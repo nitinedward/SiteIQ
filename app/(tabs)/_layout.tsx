@@ -14,10 +14,6 @@ export default function TabLayout() {
         },
         headerShown: false,
       }}
-    >
-      <Tabs.Screen name="projects" options={{ title: 'Projects' }} />
-      <Tabs.Screen name="capture" options={{ title: 'Capture' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
-    </Tabs>
+    />
   );
 }
