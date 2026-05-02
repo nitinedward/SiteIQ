@@ -13,6 +13,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { useState } from 'react';
+import { router } from 'expo-router';
 
 export default function App() {
   const [email, setEmail] = useState('');
@@ -41,7 +42,7 @@ export default function App() {
 
     // Step 4 — check against mock credentials
     if (email === 'engineer@siteiq.com' && password === 'password123') {
-      Alert.alert('Welcome to SiteIQ', 'Login successful!');
+      router.replace('/(tabs)/projects');
     } else {
       Alert.alert('Login Failed', 'Incorrect email or password. Try engineer@siteiq.com / password123');
     }
