@@ -11,6 +11,7 @@ import {
 import { useState, useRef, useEffect } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -18,6 +19,8 @@ export default function CaptureScreen() {
   // permission is the current permission status
   // requestPermission is the function to ask for permission
   const [permission, requestPermission] = useCameraPermissions();
+
+  const tabBarHeight = useBottomTabBarHeight();
 
   // Array of photos taken — starts empty
   const [photos, setPhotos] = useState<string[]>([]);
@@ -171,7 +174,7 @@ export default function CaptureScreen() {
 
       {/* Photo thumbnail strip */}
       {photos.length > 0 && (
-        <View style={styles.thumbnailContainer}>
+        <View style={[styles.thumbnailContainer, { paddingBottom: tabBarHeight + 8 }]}>
           <FlatList
             data={photos}
             horizontal
@@ -193,6 +196,14 @@ export default function CaptureScreen() {
           <Text style={styles.thumbnailHint}>
             Long press a photo to delete
           </Text>
+          <TouchableOpacity
+      style={styles.submitObsButton}
+      onPress={() => router.push('/observation')}
+    >
+      <Text style={styles.submitObsText}>
+        Review & Submit Observation →
+      </Text>
+    </TouchableOpacity>
         </View>
       )}
 
@@ -224,7 +235,7 @@ const styles = StyleSheet.create({
   },
   camera: {
     width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH * 1.2,
+    height: SCREEN_WIDTH * 1.0,
   },
   controls: {
     flexDirection: 'row',
@@ -233,6 +244,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     paddingVertical: 20,
     backgroundColor: '#0A1628',
+    zIndex: 1,
   },
   controlButton: {
     alignItems: 'center',
@@ -263,10 +275,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   thumbnailContainer: {
-    backgroundColor: '#112240',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#1C2E44',
+  backgroundColor: '#112240',
+  paddingTop: 12,
+  paddingBottom: 120,
+  borderTopWidth: 1,
+  borderTopColor: '#1C2E44',
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  zIndex: 2,
   },
   thumbnailList: {
     paddingHorizontal: 16,
@@ -332,5 +350,19 @@ voiceButtonText: {
   fontSize: 13,
   color: '#FFFFFF',
   fontWeight: '500',
+},
+submitObsButton: {
+  backgroundColor: '#059669',
+  marginHorizontal: 16,
+  marginTop: 8,
+  marginBottom: 16,
+  borderRadius: 8,
+  padding: 12,
+  alignItems: 'center',
+},
+submitObsText: {
+  color: '#FFFFFF',
+  fontSize: 14,
+  fontWeight: '600',
 },
 });
