@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 
@@ -265,7 +266,7 @@ function ZoneCard({
   const handlePress = () => {
     // Navigate to capture screen passing zone and drawing IDs
     router.push({
-      pathname: '/(tabs)/capture',
+      pathname: '/camera',
       params: {
         zone_id: zone.id,
         zone_label: zone.label,
@@ -441,10 +442,22 @@ export default function DrawingZonesScreen() {
 
         {/* Section title */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-            Inspection Zones ({drawing.zones.length})
-          </Text>
-        </View>
+            <Text style={styles.sectionTitle}>
+              Inspection Zones ({drawing.zones.length})
+            </Text>
+            <TouchableOpacity
+              style={styles.addZoneButton}
+              onPress={() => {
+                Alert.alert(
+                  'Add Zone',
+                  'In the full app you will draw a zone on the drawing. For now zones are pre-configured.',
+                  [{ text: 'OK' }]
+                );
+              }}
+            >
+              <Text style={styles.addZoneText}>+ Add Zone</Text>
+            </TouchableOpacity>
+          </View>
 
         {/* Zone cards */}
         <View style={styles.zoneList}>
@@ -456,6 +469,41 @@ export default function DrawingZonesScreen() {
             />
           ))}
         </View>
+
+        {/* Next step prompt */}
+          <View style={styles.nextStepCard}>
+            <Text style={styles.nextStepTitle}>
+              All zones inspected?
+            </Text>
+            <Text style={styles.nextStepSub}>
+              Move to the next drawing or add general observations
+            </Text>
+            <View style={styles.nextStepButtons}>
+              <TouchableOpacity
+                style={styles.nextStepBtn}
+                onPress={() => router.back()}
+              >
+                <Text style={styles.nextStepBtnText}>
+                  ← Next Drawing
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.nextStepBtn, styles.nextStepBtnPrimary]}
+                onPress={() => router.push({
+                  pathname: '/camera',
+                  params: {
+                    zone_id: 'general',
+                    zone_label: 'General Site Observation',
+                    drawing_id: 'none',
+                  },
+                })}
+              >
+                <Text style={[styles.nextStepBtnText, { color: '#FFFFFF' }]}>
+                  General Obs →
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -706,4 +754,62 @@ const styles = StyleSheet.create({
     color: '#2563EB',
     textAlign: 'center',
   },
+  addZoneButton: {
+  backgroundColor: '#1C2E44',
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  borderRadius: 6,
+  borderWidth: 1,
+  borderColor: '#2563EB',
+},
+addZoneText: {
+  fontSize: 12,
+  color: '#2563EB',
+  fontWeight: '600',
+},
+nextStepCard: {
+  marginHorizontal: 20,
+  marginTop: 16,
+  backgroundColor: '#112240',
+  borderRadius: 12,
+  padding: 16,
+  borderWidth: 1,
+  borderColor: '#1C2E44',
+  borderTopWidth: 3,
+  borderTopColor: '#2563EB',
+},
+nextStepTitle: {
+  fontSize: 15,
+  fontWeight: '600',
+  color: '#FFFFFF',
+  marginBottom: 4,
+},
+nextStepSub: {
+  fontSize: 13,
+  color: '#8899AA',
+  marginBottom: 14,
+  lineHeight: 18,
+},
+nextStepButtons: {
+  flexDirection: 'row',
+  gap: 10,
+},
+nextStepBtn: {
+  flex: 1,
+  backgroundColor: '#1C2E44',
+  borderRadius: 8,
+  padding: 12,
+  alignItems: 'center',
+  borderWidth: 1,
+  borderColor: '#2A3F55',
+},
+nextStepBtnPrimary: {
+  backgroundColor: '#2563EB',
+  borderColor: '#2563EB',
+},
+nextStepBtnText: {
+  fontSize: 13,
+  color: '#8899AA',
+  fontWeight: '600',
+},
 });

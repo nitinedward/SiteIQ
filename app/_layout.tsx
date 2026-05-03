@@ -1,4 +1,3 @@
-
 import { Stack } from 'expo-router';
 
 export default function RootLayout() {
@@ -7,6 +6,11 @@ export default function RootLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="project/[id]" />
+      <Stack.Screen name="drawing/[id]" />
+      <Stack.Screen name="camera" />
+      <Stack.Screen name="recorder" />
+      <Stack.Screen name="observation" />
+      <Stack.Screen name="session" />
     </Stack>
   );
 }
