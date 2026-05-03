@@ -152,9 +152,10 @@ export default function ProjectDetailScreen() {
           </Text>
           {project.drawings.map(drawing => (
             <TouchableOpacity
-              key={drawing.id}
-              style={styles.drawingCard}
-              activeOpacity={0.7}
+                key={drawing.id}
+                style={styles.drawingCard}
+                activeOpacity={0.7}
+                onPress={() => router.push(`/drawing/${drawing.id}`)}
             >
               <View style={styles.drawingLeft}>
                 <Text style={styles.drawingIcon}>📐</Text>
