@@ -7,18 +7,12 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Alert
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
-
-// Mock drawings for this project
-// Later this comes from GET /api/projects/:id/drawings
-const projectDrawings = [
-  { id: 'd1', title: 'Ground Floor Plan', number: 'SK-001' },
-  { id: 'd2', title: 'Level 2 Structural', number: 'SK-002' },
-  { id: 'd3', title: 'Column Schedule', number: 'SK-003' },
-];
+import { supabase } from '../lib/supabase';
 
 // ── WEATHER OPTIONS ─────────────────────────────────────
 const WEATHER_OPTIONS = [
@@ -30,15 +24,24 @@ const WEATHER_OPTIONS = [
   { label: 'Cold', icon: '🥶' },
 ];
 
-// ── SESSION STEPS ───────────────────────────────────────
 type Step = 'details' | 'capture';
+
+// One observation captured during this session
+type Observation = {
+  id: string;
+  type: 'drawing' | 'general';
+  label: string;
+  drawing?: string;
+  time: string;
+};
 
 export default function SessionScreen() {
   const { project_id, project_name } = useLocalSearchParams();
 
   const [step, setStep] = useState<Step>('details');
+  const [isSaving, setIsSaving] = useState(false);
 
-  // ── INSPECTION DETAILS FORM STATE ──────────────────────
+  // ── FORM STATE ──────────────────────────────────────────
   const [weather, setWeather] = useState('Fine');
   const [siteContact, setSiteContact] = useState('');
   const [contactPhone, setContactPhone] = useState('');
@@ -46,14 +49,10 @@ export default function SessionScreen() {
   const [purpose, setPurpose] = useState('');
   const [reportNo, setReportNo] = useState('');
 
-  // ── OBSERVATIONS STATE ──────────────────────────────────
-  type Observation = {
-    id: string;
-    type: 'drawing' | 'general';
-    label: string;
-    drawing?: string;
-    time: string;
-  };
+  // ── SESSION STATE ───────────────────────────────────────
+  // Once saved to Supabase, we store the session ID here
+  // Every observation we capture will reference this ID
+  const [inspectionId, setInspectionId] = useState<string | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
 
   const today = new Date().toLocaleDateString('en-NZ', {
@@ -69,13 +68,73 @@ export default function SessionScreen() {
     year: 'numeric',
   });
 
-  // ── VALIDATE AND START CAPTURING ────────────────────────
-  const startCapturing = () => {
-    if (!siteContact.trim()) {
-      // Site contact is the only required field
-      // Others can be filled in later
+  // ── SAVE SESSION TO SUPABASE AND START CAPTURING ────────
+  // This runs when the engineer taps "Start Capturing Observations"
+  // It creates a new row in the inspections table and stores the ID
+  const startCapturing = async () => {
+    setIsSaving(true);
+
+    // Insert a new inspection session into Supabase
+    // .select() at the end tells Supabase to return the created row
+    // so we can grab its ID
+    const { data, error } = await supabase
+      .from('inspections')
+      .insert({
+        project_id: String(project_id),
+        date: todayShort,
+        weather,
+        site_contact: siteContact.trim(),
+        contact_phone: contactPhone.trim(),
+        drawing_ref: drawingRef.trim(),
+        report_no: reportNo.trim(),
+        purpose: purpose.trim(),
+        status: 'IN_PROGRESS',
+      })
+      .select() // ← return the created row so we get the ID
+      .single(); // ← we inserted one row so expect one back
+
+    setIsSaving(false);
+
+    if (error) {
+      Alert.alert('Error', 'Could not start inspection. Please try again.');
+      console.error('Supabase error:', error);
+      return;
     }
+
+    // Store the new inspection's ID
+    // We pass this ID to every observation screen so observations
+    // are linked to this inspection session
+    setInspectionId(data.id);
     setStep('capture');
+  };
+
+  // ── COMPLETE SESSION ────────────────────────────────────
+  const completeSession = async () => {
+    Alert.alert(
+      'Complete Inspection Session',
+      `You have captured ${observations.length} observation${observations.length !== 1 ? 's' : ''}.\n\nAre you ready to complete this session?`,
+      [
+        { text: 'Keep Capturing', style: 'cancel' },
+        {
+          text: 'Complete Session',
+          onPress: async () => {
+            // Update the inspection status to COMPLETED in Supabase
+            // .eq('id', inspectionId) — only update THIS inspection
+            if (inspectionId) {
+              await supabase
+                .from('inspections')
+                .update({ status: 'COMPLETED' })
+                .eq('id', inspectionId);
+            }
+            Alert.alert(
+              '✅ Session Complete',
+              'Your inspection session has been saved.',
+              [{ text: 'OK', onPress: () => router.replace('/(tabs)/projects') }]
+            );
+          },
+        },
+      ]
+    );
   };
 
   // ══════════════════════════════════════════════════════
@@ -87,12 +146,8 @@ export default function SessionScreen() {
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Text style={styles.backArrow}>←</Text>
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
@@ -105,8 +160,6 @@ export default function SessionScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-
-          {/* Session banner */}
           <View style={styles.sessionBanner}>
             <Text style={styles.sessionProject}>{project_name}</Text>
             <Text style={styles.sessionDate}>{today}</Text>
@@ -137,7 +190,7 @@ export default function SessionScreen() {
             </View>
           </View>
 
-          {/* Site contact */}
+          {/* Site details */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Site Details</Text>
 
@@ -162,62 +215,19 @@ export default function SessionScreen() {
             />
 
             <Text style={styles.fieldLabel}>Drawing Reference</Text>
-            <Text style={styles.fieldHint}>
-               Select from uploaded drawings or type a reference
-            </Text>
-
-            {/* Drawing chips from project drawings */}
-            <View style={styles.drawingChips}>
-            <TouchableOpacity
-                style={[
-                  styles.drawingChip,
-                drawingRef === 'N/A' && styles.drawingChipActive,
-                ]}
-                onPress={() => setDrawingRef('N/A')}
-            >
-                <Text style={[
-                styles.drawingChipText,
-                drawingRef === 'N/A' && styles.drawingChipTextActive,
-                ]}>N/A</Text>
-            </TouchableOpacity>
-            {projectDrawings.map(d => (
-                <TouchableOpacity
-                key={d.id}
-                style={[
-                    styles.drawingChip,
-                    drawingRef === d.number && styles.drawingChipActive,
-                ]}
-                onPress={() => setDrawingRef(
-                    drawingRef === d.number
-                    ? drawingRef + ', '
-                    : d.number
-                )}
-                >
-                <Text style={[
-                    styles.drawingChipText,
-                    drawingRef === d.number && styles.drawingChipTextActive,
-                ]}>
-                    {d.number}
-                </Text>
-                </TouchableOpacity>
-            ))}
-            </View>
-
-            <TextInput
-            style={[styles.input, { marginTop: 8 }]}
-            placeholder="Or type references manually e.g. SK-001, SK-015"
-            placeholderTextColor="#4A5568"
-            value={drawingRef}
-            onChangeText={setDrawingRef}
-            autoCapitalize="characters"
-            />
-
-            <Text style={styles.fieldLabel}>
-              Site Report Number
-            </Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g. Enter report number"
+              placeholder="e.g. SK-001, SK-015"
+              placeholderTextColor="#4A5568"
+              value={drawingRef}
+              onChangeText={setDrawingRef}
+              autoCapitalize="characters"
+            />
+
+            <Text style={styles.fieldLabel}>Site Report Number</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. 042"
               placeholderTextColor="#4A5568"
               value={reportNo}
               onChangeText={setReportNo}
@@ -228,9 +238,6 @@ export default function SessionScreen() {
           {/* Purpose */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Purpose of Inspection</Text>
-            <Text style={styles.fieldHint}>
-              Brief description of why this inspection is being carried out
-            </Text>
             <TextInput
               style={styles.textArea}
               placeholder="Describe the purpose of this inspection visit..."
@@ -249,12 +256,10 @@ export default function SessionScreen() {
             <View style={styles.previewCard}>
               <View style={styles.previewRow}>
                 <Text style={styles.previewLabel}>Job:</Text>
-                <Text style={styles.previewValue}>
-                  {String(project_name) || '—'}
-                </Text>
+                <Text style={styles.previewValue}>{String(project_name) || '—'}</Text>
               </View>
               <View style={styles.previewRow}>
-                <Text style={styles.previewLabel}>Date/Time:</Text>
+                <Text style={styles.previewLabel}>Date:</Text>
                 <Text style={styles.previewValue}>{todayShort}</Text>
               </View>
               <View style={styles.previewRow}>
@@ -263,21 +268,15 @@ export default function SessionScreen() {
               </View>
               <View style={styles.previewRow}>
                 <Text style={styles.previewLabel}>Site Contact:</Text>
-                <Text style={styles.previewValue}>
-                  {siteContact || '—'}
-                </Text>
+                <Text style={styles.previewValue}>{siteContact || '—'}</Text>
               </View>
               <View style={styles.previewRow}>
                 <Text style={styles.previewLabel}>Drawing Ref:</Text>
-                <Text style={styles.previewValue}>
-                  {drawingRef || 'N/A'}
-                </Text>
+                <Text style={styles.previewValue}>{drawingRef || 'N/A'}</Text>
               </View>
               <View style={styles.previewRow}>
                 <Text style={styles.previewLabel}>Report No:</Text>
-                <Text style={styles.previewValue}>
-                  {reportNo || '—'}
-                </Text>
+                <Text style={styles.previewValue}>{reportNo || '—'}</Text>
               </View>
             </View>
           </View>
@@ -285,16 +284,21 @@ export default function SessionScreen() {
           {/* Start button */}
           <View style={styles.section}>
             <TouchableOpacity
-              style={styles.startButton}
+              style={[styles.startButton, isSaving && { opacity: 0.6 }]}
               onPress={startCapturing}
+              disabled={isSaving}
               activeOpacity={0.8}
             >
-              <Text style={styles.startButtonText}>
-                Start Capturing Observations →
-              </Text>
+              {isSaving ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.startButtonText}>
+                  Start Capturing Observations →
+                </Text>
+              )}
             </TouchableOpacity>
             <Text style={styles.startHint}>
-              You can edit these details before generating the report
+              This saves your inspection details and opens the capture screen
             </Text>
           </View>
 
@@ -309,13 +313,8 @@ export default function SessionScreen() {
   // ══════════════════════════════════════════════════════
   return (
     <View style={styles.container}>
-
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => setStep('details')}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => setStep('details')}>
           <Text style={styles.backArrow}>←</Text>
           <Text style={styles.backText}>Details</Text>
         </TouchableOpacity>
@@ -323,12 +322,8 @@ export default function SessionScreen() {
         <View style={{ width: 60 }} />
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* Session summary */}
         <View style={styles.sessionBanner}>
           <Text style={styles.sessionProject}>{project_name}</Text>
           <Text style={styles.sessionDate}>{todayShort} · {weather}</Text>
@@ -338,7 +333,7 @@ export default function SessionScreen() {
           </View>
         </View>
 
-        {/* Observations */}
+        {/* Observations list */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
             Observations ({observations.length})
@@ -369,34 +364,21 @@ export default function SessionScreen() {
           ))}
         </View>
 
-        {/* Add observation */}
+        {/* Add observation buttons */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Add Observation</Text>
 
           <TouchableOpacity
             style={styles.addCard}
-            onPress={() => router.push('/drawing/d1')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.addCardIcon}>📐</Text>
-            <View style={styles.addCardText}>
-              <Text style={styles.addCardTitle}>Drawing Inspection</Text>
-              <Text style={styles.addCardSub}>
-                Select a drawing, pick a zone, capture photos and measurements
-              </Text>
-            </View>
-            <Text style={styles.addCardArrow}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.addCard}
             onPress={() => router.push({
-              pathname: '/camera',
+              pathname: '/observation',
               params: {
+                // Pass the inspection ID so the observation
+                // gets linked to this session in the database
+                inspection_id: inspectionId,
+                project_id: String(project_id),
                 zone_id: 'general',
                 zone_label: 'General Site Observation',
-                drawing_id: 'none',
-                project_id: String(project_id),
               },
             })}
             activeOpacity={0.7}
@@ -410,6 +392,28 @@ export default function SessionScreen() {
             </View>
             <Text style={styles.addCardArrow}>›</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.addCard}
+            onPress={() => router.push({
+              pathname: '/drawings',
+              params: {
+                project_id: String(project_id),
+                project_name: String(project_name),
+                inspection_id: inspectionId,
+              },
+            })}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.addCardIcon}>📐</Text>
+            <View style={styles.addCardText}>
+              <Text style={styles.addCardTitle}>Drawing Inspection</Text>
+              <Text style={styles.addCardSub}>
+                Select a drawing, pick a zone, capture photos and measurements
+              </Text>
+            </View>
+            <Text style={styles.addCardArrow}>›</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Complete session */}
@@ -417,30 +421,12 @@ export default function SessionScreen() {
           <TouchableOpacity
             style={styles.completeButton}
             activeOpacity={0.8}
-                onPress={() => {
-                    Alert.alert(
-                    'Complete Inspection Session',
-                    `You have captured ${observations.length} observation${observations.length !== 1 ? 's' : ''}.\n\nAre you ready to generate the site report?`,
-                    [
-                        { text: 'Keep Capturing', style: 'cancel' },
-                        {
-                        text: 'Generate Report',
-                        onPress: () => {
-                            Alert.alert(
-                            '📄 Report Generation',
-                            'In the full app, Claude AI will now compile all your observations, photos and voice transcripts into a professional site report matching your firm\'s template.\n\nThis feature is enabled in Phase 2.',
-                            [{ text: 'OK', onPress: () => router.replace('/(tabs)/projects') }]
-                            );
-                        },
-                        },
-                    ]
-                    );
-                }}
-                >
-                <Text style={styles.completeButtonText}>
-                    Complete Session & Generate Report
-                </Text>
-            </TouchableOpacity>
+            onPress={completeSession}
+          >
+            <Text style={styles.completeButtonText}>
+              Complete Session & Generate Report
+            </Text>
+          </TouchableOpacity>
           <Text style={styles.completeHint}>
             Compiles all observations into a draft report for review
           </Text>
@@ -452,13 +438,8 @@ export default function SessionScreen() {
   );
 }
 
-// ── STYLES ──────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0A1628',
-  },
+  container: { flex: 1, backgroundColor: '#0A1628' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -469,28 +450,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1C2E44',
   },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    width: 60,
-  },
-  backArrow: {
-    fontSize: 20,
-    color: '#2563EB',
-  },
-  backText: {
-    fontSize: 16,
-    color: '#2563EB',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  scroll: {
-    flex: 1,
-  },
+  backButton: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 60 },
+  backArrow: { fontSize: 20, color: '#2563EB' },
+  backText: { fontSize: 16, color: '#2563EB' },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#FFFFFF' },
+  scroll: { flex: 1 },
   sessionBanner: {
     backgroundColor: '#112240',
     margin: 20,
@@ -502,281 +466,87 @@ const styles = StyleSheet.create({
     borderLeftColor: '#2563EB',
     gap: 4,
   },
-  sessionProject: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  sessionDate: {
-    fontSize: 13,
-    color: '#8899AA',
-  },
-  activeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 6,
-  },
-  activeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#34D399',
-  },
-  activeBadgeText: {
-    fontSize: 12,
-    color: '#34D399',
-    fontWeight: '500',
-  },
-  section: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
+  sessionProject: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  sessionDate: { fontSize: 13, color: '#8899AA' },
+  activeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  activeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#34D399' },
+  activeBadgeText: { fontSize: 12, color: '#34D399', fontWeight: '500' },
+  section: { paddingHorizontal: 20, paddingBottom: 16 },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8899AA',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 12,
+    fontSize: 13, fontWeight: '600', color: '#8899AA',
+    textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12,
   },
-  weatherGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
+  weatherGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   weatherChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#112240',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1.5,
-    borderColor: '#1C2E44',
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#112240', borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderWidth: 1.5, borderColor: '#1C2E44',
   },
-  weatherChipActive: {
-    borderColor: '#2563EB',
-    backgroundColor: '#1E3A5F',
-  },
-  weatherIcon: {
-    fontSize: 16,
-  },
-  weatherLabel: {
-    fontSize: 13,
-    color: '#8899AA',
-    fontWeight: '500',
-  },
-  weatherLabelActive: {
-    color: '#FFFFFF',
-  },
-  fieldLabel: {
-    fontSize: 12,
-    color: '#8899AA',
-    marginBottom: 6,
-    marginTop: 12,
-  },
-  fieldHint: {
-    fontSize: 12,
-    color: '#4A5568',
-    marginBottom: 8,
-    fontStyle: 'italic',
-  },
+  weatherChipActive: { borderColor: '#2563EB', backgroundColor: '#1E3A5F' },
+  weatherIcon: { fontSize: 16 },
+  weatherLabel: { fontSize: 13, color: '#8899AA', fontWeight: '500' },
+  weatherLabelActive: { color: '#FFFFFF' },
+  fieldLabel: { fontSize: 12, color: '#8899AA', marginBottom: 6, marginTop: 12 },
   input: {
-    backgroundColor: '#112240',
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    color: '#FFFFFF',
+    backgroundColor: '#112240', borderWidth: 1,
+    borderColor: '#1C2E44', borderRadius: 8,
+    padding: 12, fontSize: 14, color: '#FFFFFF',
   },
   textArea: {
-    backgroundColor: '#112240',
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    color: '#FFFFFF',
-    height: 120,
+    backgroundColor: '#112240', borderWidth: 1,
+    borderColor: '#1C2E44', borderRadius: 8,
+    padding: 12, fontSize: 14, color: '#FFFFFF', height: 120,
   },
-  previewSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
+  previewSection: { paddingHorizontal: 20, paddingBottom: 16 },
   previewTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8899AA',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 12,
+    fontSize: 13, fontWeight: '600', color: '#8899AA',
+    textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12,
   },
   previewCard: {
-    backgroundColor: '#112240',
-    borderRadius: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-    gap: 8,
+    backgroundColor: '#112240', borderRadius: 10,
+    padding: 14, borderWidth: 1, borderColor: '#1C2E44', gap: 8,
   },
-  previewRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  previewLabel: {
-    fontSize: 12,
-    color: '#4A5568',
-    width: 100,
-    flexShrink: 0,
-  },
-  previewValue: {
-    fontSize: 12,
-    color: '#FFFFFF',
-    flex: 1,
-  },
+  previewRow: { flexDirection: 'row', gap: 8 },
+  previewLabel: { fontSize: 12, color: '#4A5568', width: 100, flexShrink: 0 },
+  previewValue: { fontSize: 12, color: '#FFFFFF', flex: 1 },
   startButton: {
-    backgroundColor: '#2563EB',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
+    backgroundColor: '#2563EB', borderRadius: 12,
+    padding: 16, alignItems: 'center',
   },
-  startButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  startHint: {
-    fontSize: 12,
-    color: '#4A5568',
-    textAlign: 'center',
-    marginTop: 8,
-  },
+  startButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  startHint: { fontSize: 12, color: '#4A5568', textAlign: 'center', marginTop: 8 },
   emptyObs: {
-    backgroundColor: '#112240',
-    borderRadius: 12,
-    padding: 24,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-    borderStyle: 'dashed',
-    gap: 10,
+    backgroundColor: '#112240', borderRadius: 12, padding: 24,
+    alignItems: 'center', borderWidth: 1, borderColor: '#1C2E44',
+    borderStyle: 'dashed', gap: 10,
   },
-  emptyObsIcon: {
-    fontSize: 32,
-  },
-  emptyObsText: {
-    fontSize: 13,
-    color: '#4A5568',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  emptyObsIcon: { fontSize: 32 },
+  emptyObsText: { fontSize: 13, color: '#4A5568', textAlign: 'center', lineHeight: 20 },
   obsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#112240',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-    gap: 12,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#112240', borderRadius: 10,
+    padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#1C2E44', gap: 12,
   },
-  obsIcon: {
-    fontSize: 20,
-  },
-  obsInfo: {
-    flex: 1,
-  },
-  obsLabel: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  obsMeta: {
-    fontSize: 12,
-    color: '#8899AA',
-  },
-  obsTime: {
-    fontSize: 12,
-    color: '#4A5568',
-  },
+  obsIcon: { fontSize: 20 },
+  obsInfo: { flex: 1 },
+  obsLabel: { fontSize: 14, color: '#FFFFFF', fontWeight: '500', marginBottom: 2 },
+  obsMeta: { fontSize: 12, color: '#8899AA' },
+  obsTime: { fontSize: 12, color: '#4A5568' },
   addCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#112240',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-    gap: 14,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#112240', borderRadius: 12,
+    padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#1C2E44', gap: 14,
   },
-  addCardIcon: {
-    fontSize: 24,
-  },
-  addCardText: {
-    flex: 1,
-  },
-  addCardTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 3,
-  },
-  addCardSub: {
-    fontSize: 12,
-    color: '#8899AA',
-    lineHeight: 18,
-  },
-  addCardArrow: {
-    fontSize: 20,
-    color: '#4A5568',
-  },
+  addCardIcon: { fontSize: 24 },
+  addCardText: { flex: 1 },
+  addCardTitle: { fontSize: 15, fontWeight: '600', color: '#FFFFFF', marginBottom: 3 },
+  addCardSub: { fontSize: 12, color: '#8899AA', lineHeight: 18 },
+  addCardArrow: { fontSize: 20, color: '#4A5568' },
   completeButton: {
-    backgroundColor: '#059669',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 8,
+    backgroundColor: '#059669', borderRadius: 12,
+    padding: 16, alignItems: 'center', marginBottom: 8,
   },
-  completeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  completeHint: {
-    fontSize: 12,
-    color: '#4A5568',
-    textAlign: 'center',
-  },
-  drawingChips: {
-  flexDirection: 'row',
-  flexWrap: 'wrap',
-  gap: 8,
-  marginBottom: 4,
-},
-drawingChip: {
-  paddingHorizontal: 12,
-  paddingVertical: 6,
-  borderRadius: 20,
-  backgroundColor: '#112240',
-  borderWidth: 1.5,
-  borderColor: '#1C2E44',
-},
-drawingChipActive: {
-  borderColor: '#2563EB',
-  backgroundColor: '#1E3A5F',
-},
-drawingChipText: {
-  fontSize: 12,
-  color: '#8899AA',
-  fontWeight: '500',
-},
-drawingChipTextActive: {
-  color: '#FFFFFF',
-},
+  completeButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  completeHint: { fontSize: 12, color: '#4A5568', textAlign: 'center' },
 });

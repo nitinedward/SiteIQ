@@ -1,64 +1,19 @@
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { useState } from 'react';
-import { router } from 'expo-router';
-
-// ── MOCK DATA ──────────────────────────────
-// This is fake data that looks like real database data.
-// Later we will replace this with a real API call.
-
-const mockProjects: Project[] = [
-  {
-    id: '1',
-    name: '23 Harbour View Towers',
-    address: 'Auckland CBD, Auckland',
-    client_name: 'Harbour Developments Ltd',
-    project_number: '2026-047',
-    status: 'ACTIVE',
-    drawing_count: 3,
-    last_inspection: '28 Apr 2026',
-  },
-  {
-    id: '2',
-    name: 'Queens Wharf Apartments',
-    address: 'Wellington Waterfront, Wellington',
-    client_name: 'QW Holdings Ltd',
-    project_number: '2026-031',
-    status: 'ACTIVE',
-    drawing_count: 5,
-    last_inspection: '22 Apr 2026',
-  },
-  {
-    id: '3',
-    name: 'Christchurch Office Tower',
-    address: 'Cathedral Square, Christchurch',
-    client_name: 'South Island Developments',
-    project_number: '2026-019',
-    status: 'ON_HOLD',
-    drawing_count: 2,
-    last_inspection: '10 Mar 2026',
-  },
-  {
-    id: '4',
-    name: 'Takapuna Beach Resort',
-    address: 'Takapuna, Auckland',
-    client_name: 'North Shore Hospitality',
-    project_number: '2025-098',
-    status: 'COMPLETED',
-    drawing_count: 8,
-    last_inspection: '15 Jan 2026',
-  },
-];
+import { useState, useCallback } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { supabase } from '../../lib/supabase';
 
 // ── TYPE DEFINITION ────────────────────────
-// This tells TypeScript exactly what shape a Project object is.
-// If you try to use a field that doesn't exist here, TypeScript warns you.
+// Tells TypeScript exactly what a Project object looks like
 
 type Project = {
   id: string;
@@ -72,8 +27,7 @@ type Project = {
 };
 
 // ── STATUS BADGE COMPONENT ─────────────────
-// A small reusable component just for the coloured status badge.
-// This is your first custom component inside a screen file.
+// Small coloured badge showing project status — unchanged
 
 function StatusBadge({ status }: { status: Project['status'] }) {
   const colours = {
@@ -101,15 +55,24 @@ function StatusBadge({ status }: { status: Project['status'] }) {
 }
 
 // ── PROJECT CARD COMPONENT ─────────────────
-// One card for one project. Receives a project object as a prop.
+// Now accepts onDelete as a prop so the card knows what to do on long press
 
-function ProjectCard({ project }: { project: Project }) {
+function ProjectCard({
+  project,
+  onDelete,
+}: {
+  project: Project;
+  onDelete: (project: Project) => void; // a function that receives the project
+}) {
   return (
     <TouchableOpacity
-  style={styles.card}
-  activeOpacity={0.7}
-  onPress={() => router.push(`/project/${project.id}`)}
->
+      style={styles.card}
+      activeOpacity={0.7}
+      onPress={() => router.push(`/project/${project.id}`)}
+      // onLongPress fires when the engineer holds their finger on the card
+      // It calls onDelete and passes the project so we know which one to delete
+      onLongPress={() => onDelete(project)}
+    >
       <View style={styles.cardHeader}>
         <Text style={styles.projectNumber}>{project.project_number}</Text>
         <StatusBadge status={project.status} />
@@ -131,9 +94,12 @@ function ProjectCard({ project }: { project: Project }) {
         </View>
         <View style={styles.footerItem}>
           <Text style={styles.footerLabel}>Last Inspection</Text>
-          <Text style={styles.footerValue}>{project.last_inspection}</Text>
+          <Text style={styles.footerValue}>{project.last_inspection ?? '—'}</Text>
         </View>
       </View>
+
+      {/* Small hint so engineers know they can long press */}
+      <Text style={styles.longPressHint}>Hold to delete</Text>
     </TouchableOpacity>
   );
 }
@@ -141,15 +107,84 @@ function ProjectCard({ project }: { project: Project }) {
 // ── MAIN SCREEN ────────────────────────────
 
 export default function ProjectsScreen() {
-  const [searchText, setSearchText] = useState('');
+  const [searchText, setSearchText]   = useState('');
+  const [projects, setProjects]       = useState<Project[]>([]);
+  const [isLoading, setIsLoading]     = useState(true);
+  const [errorMsg, setErrorMsg]       = useState('');
+
+  // ── FETCH PROJECTS FROM SUPABASE ──────────
+  // Reads all projects from the database, newest first
+  const fetchProjects = async () => {
+    setIsLoading(true);
+    setErrorMsg('');
+
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      setErrorMsg('Could not load projects. Please try again.');
+      console.error('Supabase error:', error);
+    } else {
+      setProjects(data as Project[]);
+    }
+
+    setIsLoading(false);
+  };
+
+  // ── DELETE A PROJECT ──────────────────────
+  // Called when engineer long presses a card
+  // Shows a confirmation popup before actually deleting
+  const handleDelete = (project: Project) => {
+    Alert.alert(
+      'Delete Project',
+      `Are you sure you want to delete "${project.name}"? This cannot be undone.`,
+      [
+        // Cancel button — does nothing
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive', // makes this button red on iOS
+          onPress: async () => {
+            // Tell Supabase to delete the row where id matches this project
+            // .eq('id', project.id) means "where id equals project.id"
+            const { error } = await supabase
+              .from('projects')
+              .delete()
+              .eq('id', project.id);
+
+            if (error) {
+              Alert.alert('Error', 'Could not delete project. Please try again.');
+              return;
+            }
+
+            // Remove it from the local list immediately
+            // This means the screen updates instantly without needing to refetch
+            // .filter() keeps every project EXCEPT the deleted one
+            setProjects(current => current.filter(p => p.id !== project.id));
+          },
+        },
+      ]
+    );
+  };
+
+  // ── useFocusEffect ────────────────────────
+  // Runs fetchProjects every time this screen comes into focus
+  // This means when an engineer creates a project and comes back,
+  // the new project appears automatically in the list
+  // useCallback stops it from running in an infinite loop
+  useFocusEffect(
+    useCallback(() => {
+      fetchProjects();
+    }, [])
+  );
 
   // Filter projects based on search text
-  // .filter() goes through every item in the array
-  // and keeps only the ones where the condition is true
-  const filteredProjects = mockProjects.filter(project =>
+  const filteredProjects = projects.filter(project =>
     project.name.toLowerCase().includes(searchText.toLowerCase()) ||
-    project.address.toLowerCase().includes(searchText.toLowerCase()) ||
-    project.client_name.toLowerCase().includes(searchText.toLowerCase())
+    project.address?.toLowerCase().includes(searchText.toLowerCase()) ||
+    project.client_name?.toLowerCase().includes(searchText.toLowerCase())
   );
 
   return (
@@ -161,10 +196,18 @@ export default function ProjectsScreen() {
           <Text style={styles.headerGreeting}>Good morning</Text>
           <Text style={styles.headerTitle}>Projects</Text>
         </View>
-        <View style={styles.headerBadge}>
-          <Text style={styles.headerBadgeText}>
-            {filteredProjects.length}
-          </Text>
+        <View style={styles.headerRight}>
+          <View style={styles.headerBadge}>
+            <Text style={styles.headerBadgeText}>
+              {filteredProjects.length}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => router.push('/project/create')}
+          >
+            <Text style={styles.addButtonText}>+ New</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -181,22 +224,47 @@ export default function ProjectsScreen() {
         />
       </View>
 
+      {/* Loading spinner */}
+      {isLoading && (
+        <View style={styles.centeredMessage}>
+          <ActivityIndicator size="large" color="#2563EB" />
+          <Text style={styles.loadingText}>Loading projects...</Text>
+        </View>
+      )}
+
+      {/* Error message */}
+      {!isLoading && errorMsg !== '' && (
+        <View style={styles.centeredMessage}>
+          <Text style={styles.errorText}>{errorMsg}</Text>
+          <TouchableOpacity onPress={fetchProjects} style={styles.retryButton}>
+            <Text style={styles.retryText}>Tap to retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Project list */}
-      <FlatList
-        data={filteredProjects}
-        renderItem={({ item }) => <ProjectCard project={item} />}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No projects found</Text>
-            <Text style={styles.emptySubtext}>
-              Try a different search term
-            </Text>
-          </View>
-        }
-      />
+      {!isLoading && errorMsg === '' && (
+        <FlatList
+          data={filteredProjects}
+          renderItem={({ item }) => (
+            <ProjectCard
+              project={item}
+              onDelete={handleDelete}
+            />
+          )}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No projects yet</Text>
+              <Text style={styles.emptySubtext}>
+                Tap + New to create your first project
+              </Text>
+            </View>
+          }
+        />
+      )}
 
     </View>
   );
@@ -227,6 +295,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   headerBadge: {
     width: 36,
     height: 36,
@@ -238,6 +311,17 @@ const styles = StyleSheet.create({
   headerBadgeText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  addButton: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '600',
   },
   searchContainer: {
@@ -260,6 +344,33 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 14,
     color: '#FFFFFF',
+  },
+  centeredMessage: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    color: '#8899AA',
+    fontSize: 14,
+  },
+  errorText: {
+    color: '#F87171',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
+  retryButton: {
+    backgroundColor: '#1C2E44',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: '#2563EB',
+    fontSize: 14,
+    fontWeight: '500',
   },
   listContent: {
     paddingHorizontal: 20,
@@ -336,6 +447,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8899AA',
     fontWeight: '500',
+  },
+  longPressHint: {
+    fontSize: 10,
+    color: '#2A3F55',
+    textAlign: 'right',
+    marginTop: 8,
   },
   emptyContainer: {
     alignItems: 'center',

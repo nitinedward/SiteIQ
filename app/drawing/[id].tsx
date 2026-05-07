@@ -2,814 +2,362 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
-  Image,
-  Dimensions,
   Alert,
+  ActivityIndicator,
+  Modal,
+  TextInput,
+  ScrollView,
 } from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// ── MOCK DATA ──────────────────────────────────────────
-// Mock drawings with their inspection zones
-// Later this comes from GET /api/drawings/:id
-
-const mockDrawings: {
-  id: string;
-  title: string;
-  drawing_number: string;
-  revision: string;
-  project_id: string;
-  project_name: string;
-  zones: Zone[];
-}[] = [
-  {
-    id: 'd1',
-    title: 'Ground Floor Plan',
-    drawing_number: 'SK-001',
-    revision: 'C',
-    project_id: '1',
-    project_name: '23 Harbour View Towers',
-    zones: [
-      {
-        id: 'z1',
-        label: 'Column C3 — Level 1',
-        zone_type: 'COLUMN',
-        status: 'PENDING',
-        priority: 'HIGH',
-        notes: 'Check for cracking at base. Previous inspection noted minor hairline cracks.',
-      },
-      {
-        id: 'z2',
-        label: 'Beam B2 — Grid 4',
-        zone_type: 'BEAM',
-        status: 'COMPLETE',
-        priority: 'MEDIUM',
-        notes: 'Inspect soffit for spalling. Check bearing condition.',
-      },
-      {
-        id: 'z3',
-        label: 'Connection J1 — East Wall',
-        zone_type: 'CONNECTION',
-        status: 'FLAGGED',
-        priority: 'CRITICAL',
-        notes: 'URGENT: Previous inspection flagged movement in beam-column connection. Requires immediate assessment.',
-      },
-      {
-        id: 'z4',
-        label: 'Slab S1 — Bay 2',
-        zone_type: 'SLAB',
-        status: 'PENDING',
-        priority: 'LOW',
-        notes: 'Routine check of slab soffit condition.',
-      },
-    ],
-  },
-  {
-    id: 'd2',
-    title: 'Level 2 Structural',
-    drawing_number: 'SK-002',
-    revision: 'B',
-    project_id: '1',
-    project_name: '23 Harbour View Towers',
-    zones: [
-      {
-        id: 'z5',
-        label: 'Column D4 — Level 2',
-        zone_type: 'COLUMN',
-        status: 'PENDING',
-        priority: 'MEDIUM',
-        notes: 'Standard inspection. Check for surface defects.',
-      },
-      {
-        id: 'z6',
-        label: 'Shear Wall SW1',
-        zone_type: 'WALL',
-        status: 'IN_PROGRESS',
-        priority: 'HIGH',
-        notes: 'Inspect full height of shear wall. Note any diagonal cracking.',
-      },
-      {
-        id: 'z7',
-        label: 'Foundation Pad FP2',
-        zone_type: 'FOUNDATION',
-        status: 'PENDING',
-        priority: 'HIGH',
-        notes: 'Check settlement. Measure any differential movement.',
-      },
-      {
-        id: 'z8',
-        label: 'Beam B5 — North Face',
-        zone_type: 'BEAM',
-        status: 'COMPLETE',
-        priority: 'LOW',
-        notes: 'Previously inspected. Confirm no change.',
-      },
-      {
-        id: 'z9',
-        label: 'Column C5 — Level 2',
-        zone_type: 'COLUMN',
-        status: 'PENDING',
-        priority: 'MEDIUM',
-        notes: 'Check column plumb. Measure any deviation.',
-      },
-      {
-        id: 'z10',
-        label: 'Connection J3 — North',
-        zone_type: 'CONNECTION',
-        status: 'PENDING',
-        priority: 'HIGH',
-        notes: 'Inspect beam-column connection. Check bolts and welds.',
-      },
-    ],
-  },
-  {
-    id: 'd3',
-    title: 'Column Schedule',
-    drawing_number: 'SK-003',
-    revision: 'A',
-    project_id: '1',
-    project_name: '23 Harbour View Towers',
-    zones: [
-      {
-        id: 'z11',
-        label: 'Column A1 — All Levels',
-        zone_type: 'COLUMN',
-        status: 'PENDING',
-        priority: 'MEDIUM',
-        notes: 'Full height inspection of column A1.',
-      },
-      {
-        id: 'z12',
-        label: 'Column A2 — All Levels',
-        zone_type: 'COLUMN',
-        status: 'PENDING',
-        priority: 'MEDIUM',
-        notes: 'Full height inspection of column A2.',
-      },
-    ],
-  },
-  {
-    id: 'd4',
-    title: 'Foundation Plan',
-    drawing_number: 'SK-004',
-    revision: 'D',
-    project_id: '2',
-    project_name: 'Queens Wharf Apartments',
-    zones: [
-      {
-        id: 'z13',
-        label: 'Pad Foundation PF1',
-        zone_type: 'FOUNDATION',
-        status: 'PENDING',
-        priority: 'HIGH',
-        notes: 'Check for settlement and cracking around foundation.',
-      },
-      {
-        id: 'z14',
-        label: 'Strip Foundation SF2',
-        zone_type: 'FOUNDATION',
-        status: 'COMPLETE',
-        priority: 'MEDIUM',
-        notes: 'Previously inspected. No issues found.',
-      },
-      {
-        id: 'z15',
-        label: 'Pile Cap PC1',
-        zone_type: 'FOUNDATION',
-        status: 'FLAGGED',
-        priority: 'CRITICAL',
-        notes: 'Signs of movement detected. Requires urgent assessment.',
-      },
-      {
-        id: 'z16',
-        label: 'Ground Slab GS1',
-        zone_type: 'SLAB',
-        status: 'PENDING',
-        priority: 'LOW',
-        notes: 'Check for cracking and settlement.',
-      },
-      {
-        id: 'z17',
-        label: 'Retaining Wall RW1',
-        zone_type: 'WALL',
-        status: 'IN_PROGRESS',
-        priority: 'HIGH',
-        notes: 'Inspect for lateral movement and cracking.',
-      },
-    ],
-  },
-];
-
-// ── STATUS CONFIG ───────────────────────────────────────
-
-type ZoneStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETE' | 'FLAGGED';
-type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-
-const statusConfig = {
-  PENDING: {
-    colour: '#8899AA',
-    bg: '#1C2E44',
-    label: 'Pending',
-    icon: '⏳',
-  },
-  IN_PROGRESS: {
-    colour: '#FBBF24',
-    bg: '#3B2E0D',
-    label: 'In Progress',
-    icon: '🔄',
-  },
-  COMPLETE: {
-    colour: '#34D399',
-    bg: '#0D3B2E',
-    label: 'Complete',
-    icon: '✅',
-  },
-  FLAGGED: {
-    colour: '#F87171',
-    bg: '#3B1A1A',
-    label: 'Flagged',
-    icon: '🚨',
-  },
-};
-
-const priorityConfig = {
-  LOW:      { colour: '#8899AA', label: 'Low' },
-  MEDIUM:   { colour: '#FBBF24', label: 'Medium' },
-  HIGH:     { colour: '#F97316', label: 'High' },
-  CRITICAL: { colour: '#F87171', label: 'Critical' },
-};
-
-// ── ZONE CARD COMPONENT ─────────────────────────────────
+import { useState, useCallback } from 'react';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { supabase } from '../../lib/supabase';
+import * as WebBrowser from 'expo-web-browser';
 
 type Zone = {
   id: string;
   label: string;
-  zone_type: string;
-  status: ZoneStatus;
-  priority: Priority;
-  notes: string;
+  x_percent: number;
+  y_percent: number;
 };
 
-function ZoneCard({
-  zone,
-  drawingId,
-}: {
-  zone: Zone;
-  drawingId: string;
-}) {
-  const status = statusConfig[zone.status];
-  const priority = priorityConfig[zone.priority];
+export default function DrawingViewerScreen() {
+  const params    = useLocalSearchParams();
+  const drawingId = params.id as string;
+  const title     = params.title as string;
+  const fileUrl   = params.file_url as string;
+  const projectId = params.project_id as string;
 
-  const handlePress = () => {
-    // Navigate to capture screen passing zone and drawing IDs
-    router.push({
-      pathname: '/camera',
-      params: {
-        zone_id: zone.id,
-        zone_label: zone.label,
-        drawing_id: drawingId,
-      },
-    });
+  const [zones, setZones]               = useState<Zone[]>([]);
+  const [isLoading, setIsLoading]       = useState(false);
+  const [showAddZone, setShowAddZone]   = useState(false);
+  const [newZoneLabel, setNewZoneLabel] = useState('');
+
+  // ── FETCH ZONES ────────────────────────────────────────
+  const fetchZones = async () => {
+    const { data, error } = await supabase
+      .from('zones')
+      .select('*')
+      .eq('drawing_id', drawingId)
+      .order('created_at', { ascending: true });
+    if (!error) setZones(data as Zone[]);
   };
 
-  return (
-    <TouchableOpacity
-      style={[styles.zoneCard, { borderLeftColor: status.colour }]}
-      onPress={handlePress}
-      activeOpacity={0.7}
-    >
-      {/* Zone header */}
-      <View style={styles.zoneHeader}>
-        <Text style={styles.zoneIcon}>{status.icon}</Text>
-        <Text style={styles.zoneLabel} numberOfLines={1}>
-          {zone.label}
-        </Text>
-        <View style={[
-          styles.priorityBadge,
-          { backgroundColor: priorityConfig[zone.priority].colour + '20' }
-        ]}>
-          <Text style={[
-            styles.priorityText,
-            { color: priority.colour }
-          ]}>
-            {priority.label}
-          </Text>
-        </View>
-      </View>
-
-      {/* Zone type and status */}
-      <View style={styles.zoneMeta}>
-        <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-          <Text style={[styles.statusText, { color: status.colour }]}>
-            {status.label}
-          </Text>
-        </View>
-        <Text style={styles.zoneType}>
-          {zone.zone_type.charAt(0) +
-            zone.zone_type.slice(1).toLowerCase()}
-        </Text>
-      </View>
-
-      {/* Notes preview */}
-      {zone.notes && (
-        <Text style={styles.zoneNotes} numberOfLines={2}>
-          {zone.notes}
-        </Text>
-      )}
-
-      {/* Start inspection arrow */}
-      <View style={styles.zoneFooter}>
-        <Text style={styles.inspectText}>
-          Tap to start inspection
-        </Text>
-        <Text style={styles.zoneArrow}>›</Text>
-      </View>
-    </TouchableOpacity>
+  useFocusEffect(
+    useCallback(() => {
+      fetchZones();
+    }, [drawingId])
   );
-}
 
-// ── SUMMARY BAR ─────────────────────────────────────────
+  // ── OPEN PDF ───────────────────────────────────────────
+  // Fetches the PDF as a blob, converts to base64 data URL
+  // then opens in the browser — no native modules needed
+  const handleOpenPdf = async () => {
+    setIsLoading(true);
+    try {
+      // Fetch the PDF file from Supabase Storage
+      const response = await fetch(fileUrl);
 
-function ZoneSummaryBar({ zones }: { zones: Zone[] }) {
-  const counts = {
-    PENDING: zones.filter(z => z.status === 'PENDING').length,
-    IN_PROGRESS: zones.filter(z => z.status === 'IN_PROGRESS').length,
-    COMPLETE: zones.filter(z => z.status === 'COMPLETE').length,
-    FLAGGED: zones.filter(z => z.status === 'FLAGGED').length,
-  };
+      if (!response.ok) {
+        throw new Error(`Failed to fetch PDF: ${response.status}`);
+      }
 
-  return (
-    <View style={styles.summaryBar}>
-      {Object.entries(counts).map(([status, count]) => {
-        const config = statusConfig[status as ZoneStatus];
-        if (count === 0) return null;
-        return (
-          <View key={status} style={styles.summaryItem}>
-            <Text style={styles.summaryIcon}>{config.icon}</Text>
-            <Text style={[styles.summaryCount, { color: config.colour }]}>
-              {count}
-            </Text>
-            <Text style={styles.summaryLabel}>{config.label}</Text>
-          </View>
+      const blob = await response.blob();
+
+      // Convert blob to base64 data URL using FileReader
+      // This is pure JavaScript — no native modules needed
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      // Open the base64 data URL in Safari
+      // Safari can render PDF data URLs natively
+      await WebBrowser.openBrowserAsync(base64);
+
+    } catch (err) {
+      console.error('PDF open error:', err);
+      // Fallback — try opening the raw URL directly
+      try {
+        await WebBrowser.openBrowserAsync(fileUrl);
+      } catch (fallbackErr) {
+        Alert.alert(
+          'Could Not Open PDF',
+          'Please try again or check your internet connection.'
         );
-      })}
-    </View>
-  );
-}
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-// ── MAIN SCREEN ─────────────────────────────────────────
+  // ── SAVE NEW ZONE ──────────────────────────────────────
+  const handleSaveZone = async () => {
+    if (!newZoneLabel.trim()) {
+      Alert.alert('Missing Label', 'Please enter a name for this zone.');
+      return;
+    }
 
-export default function DrawingZonesScreen() {
-  const { id } = useLocalSearchParams();
-  const drawing = mockDrawings.find(d => d.id === id);
+    const { error } = await supabase.from('zones').insert({
+      drawing_id: drawingId,
+      project_id: projectId,
+      label: newZoneLabel.trim(),
+      x_percent: 0,
+      y_percent: 0,
+    });
 
-  if (!drawing) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>Drawing not found</Text>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backLink}>Go back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+    if (error) { Alert.alert('Error', 'Could not save zone.'); return; }
 
-  const flaggedZones = drawing.zones.filter(z => z.status === 'FLAGGED');
-  const otherZones = drawing.zones.filter(z => z.status !== 'FLAGGED');
-  const sortedZones = [...flaggedZones, ...otherZones];
+    setNewZoneLabel('');
+    setShowAddZone(false);
+    fetchZones();
+  };
+
+  // ── DELETE ZONE ────────────────────────────────────────
+  const handleDeleteZone = (zone: Zone) => {
+    Alert.alert('Delete Zone', `Delete "${zone.label}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          await supabase.from('zones').delete().eq('id', zone.id);
+          setZones(current => current.filter(z => z.id !== zone.id));
+        },
+      },
+    ]);
+  };
 
   return (
     <View style={styles.container}>
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backArrow}>←</Text>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <Text style={styles.drawingNumber}>
-            {drawing.drawing_number}
-          </Text>
-          <Text style={styles.revisionBadge}>Rev {drawing.revision}</Text>
-        </View>
+        <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
+        <View style={{ width: 60 }} />
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* Drawing title */}
-        <View style={styles.titleBlock}>
-          <Text style={styles.drawingTitle}>{drawing.title}</Text>
-          <Text style={styles.projectName}>{drawing.project_name}</Text>
+        {/* Open PDF button */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.openPdfButton}
+            onPress={handleOpenPdf}
+            disabled={isLoading}
+            activeOpacity={0.8}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.openPdfIcon}>📄</Text>
+            )}
+            <View style={styles.openPdfText}>
+              <Text style={styles.openPdfTitle}>
+                {isLoading ? 'Loading drawing...' : 'View Drawing'}
+              </Text>
+              <Text style={styles.openPdfSub}>
+                {isLoading
+                  ? 'Downloading — please wait'
+                  : 'Opens in Safari — pinch to zoom'}
+              </Text>
+            </View>
+            {!isLoading && <Text style={styles.openPdfArrow}>›</Text>}
+          </TouchableOpacity>
         </View>
 
-        {/* Drawing placeholder image */}
-        <View style={styles.drawingImageContainer}>
-          <View style={styles.drawingImagePlaceholder}>
-            <Text style={styles.drawingImageIcon}>📐</Text>
-            <Text style={styles.drawingImageText}>
-              {drawing.title}
-            </Text>
-            <Text style={styles.drawingImageSub}>
-              Drawing preview will show here
-            </Text>
-          </View>
-        </View>
-
-        {/* Zone summary */}
-        <ZoneSummaryBar zones={drawing.zones} />
-
-        {/* Flagged zones warning */}
-        {flaggedZones.length > 0 && (
-          <View style={styles.flaggedWarning}>
-            <Text style={styles.flaggedWarningIcon}>🚨</Text>
-            <Text style={styles.flaggedWarningText}>
-              {flaggedZones.length} zone
-              {flaggedZones.length > 1 ? 's' : ''} flagged
-              for urgent attention — shown first below
-            </Text>
-          </View>
-        )}
-
-        {/* Section title */}
-        <View style={styles.sectionHeader}>
+        {/* Zones section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>
-              Inspection Zones ({drawing.zones.length})
+              Inspection Zones ({zones.length})
             </Text>
             <TouchableOpacity
-              style={styles.addZoneButton}
-              onPress={() => {
-                Alert.alert(
-                  'Add Zone',
-                  'In the full app you will draw a zone on the drawing. For now zones are pre-configured.',
-                  [{ text: 'OK' }]
-                );
-              }}
+              style={styles.addButton}
+              onPress={() => setShowAddZone(true)}
             >
-              <Text style={styles.addZoneText}>+ Add Zone</Text>
+              <Text style={styles.addButtonText}>+ Add Zone</Text>
             </TouchableOpacity>
           </View>
 
-        {/* Zone cards */}
-        <View style={styles.zoneList}>
-          {sortedZones.map(zone => (
-            <ZoneCard
+          <Text style={styles.hint}>
+            Add zones for each area you need to inspect on this drawing.
+            Tap a zone to start an observation. Hold to delete.
+          </Text>
+
+          {zones.length === 0 && (
+            <View style={styles.emptyZones}>
+              <Text style={styles.emptyIcon}>📍</Text>
+              <Text style={styles.emptyText}>No zones yet</Text>
+              <Text style={styles.emptyHint}>
+                Tap + Add Zone to mark areas on this drawing
+              </Text>
+            </View>
+          )}
+
+          {zones.map((zone, index) => (
+            <TouchableOpacity
               key={zone.id}
-              zone={zone}
-              drawingId={drawing.id}
-            />
+              style={styles.zoneCard}
+              onPress={() => router.push({
+                pathname: '/observation',
+                params: {
+                  zone_id: zone.id,
+                  zone_label: zone.label,
+                  project_id: projectId,
+                  inspection_id: '',
+                },
+              })}
+              onLongPress={() => handleDeleteZone(zone)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.zoneNumber}>
+                <Text style={styles.zoneNumberText}>{index + 1}</Text>
+              </View>
+              <View style={styles.zoneInfo}>
+                <Text style={styles.zoneLabel}>{zone.label}</Text>
+                <Text style={styles.zoneMeta}>Tap to inspect · Hold to delete</Text>
+              </View>
+              <Text style={styles.zoneArrow}>›</Text>
+            </TouchableOpacity>
           ))}
         </View>
 
-        {/* Next step prompt */}
-          <View style={styles.nextStepCard}>
-            <Text style={styles.nextStepTitle}>
-              All zones inspected?
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      {/* Add zone modal */}
+      <Modal
+        visible={showAddZone}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddZone(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowAddZone(false)}
+          />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Add Inspection Zone</Text>
+            <Text style={styles.modalSub}>
+              Name the area you want to inspect on this drawing
             </Text>
-            <Text style={styles.nextStepSub}>
-              Move to the next drawing or add general observations
+            <Text style={styles.modalExamples}>
+              e.g. Column C3, Slab Level 2, Beam B1, Foundation Grid A
             </Text>
-            <View style={styles.nextStepButtons}>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Zone name..."
+              placeholderTextColor="#4A5568"
+              value={newZoneLabel}
+              onChangeText={setNewZoneLabel}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleSaveZone}
+            />
+            <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={styles.nextStepBtn}
-                onPress={() => router.back()}
+                style={styles.modalCancel}
+                onPress={() => {
+                  setShowAddZone(false);
+                  setNewZoneLabel('');
+                }}
               >
-                <Text style={styles.nextStepBtnText}>
-                  ← Next Drawing
-                </Text>
+                <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.nextStepBtn, styles.nextStepBtnPrimary]}
-                onPress={() => router.push({
-                  pathname: '/camera',
-                  params: {
-                    zone_id: 'general',
-                    zone_label: 'General Site Observation',
-                    drawing_id: 'none',
-                  },
-                })}
-              >
-                <Text style={[styles.nextStepBtnText, { color: '#FFFFFF' }]}>
-                  General Obs →
-                </Text>
+              <TouchableOpacity style={styles.modalSave} onPress={handleSaveZone}>
+                <Text style={styles.modalSaveText}>Save Zone</Text>
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
 
-        <View style={{ height: 40 }} />
-      </ScrollView>
     </View>
   );
 }
 
-// ── STYLES ──────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0A1628',
-  },
+  container: { flex: 1, backgroundColor: '#0A1628' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1C2E44',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingTop: 60, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: '#1C2E44',
   },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  backButton: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 60 },
+  backArrow: { fontSize: 20, color: '#2563EB' },
+  backText: { fontSize: 16, color: '#2563EB' },
+  headerTitle: { fontSize: 16, fontWeight: '600', color: '#FFFFFF', flex: 1, textAlign: 'center' },
+  scroll: { flex: 1 },
+  section: { padding: 20, paddingBottom: 8 },
+  sectionTitle: { fontSize: 13, fontWeight: '600', color: '#8899AA', textTransform: 'uppercase', letterSpacing: 1 },
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  openPdfButton: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#2563EB', borderRadius: 14,
+    padding: 18, gap: 14,
   },
-  backArrow: {
-    fontSize: 20,
-    color: '#2563EB',
+  openPdfIcon: { fontSize: 28 },
+  openPdfText: { flex: 1 },
+  openPdfTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginBottom: 3 },
+  openPdfSub: { fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 16 },
+  openPdfArrow: { fontSize: 24, color: 'rgba(255,255,255,0.7)' },
+  hint: { fontSize: 12, color: '#4A5568', fontStyle: 'italic', marginBottom: 14, lineHeight: 18 },
+  addButton: {
+    backgroundColor: '#1C2E44', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8,
   },
-  backText: {
-    fontSize: 16,
-    color: '#2563EB',
-    fontWeight: '500',
+  addButtonText: { fontSize: 13, color: '#2563EB', fontWeight: '600' },
+  emptyZones: {
+    backgroundColor: '#112240', borderRadius: 12, padding: 28,
+    alignItems: 'center', borderWidth: 1, borderColor: '#1C2E44',
+    borderStyle: 'dashed', gap: 8,
   },
-  headerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  drawingNumber: {
-    fontSize: 13,
-    color: '#8899AA',
-    fontWeight: '500',
-  },
-  revisionBadge: {
-    fontSize: 11,
-    color: '#2563EB',
-    backgroundColor: '#1C2E44',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  scroll: {
-    flex: 1,
-  },
-  titleBlock: {
-    padding: 20,
-    paddingBottom: 12,
-  },
-  drawingTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  projectName: {
-    fontSize: 13,
-    color: '#8899AA',
-  },
-  drawingImageContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  drawingImagePlaceholder: {
-    width: '100%',
-    height: 160,
-    backgroundColor: '#112240',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  drawingImageIcon: {
-    fontSize: 32,
-  },
-  drawingImageText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    fontWeight: '500',
-  },
-  drawingImageSub: {
-    fontSize: 12,
-    color: '#4A5568',
-  },
-  summaryBar: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 16,
-    backgroundColor: '#112240',
-    marginHorizontal: 20,
-    borderRadius: 10,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-  },
-  summaryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  summaryIcon: {
-    fontSize: 14,
-  },
-  summaryCount: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  summaryLabel: {
-    fontSize: 11,
-    color: '#8899AA',
-  },
-  flaggedWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginHorizontal: 20,
-    marginBottom: 12,
-    backgroundColor: '#3B1A1A',
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#F87171',
-  },
-  flaggedWarningIcon: {
-    fontSize: 18,
-  },
-  flaggedWarningText: {
-    fontSize: 13,
-    color: '#F87171',
-    flex: 1,
-    lineHeight: 18,
-  },
-  sectionHeader: {
-    paddingHorizontal: 20,
-    paddingBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8899AA',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  zoneList: {
-    paddingHorizontal: 20,
-    gap: 10,
-  },
+  emptyIcon: { fontSize: 32 },
+  emptyText: { fontSize: 15, color: '#FFFFFF', fontWeight: '500' },
+  emptyHint: { fontSize: 12, color: '#4A5568', textAlign: 'center' },
   zoneCard: {
-    backgroundColor: '#112240',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-    borderLeftWidth: 4,
-    gap: 8,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#112240', borderRadius: 12,
+    padding: 14, marginBottom: 10,
+    borderWidth: 1, borderColor: '#1C2E44', gap: 12,
   },
-  zoneHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  zoneNumber: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: '#2563EB', alignItems: 'center', justifyContent: 'center',
   },
-  zoneIcon: {
-    fontSize: 18,
-    width: 24,
+  zoneNumberText: { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
+  zoneInfo: { flex: 1 },
+  zoneLabel: { fontSize: 15, fontWeight: '600', color: '#FFFFFF', marginBottom: 2 },
+  zoneMeta: { fontSize: 11, color: '#4A5568' },
+  zoneArrow: { fontSize: 20, color: '#4A5568' },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
   },
-  zoneLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    flex: 1,
+  modalCard: {
+    backgroundColor: '#112240', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 24, gap: 10,
   },
-  priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF' },
+  modalSub: { fontSize: 13, color: '#8899AA' },
+  modalExamples: { fontSize: 12, color: '#4A5568', fontStyle: 'italic' },
+  modalInput: {
+    backgroundColor: '#0A1628', borderWidth: 1, borderColor: '#2A3F55',
+    borderRadius: 10, padding: 14, fontSize: 15, color: '#FFFFFF', marginTop: 4,
   },
-  priorityText: {
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  modalCancel: {
+    flex: 1, backgroundColor: '#1C2E44', borderRadius: 10, padding: 14, alignItems: 'center',
   },
-  zoneMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  zoneType: {
-    fontSize: 12,
-    color: '#4A5568',
-  },
-  zoneNotes: {
-    fontSize: 12,
-    color: '#8899AA',
-    lineHeight: 18,
-  },
-  zoneFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  inspectText: {
-    fontSize: 12,
-    color: '#2563EB',
-    fontWeight: '500',
-  },
-  zoneArrow: {
-    fontSize: 20,
-    color: '#2563EB',
-  },
-  errorText: {
-    fontSize: 18,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    marginTop: 100,
-    marginBottom: 20,
-  },
-  backLink: {
-    fontSize: 16,
-    color: '#2563EB',
-    textAlign: 'center',
-  },
-  addZoneButton: {
-  backgroundColor: '#1C2E44',
-  paddingHorizontal: 12,
-  paddingVertical: 6,
-  borderRadius: 6,
-  borderWidth: 1,
-  borderColor: '#2563EB',
-},
-addZoneText: {
-  fontSize: 12,
-  color: '#2563EB',
-  fontWeight: '600',
-},
-nextStepCard: {
-  marginHorizontal: 20,
-  marginTop: 16,
-  backgroundColor: '#112240',
-  borderRadius: 12,
-  padding: 16,
-  borderWidth: 1,
-  borderColor: '#1C2E44',
-  borderTopWidth: 3,
-  borderTopColor: '#2563EB',
-},
-nextStepTitle: {
-  fontSize: 15,
-  fontWeight: '600',
-  color: '#FFFFFF',
-  marginBottom: 4,
-},
-nextStepSub: {
-  fontSize: 13,
-  color: '#8899AA',
-  marginBottom: 14,
-  lineHeight: 18,
-},
-nextStepButtons: {
-  flexDirection: 'row',
-  gap: 10,
-},
-nextStepBtn: {
-  flex: 1,
-  backgroundColor: '#1C2E44',
-  borderRadius: 8,
-  padding: 12,
-  alignItems: 'center',
-  borderWidth: 1,
-  borderColor: '#2A3F55',
-},
-nextStepBtnPrimary: {
-  backgroundColor: '#2563EB',
-  borderColor: '#2563EB',
-},
-nextStepBtnText: {
-  fontSize: 13,
-  color: '#8899AA',
-  fontWeight: '600',
-},
+  modalCancelText: { color: '#8899AA', fontSize: 15, fontWeight: '500' },
+  modalSave: { flex: 1, backgroundColor: '#2563EB', borderRadius: 10, padding: 14, alignItems: 'center' },
+  modalSaveText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
 });
