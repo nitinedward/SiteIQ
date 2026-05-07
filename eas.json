@@ -1,12 +1,18 @@
 {
   "cli": {
-    "version": ">= 18.11.0",
+    "version": ">= 16.3.1",
     "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_OPENAI_API_KEY": ""
+      }
     },
     "preview": {
       "distribution": "internal"
