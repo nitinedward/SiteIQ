@@ -9,9 +9,6 @@
       "distribution": "internal",
       "ios": {
         "resourceClass": "m-medium"
-      },
-      "env": {
-        "EXPO_PUBLIC_OPENAI_API_KEY": ""
       }
     },
     "preview": {
