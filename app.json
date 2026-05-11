@@ -18,10 +18,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "SiteIQ needs camera access to capture site inspection photos.",
         "NSMicrophoneUsageDescription": "SiteIQ needs microphone access to record inspection notes.",
-        "NSPhotoLibraryUsageDescription": "SiteIQ needs photo library access to save inspection photos.",
-        "ITSAppUsesNonExemptEncryption": false
-      },
-      "bundleIdentifier": "com.nitinedward.SiteIQ"
+        "NSPhotoLibraryUsageDescription": "SiteIQ needs photo library access to save inspection photos."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -47,15 +45,7 @@
           "photosPermission": "Allow SiteIQ to access your photos for inspection records.",
           "cameraPermission": "Allow SiteIQ to use the camera to photograph inspection findings."
         }
-      ],
-      "expo-web-browser",
-      "expo-secure-store"
-    ],
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "c580efb3-2a9e-4566-ad95-26fb5e39d0be"
-      }
-    }
+      ]
+    ]
   }
 }

@@ -39,10 +39,30 @@ type Drawing = {
   created_at: string;
 };
 
+type Inspection = {
+  id: string;
+  date: string;
+  report_no: string;
+  weather: string;
+  site_contact: string;
+  purpose: string;
+  status: string;
+  created_at: string;
+};
+
 const statusConfig = {
   ACTIVE:    { colour: '#34D399', bg: '#0D3B2E', label: 'Active' },
   ON_HOLD:   { colour: '#FBBF24', bg: '#3B2E0D', label: 'On Hold' },
   COMPLETED: { colour: '#60A5FA', bg: '#1E3A5F', label: 'Completed' },
+};
+
+const STATUS_OPTIONS = ['ACTIVE', 'ON_HOLD', 'COMPLETED'] as const;
+
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-NZ', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  });
 };
 
 export default function ProjectDetailScreen() {
@@ -50,20 +70,44 @@ export default function ProjectDetailScreen() {
 
   const [project, setProject]         = useState<Project | null>(null);
   const [drawings, setDrawings]       = useState<Drawing[]>([]);
+  const [inspections, setInspections] = useState<Inspection[]>([]);
   const [isLoading, setIsLoading]     = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [errorMsg, setErrorMsg]       = useState('');
+  const [isAdmin, setIsAdmin]         = useState(false);
 
-  // Upload modal state
+  // Upload modal
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [drawingTitle, setDrawingTitle]       = useState('');
   const [drawingNumber, setDrawingNumber]     = useState('');
+  const [drawingRevision, setDrawingRevision] = useState('A');
   const [selectedFile, setSelectedFile]       = useState<{ uri: string; name: string } | null>(null);
+
+  // Edit project modal
+  const [showEditModal, setShowEditModal]   = useState(false);
+  const [editName, setEditName]             = useState('');
+  const [editNumber, setEditNumber]         = useState('');
+  const [editClient, setEditClient]         = useState('');
+  const [editAddress, setEditAddress]       = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editStatus, setEditStatus]         = useState<typeof STATUS_OPTIONS[number]>('ACTIVE');
+  const [isSavingEdit, setIsSavingEdit]     = useState(false);
 
   // ── FETCH DATA ─────────────────────────────────────────
   const fetchData = async () => {
     setIsLoading(true);
     setErrorMsg('');
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (user) {
+      const { data: memberData } = await supabase
+        .from('firm_members')
+        .select('role')
+        .eq('user_id', user.id)
+        .single();
+      setIsAdmin(memberData?.role === 'admin');
+    }
 
     const { data: projectData, error: projectError } = await supabase
       .from('projects')
@@ -79,22 +123,73 @@ export default function ProjectDetailScreen() {
 
     setProject(projectData as Project);
 
-    const { data: drawingsData, error: drawingsError } = await supabase
+    // Fetch drawings ordered by number
+    const { data: drawingsData } = await supabase
       .from('drawings')
       .select('*')
       .eq('project_id', id)
       .order('created_at', { ascending: false });
 
-    if (!drawingsError) setDrawings(drawingsData as Drawing[]);
+    setDrawings(drawingsData as Drawing[] ?? []);
+
+    // Fetch past inspections for this project
+    const { data: inspectionsData } = await supabase
+      .from('inspections')
+      .select('*')
+      .eq('project_id', id)
+      .order('created_at', { ascending: false });
+
+    setInspections(inspectionsData as Inspection[] ?? []);
 
     setIsLoading(false);
   };
 
   useFocusEffect(
-    useCallback(() => {
-      fetchData();
-    }, [id])
+    useCallback(() => { fetchData(); }, [id])
   );
+
+  // ── OPEN EDIT MODAL ────────────────────────────────────
+  const handleEditProject = () => {
+    if (!project) return;
+    setEditName(project.name);
+    setEditNumber(project.project_number);
+    setEditClient(project.client_name || '');
+    setEditAddress(project.address || '');
+    setEditDescription(project.description || '');
+    setEditStatus(project.status);
+    setShowEditModal(true);
+  };
+
+  // ── SAVE EDITED PROJECT ────────────────────────────────
+  const handleSaveEdit = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Missing Field', 'Please enter a project name.');
+      return;
+    }
+    setIsSavingEdit(true);
+
+    const { error } = await supabase
+      .from('projects')
+      .update({
+        name:           editName.trim(),
+        project_number: editNumber.trim(),
+        client_name:    editClient.trim(),
+        address:        editAddress.trim(),
+        description:    editDescription.trim(),
+        status:         editStatus,
+      })
+      .eq('id', id);
+
+    setIsSavingEdit(false);
+
+    if (error) {
+      Alert.alert('Save Failed', error.message);
+      return;
+    }
+
+    setShowEditModal(false);
+    fetchData();
+  };
 
   // ── PICK PDF FILE ──────────────────────────────────────
   const handlePickFile = async () => {
@@ -102,9 +197,7 @@ export default function ProjectDetailScreen() {
       type: ['application/pdf'],
       copyToCacheDirectory: true,
     });
-
     if (result.canceled) return;
-
     const file = result.assets[0];
     setSelectedFile({ uri: file.uri, name: file.name });
     setDrawingTitle(file.name.replace('.pdf', '').replace(/-/g, ' '));
@@ -126,36 +219,48 @@ export default function ProjectDetailScreen() {
     setShowUploadModal(false);
 
     try {
-      const response = await fetch(selectedFile.uri);
-      const blob = await response.blob();
-      const uploadFileName = `${Date.now()}-${selectedFile.name}`;
+      const fileExtension = selectedFile.name.split('.').pop() || 'pdf';
+      const uploadFileName = `drawing-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExtension}`;
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('drawings')
-        .upload(uploadFileName, blob, {
-          contentType: 'application/pdf',
-          upsert: false,
-        });
+      const formData = new FormData();
+      formData.append('file', {
+        uri: selectedFile.uri,
+        name: uploadFileName,
+        type: 'application/pdf',
+      } as any);
 
-      if (uploadError) {
-        Alert.alert('Upload Failed', uploadError.message);
+      const supabaseUrl = 'https://vbaewualqaxhbmqgnhdt.supabase.co';
+      const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZiYWV3dWFscWF4aGJtcWduaGR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4NzAzNjMsImV4cCI6MjA5MzQ0NjM2M30.8s39SZtGq4r_0NXYhsAU0WdPSGqLfefm2YYK_JXjZbg';
+
+      const uploadResponse = await fetch(
+        `${supabaseUrl}/storage/v1/object/drawings/${uploadFileName}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'apikey': supabaseKey,
+          },
+          body: formData,
+        }
+      );
+
+      if (!uploadResponse.ok) {
+        Alert.alert('Upload Failed', 'Could not upload drawing. Please try again.');
         setIsUploading(false);
         return;
       }
 
-      const { data: urlData } = supabase.storage
-        .from('drawings')
-        .getPublicUrl(uploadData.path);
+      const publicUrl = `${supabaseUrl}/storage/v1/object/public/drawings/${uploadFileName}`;
 
       const { error: dbError } = await supabase
         .from('drawings')
         .insert({
           project_id: id,
-          title: drawingTitle.trim(),
-          number: drawingNumber.trim(),
-          revision: 'A',
-          file_url: urlData.publicUrl,
-          file_name: selectedFile.name,
+          title:      drawingTitle.trim(),
+          number:     drawingNumber.trim(),
+          revision:   drawingRevision.trim() || 'A',
+          file_url:   publicUrl,
+          file_name:  uploadFileName,
         });
 
       if (dbError) {
@@ -171,6 +276,7 @@ export default function ProjectDetailScreen() {
 
       setDrawingTitle('');
       setDrawingNumber('');
+      setDrawingRevision('A');
       setSelectedFile(null);
 
       Alert.alert('✅ Drawing Uploaded', `"${drawingTitle}" has been added.`);
@@ -185,9 +291,10 @@ export default function ProjectDetailScreen() {
 
   // ── DELETE DRAWING ─────────────────────────────────────
   const handleDeleteDrawing = (drawing: Drawing) => {
+    if (!isAdmin) return;
     Alert.alert(
       'Delete Drawing',
-      `Are you sure you want to delete "${drawing.title}"?`,
+      `Delete "${drawing.title}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -201,7 +308,6 @@ export default function ProjectDetailScreen() {
     );
   };
 
-  // ── LOADING STATE ──────────────────────────────────────
   if (isLoading) {
     return (
       <View style={[styles.container, styles.centred]}>
@@ -233,10 +339,16 @@ export default function ProjectDetailScreen() {
           <Text style={styles.backArrow}>←</Text>
           <Text style={styles.backText}>Projects</Text>
         </TouchableOpacity>
-        <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-          <Text style={[styles.statusText, { color: status.colour }]}>
-            {status.label}
-          </Text>
+        <View style={styles.headerRight}>
+          <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+            <Text style={[styles.statusText, { color: status.colour }]}>{status.label}</Text>
+          </View>
+          {/* Edit button — admin only */}
+          {isAdmin && (
+            <TouchableOpacity style={styles.editButton} onPress={handleEditProject}>
+              <Text style={styles.editButtonText}>Edit</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -252,16 +364,18 @@ export default function ProjectDetailScreen() {
         {/* Stats */}
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{drawings.length}</Text>
+            <Text style={styles.statValue}>{project.drawing_count ?? drawings.length}</Text>
             <Text style={styles.statLabel}>Drawings</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>—</Text>
-            <Text style={styles.statLabel}>Zones</Text>
+            <Text style={styles.statValue}>{inspections.length}</Text>
+            <Text style={styles.statLabel}>Inspections</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>—</Text>
-            <Text style={styles.statLabel}>Inspections</Text>
+            <Text style={styles.statValue}>
+              {inspections.filter(i => i.status === 'COMPLETED').length}
+            </Text>
+            <Text style={styles.statLabel}>Reports</Text>
           </View>
         </View>
 
@@ -273,7 +387,9 @@ export default function ProjectDetailScreen() {
           </View>
           <View style={styles.infoCard}>
             <Text style={styles.infoLabel}>Last Inspection</Text>
-            <Text style={styles.infoValue}>{project.last_inspection || 'None yet'}</Text>
+            <Text style={styles.infoValue}>
+              {inspections.length > 0 ? inspections[0].date : 'None yet'}
+            </Text>
           </View>
         </View>
 
@@ -285,7 +401,7 @@ export default function ProjectDetailScreen() {
           </View>
         ) : null}
 
-        {/* Start Inspection */}
+        {/* START INSPECTION */}
         {project.status !== 'COMPLETED' && (
           <View style={styles.section}>
             <TouchableOpacity
@@ -300,7 +416,7 @@ export default function ProjectDetailScreen() {
               <View style={styles.startButtonTextBlock}>
                 <Text style={styles.startButtonTitle}>Start Today's Inspection</Text>
                 <Text style={styles.startButtonSub}>
-                  Capture observations, photos and measurements
+                  Select drawings, capture observations and measurements
                 </Text>
               </View>
               <Text style={styles.startButtonArrow}>›</Text>
@@ -308,30 +424,14 @@ export default function ProjectDetailScreen() {
           </View>
         )}
 
-        {/* Drawings */}
+        {/* ALL DRAWINGS — full list */}
         <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Drawings ({drawings.length})</Text>
-            {isUploading ? (
-              <ActivityIndicator size="small" color="#2563EB" />
-            ) : (
-              <TouchableOpacity style={styles.uploadButton} onPress={handlePickFile}>
-                <Text style={styles.uploadButtonText}>+ Upload PDF</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <Text style={styles.drawingsHint}>Tap to view · Hold to delete</Text>
-
+          <Text style={styles.sectionTitle}>Drawings ({drawings.length})</Text>
           {drawings.length === 0 ? (
-            <TouchableOpacity style={styles.emptyDrawings} onPress={handlePickFile}>
+            <View style={styles.emptyDrawings}>
               <Text style={styles.emptyDrawingsIcon}>📐</Text>
-              <Text style={styles.emptyDrawingsText}>No drawings yet</Text>
-              <Text style={styles.emptyDrawingsHint}>Tap here to upload a PDF drawing</Text>
-              <View style={styles.emptyUploadButton}>
-                <Text style={styles.emptyUploadButtonText}>Select PDF from Files</Text>
-              </View>
-            </TouchableOpacity>
+              <Text style={styles.emptyDrawingsText}>No drawings uploaded yet</Text>
+            </View>
           ) : (
             drawings.map(drawing => (
               <TouchableOpacity
@@ -344,16 +444,19 @@ export default function ProjectDetailScreen() {
                     title: drawing.title,
                     file_url: drawing.file_url,
                     project_id: project.id,
+                    view_only: 'true',
                   },
                 })}
                 onLongPress={() => handleDeleteDrawing(drawing)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.drawingIcon}>📄</Text>
+                <View style={styles.drawingBadge}>
+                  <Text style={styles.drawingBadgeText}>{drawing.number || '—'}</Text>
+                </View>
                 <View style={styles.drawingInfo}>
                   <Text style={styles.drawingTitle}>{drawing.title}</Text>
                   <Text style={styles.drawingMeta}>
-                    {drawing.number ? `${drawing.number} · ` : ''}Rev {drawing.revision}
+                    Rev {drawing.revision} · {formatDate(drawing.created_at)}
                   </Text>
                 </View>
                 <Text style={styles.drawingArrow}>›</Text>
@@ -362,10 +465,172 @@ export default function ProjectDetailScreen() {
           )}
         </View>
 
+        {/* UPLOAD BUTTON — admin only */}
+        {isAdmin && (
+          <View style={styles.section}>
+            {isUploading ? (
+              <View style={styles.uploadingRow}>
+                <ActivityIndicator size="small" color="#2563EB" />
+                <Text style={styles.uploadingText}>Uploading drawing...</Text>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.uploadDrawingsButton} onPress={handlePickFile}>
+                <Text style={styles.uploadDrawingsIcon}>📐</Text>
+                <Text style={styles.uploadDrawingsText}>Upload Drawing</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* PAST INSPECTIONS / SITE REPORTS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Site Reports ({inspections.length})
+          </Text>
+
+          {inspections.length === 0 ? (
+            <View style={styles.emptyInspections}>
+              <Text style={styles.emptyInspectionsText}>
+                No inspections yet — tap Start Inspection above
+              </Text>
+            </View>
+          ) : (
+            inspections.map(inspection => (
+              <TouchableOpacity
+                key={inspection.id}
+                style={styles.inspectionRow}
+                activeOpacity={0.7}
+                onPress={() => Alert.alert(
+                  `Report #${inspection.report_no}`,
+                  `Date: ${inspection.date}\nWeather: ${inspection.weather}\nSite Contact: ${inspection.site_contact || '—'}\nPurpose: ${inspection.purpose || '—'}\nStatus: ${inspection.status}`,
+                  [{ text: 'OK' }]
+                )}
+              >
+                <View style={styles.inspectionLeft}>
+                  <View style={styles.reportBadge}>
+                    <Text style={styles.reportBadgeText}>#{inspection.report_no}</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.inspectionDate}>{inspection.date}</Text>
+                    <Text style={styles.inspectionMeta}>
+                      {inspection.site_contact || 'No contact'} · {inspection.weather}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[
+                  styles.inspectionStatus,
+                  { backgroundColor: inspection.status === 'COMPLETED' ? '#0D3B2E' : '#3B2E0D' }
+                ]}>
+                  <Text style={[
+                    styles.inspectionStatusText,
+                    { color: inspection.status === 'COMPLETED' ? '#34D399' : '#FBBF24' }
+                  ]}>
+                    {inspection.status === 'COMPLETED' ? 'Complete' : 'In Progress'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Upload modal — KeyboardAvoidingView stops keyboard covering inputs */}
+      {/* Edit project modal */}
+      <Modal
+        visible={showEditModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowEditModal(false)}
+          />
+          <ScrollView style={styles.modalCard} keyboardShouldPersistTaps="handled">
+            <Text style={styles.modalTitle}>Edit Project</Text>
+
+            <Text style={styles.modalLabel}>Project Name *</Text>
+            <TextInput style={styles.modalInput} value={editName} onChangeText={setEditName} placeholderTextColor="#4A5568" />
+
+            <Text style={styles.modalLabel}>Project Number</Text>
+            <TextInput style={styles.modalInput} value={editNumber} onChangeText={setEditNumber} placeholderTextColor="#4A5568" autoCapitalize="characters" />
+
+            <Text style={styles.modalLabel}>Client Name</Text>
+            <TextInput style={styles.modalInput} value={editClient} onChangeText={setEditClient} placeholderTextColor="#4A5568" />
+
+            <Text style={styles.modalLabel}>Address</Text>
+            <TextInput style={styles.modalInput} value={editAddress} onChangeText={setEditAddress} placeholderTextColor="#4A5568" />
+
+            <Text style={styles.modalLabel}>Project Scope / Description</Text>
+            <TextInput
+              style={[styles.modalInput, { height: 80, textAlignVertical: 'top' }]}
+              value={editDescription}
+              onChangeText={setEditDescription}
+              placeholderTextColor="#4A5568"
+              multiline
+            />
+
+            <Text style={styles.modalLabel}>Status</Text>
+            <View style={styles.statusRow}>
+              {STATUS_OPTIONS.map(s => (
+                <TouchableOpacity
+                  key={s}
+                  style={[
+                    styles.statusOption,
+                    editStatus === s && {
+                      borderColor: statusConfig[s].colour,
+                      backgroundColor: statusConfig[s].colour + '15',
+                    },
+                  ]}
+                  onPress={() => setEditStatus(s)}
+                >
+                  <View style={[
+                    styles.statusDot,
+                    { backgroundColor: statusConfig[s].colour },
+                    editStatus !== s && { opacity: 0.4 },
+                  ]} />
+                  <Text style={[
+                    styles.statusLabel,
+                    editStatus === s && { color: statusConfig[s].colour },
+                  ]}>
+                    {statusConfig[s].label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => setShowEditModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSave, isSavingEdit && { opacity: 0.6 }]}
+                onPress={handleSaveEdit}
+                disabled={isSavingEdit}
+              >
+                {isSavingEdit ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.modalSaveText}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Upload drawing modal */}
       <Modal
         visible={showUploadModal}
         transparent
@@ -401,20 +666,33 @@ export default function ProjectDetailScreen() {
               value={drawingTitle}
               onChangeText={setDrawingTitle}
               autoFocus
-              returnKeyType="next"
             />
 
-            <Text style={styles.modalLabel}>Drawing Number</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. SK-001"
-              placeholderTextColor="#4A5568"
-              value={drawingNumber}
-              onChangeText={setDrawingNumber}
-              autoCapitalize="characters"
-              returnKeyType="done"
-              onSubmitEditing={handleUpload}
-            />
+            <View style={styles.modalRow}>
+              <View style={styles.modalHalf}>
+                <Text style={styles.modalLabel}>Drawing Number</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="e.g. SK-001"
+                  placeholderTextColor="#4A5568"
+                  value={drawingNumber}
+                  onChangeText={setDrawingNumber}
+                  autoCapitalize="characters"
+                />
+              </View>
+              <View style={styles.modalHalf}>
+                <Text style={styles.modalLabel}>Revision</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="e.g. A"
+                  placeholderTextColor="#4A5568"
+                  value={drawingRevision}
+                  onChangeText={setDrawingRevision}
+                  autoCapitalize="characters"
+                  maxLength={3}
+                />
+              </View>
+            </View>
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
@@ -424,6 +702,7 @@ export default function ProjectDetailScreen() {
                   setSelectedFile(null);
                   setDrawingTitle('');
                   setDrawingNumber('');
+                  setDrawingRevision('A');
                 }}
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
@@ -454,8 +733,14 @@ const styles = StyleSheet.create({
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   backArrow: { fontSize: 20, color: '#2563EB' },
   backText: { fontSize: 16, color: '#2563EB', fontWeight: '500' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   statusBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
   statusText: { fontSize: 12, fontWeight: '500' },
+  editButton: {
+    backgroundColor: '#1C2E44', paddingHorizontal: 14,
+    paddingVertical: 7, borderRadius: 8,
+  },
+  editButtonText: { fontSize: 13, color: '#2563EB', fontWeight: '600' },
   scroll: { flex: 1 },
   titleBlock: { padding: 20, paddingBottom: 12 },
   projectNumber: { fontSize: 12, color: '#8899AA', letterSpacing: 1, marginBottom: 6 },
@@ -485,11 +770,19 @@ const styles = StyleSheet.create({
   startButtonTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginBottom: 3 },
   startButtonSub: { fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 16 },
   startButtonArrow: { fontSize: 24, color: 'rgba(255,255,255,0.7)' },
-  uploadButton: {
-    backgroundColor: '#1C2E44', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8,
+  latestDrawingCard: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#112240',
+    borderRadius: 10, padding: 14, borderWidth: 1.5, borderColor: '#2563EB', gap: 12,
   },
-  uploadButtonText: { fontSize: 13, color: '#2563EB', fontWeight: '600' },
-  drawingsHint: { fontSize: 12, color: '#4A5568', marginBottom: 10, fontStyle: 'italic', marginTop: 4 },
+  uploadDrawingsButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#112240', borderRadius: 12, padding: 16,
+    borderWidth: 1.5, borderColor: '#2563EB', borderStyle: 'dashed', gap: 10,
+  },
+  uploadDrawingsIcon: { fontSize: 22 },
+  uploadDrawingsText: { fontSize: 15, color: '#2563EB', fontWeight: '600' },
+  uploadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, justifyContent: 'center', padding: 16 },
+  uploadingText: { fontSize: 14, color: '#8899AA' },
   emptyDrawings: {
     backgroundColor: '#112240', borderRadius: 12, padding: 28,
     alignItems: 'center', borderWidth: 1, borderColor: '#1C2E44',
@@ -497,7 +790,6 @@ const styles = StyleSheet.create({
   },
   emptyDrawingsIcon: { fontSize: 36 },
   emptyDrawingsText: { fontSize: 15, color: '#FFFFFF', fontWeight: '500' },
-  emptyDrawingsHint: { fontSize: 12, color: '#4A5568', textAlign: 'center' },
   emptyUploadButton: {
     backgroundColor: '#2563EB', borderRadius: 8,
     paddingHorizontal: 20, paddingVertical: 10, marginTop: 8,
@@ -508,36 +800,66 @@ const styles = StyleSheet.create({
     borderRadius: 10, padding: 14, marginBottom: 8,
     borderWidth: 1, borderColor: '#1C2E44', gap: 12,
   },
-  drawingIcon: { fontSize: 22 },
+  drawingBadge: {
+    backgroundColor: '#1C2E44', borderRadius: 8, paddingHorizontal: 10,
+    paddingVertical: 6, minWidth: 52, alignItems: 'center',
+    borderWidth: 1, borderColor: '#2A3F55',
+  },
+  drawingBadgeText: { fontSize: 11, color: '#2563EB', fontWeight: '700', letterSpacing: 0.5 },
   drawingInfo: { flex: 1 },
-  drawingTitle: { fontSize: 14, fontWeight: '500', color: '#FFFFFF', marginBottom: 2 },
-  drawingMeta: { fontSize: 12, color: '#8899AA' },
+  drawingTitle: { fontSize: 14, fontWeight: '500', color: '#FFFFFF', marginBottom: 3 },
+  drawingMeta: { fontSize: 12, color: '#4A5568' },
   drawingArrow: { fontSize: 20, color: '#4A5568' },
-  modalOverlay: {
-    flex: 1, justifyContent: 'flex-end',
+  emptyInspections: {
+    backgroundColor: '#112240', borderRadius: 10, padding: 16,
+    borderWidth: 1, borderColor: '#1C2E44', alignItems: 'center',
   },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+  emptyInspectionsText: { fontSize: 13, color: '#4A5568', textAlign: 'center' },
+  inspectionRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#112240', borderRadius: 10, padding: 14,
+    marginBottom: 8, borderWidth: 1, borderColor: '#1C2E44',
   },
+  inspectionLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  reportBadge: {
+    backgroundColor: '#1C2E44', borderRadius: 6, paddingHorizontal: 8,
+    paddingVertical: 4, borderWidth: 1, borderColor: '#2A3F55',
+  },
+  reportBadgeText: { fontSize: 12, color: '#8899AA', fontWeight: '700' },
+  inspectionDate: { fontSize: 14, color: '#FFFFFF', fontWeight: '500', marginBottom: 2 },
+  inspectionMeta: { fontSize: 12, color: '#4A5568' },
+  inspectionStatus: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  inspectionStatusText: { fontSize: 11, fontWeight: '600' },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)' },
   modalCard: {
     backgroundColor: '#112240', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 24, gap: 12,
+    padding: 24, maxHeight: '90%',
   },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', marginBottom: 4 },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', marginBottom: 16 },
   selectedFile: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#0A1628', borderRadius: 8, padding: 12,
-    borderWidth: 1, borderColor: '#2563EB',
+    borderWidth: 1, borderColor: '#2563EB', marginBottom: 12,
   },
   selectedFileIcon: { fontSize: 20 },
   selectedFileName: { flex: 1, fontSize: 13, color: '#2563EB', fontWeight: '500' },
-  modalLabel: { fontSize: 12, color: '#8899AA', marginBottom: 4, marginTop: 4 },
+  modalLabel: { fontSize: 12, color: '#8899AA', marginBottom: 6, marginTop: 12 },
   modalInput: {
     backgroundColor: '#0A1628', borderWidth: 1, borderColor: '#2A3F55',
     borderRadius: 10, padding: 14, fontSize: 15, color: '#FFFFFF',
   },
-  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  modalRow: { flexDirection: 'row', gap: 10 },
+  modalHalf: { flex: 1 },
+  statusRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  statusOption: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#0A1628', borderWidth: 1.5, borderColor: '#1C2E44',
+    borderRadius: 10, padding: 10,
+  },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusLabel: { fontSize: 12, color: '#8899AA', fontWeight: '500' },
+  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 20 },
   modalCancel: {
     flex: 1, backgroundColor: '#1C2E44', borderRadius: 10, padding: 14, alignItems: 'center',
   },

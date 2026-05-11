@@ -11,6 +11,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { useState, useEffect } from 'react';
 import { router } from 'expo-router';
@@ -22,70 +23,49 @@ import {
   authenticateWithBiometric,
 } from '../lib/auth';
 
+const { width } = Dimensions.get('window');
+
 export default function LoginScreen() {
   const [email, setEmail]         = useState('');
   const [password, setPassword]   = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showBiometric, setShowBiometric]     = useState(false);
-  const [showPinOption, setShowPinOption]     = useState(false);
+  const [showBiometric, setShowBiometric]         = useState(false);
+  const [showPinOption, setShowPinOption]         = useState(false);
   const [isBiometricLoading, setIsBiometricLoading] = useState(false);
+  const [focusedField, setFocusedField]           = useState<string | null>(null);
 
-  useEffect(() => {
-    checkAuthOptions();
-  }, []);
+  useEffect(() => { checkAuthOptions(); }, []);
 
   const checkAuthOptions = async () => {
     const biometricAvailable = await isBiometricAvailable();
     const biometricOn        = await isBiometricEnabled();
     const pinOn              = await isPinEnabled();
-
     setShowBiometric(biometricAvailable && biometricOn);
     setShowPinOption(pinOn);
-
-    // Auto-trigger Face ID if enabled
     if (biometricAvailable && biometricOn) {
-      setTimeout(() => handleBiometricLogin(), 500);
+      setTimeout(() => handleBiometricLogin(), 600);
     }
   };
 
-  // ── FACE ID LOGIN ──────────────────────────────────────
   const handleBiometricLogin = async () => {
     setIsBiometricLoading(true);
     const result = await authenticateWithBiometric();
     setIsBiometricLoading(false);
-
-    if (result.success) {
-      router.replace('/(tabs)/projects');
-    } else if (!result.cancelled) {
-      // Face ID failed — offer PIN as fallback
-      router.push('/pin-login');
-    }
-    // If cancelled, just let them use email/password
+    if (result.success) router.replace('/(tabs)/projects');
+    else if (!result.cancelled) router.push('/pin-login');
   };
 
-  // ── EMAIL/PASSWORD LOGIN ───────────────────────────────
   const handleLogin = async () => {
     if (!email) { Alert.alert('Missing Email', 'Please enter your email.'); return; }
     if (!password) { Alert.alert('Missing Password', 'Please enter your password.'); return; }
-
     Keyboard.dismiss();
     setIsLoading(true);
-
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-
     setIsLoading(false);
-
     if (error) { Alert.alert('Login Failed', error.message); return; }
-
-    // Check if they've already set up PIN
     const pinOn = await isPinEnabled();
-
     if (!pinOn) {
-      // First time — take them to PIN setup
-      router.replace({
-        pathname: '/setup-pin',
-        params: { email, password },
-      });
+      router.replace({ pathname: '/setup-pin', params: { email, password } });
     } else {
       router.replace('/(tabs)/projects');
     }
@@ -97,97 +77,116 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Logo area */}
+          <View style={styles.logoArea}>
+            <View style={styles.logoMark}>
+              <Text style={styles.logoMarkText}>S</Text>
+            </View>
+            <Text style={styles.appName}>SiteIQ</Text>
+            <Text style={styles.tagline}>Structural Inspection Platform</Text>
+          </View>
 
-          <Text style={styles.appName}>SiteIQ</Text>
-          <Text style={styles.tagline}>Structural Site Inspections</Text>
-
-          {/* Face ID button */}
-          {showBiometric && (
-            <TouchableOpacity
-              style={styles.biometricButton}
-              onPress={handleBiometricLogin}
-              disabled={isBiometricLoading}
-            >
-              {isBiometricLoading ? (
-                <ActivityIndicator color="#2563EB" />
-              ) : (
-                <>
-                  <Text style={styles.biometricIcon}>🔒</Text>
-                  <Text style={styles.biometricText}>Log in with Face ID</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-
-          {/* PIN button */}
-          {showPinOption && (
-            <TouchableOpacity
-              style={styles.pinButton}
-              onPress={() => router.push('/pin-login')}
-            >
-              <Text style={styles.pinIcon}>🔢</Text>
-              <Text style={styles.pinText}>Log in with PIN</Text>
-            </TouchableOpacity>
-          )}
-
+          {/* Biometric buttons */}
           {(showBiometric || showPinOption) && (
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or use email</Text>
-              <View style={styles.dividerLine} />
+            <View style={styles.biometricArea}>
+              {showBiometric && (
+                <TouchableOpacity
+                  style={styles.biometricBtn}
+                  onPress={handleBiometricLogin}
+                  disabled={isBiometricLoading}
+                  activeOpacity={0.8}
+                >
+                  {isBiometricLoading ? (
+                    <ActivityIndicator color="#0EA5E9" size="small" />
+                  ) : (
+                    <>
+                      <Text style={styles.biometricBtnIcon}>🔒</Text>
+                      <Text style={styles.biometricBtnText}>Continue with Face ID</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+              {showPinOption && (
+                <TouchableOpacity
+                  style={styles.pinBtn}
+                  onPress={() => router.push('/pin-login')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.pinBtnIcon}>⠿</Text>
+                  <Text style={styles.pinBtnText}>Use PIN</Text>
+                </TouchableOpacity>
+              )}
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or sign in with email</Text>
+                <View style={styles.dividerLine} />
+              </View>
             </View>
           )}
 
+          {/* Form */}
           <View style={styles.form}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="engineer@yourfirm.com"
-              placeholderTextColor="#4A5568"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>EMAIL</Text>
+              <TextInput
+                style={[styles.input, focusedField === 'email' && styles.inputFocused]}
+                placeholder="engineer@yourfirm.com"
+                placeholderTextColor="#334155"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                onFocus={() => setFocusedField('email')}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
 
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your password"
-              placeholderTextColor="#4A5568"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+            <View style={styles.fieldGroup}>
+              <View style={styles.labelRow}>
+                <Text style={styles.fieldLabel}>PASSWORD</Text>
+                <TouchableOpacity onPress={() => router.push('/forgot-password')}>
+                  <Text style={styles.forgotText}>Forgot?</Text>
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={[styles.input, focusedField === 'password' && styles.inputFocused]}
+                placeholder="••••••••"
+                placeholderTextColor="#334155"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
 
             <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={() => router.push('/forgot-password')}
-            >
-              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, isLoading && styles.buttonDisabled]}
+              style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
               onPress={handleLogin}
               disabled={isLoading}
+              activeOpacity={0.9}
             >
               {isLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.buttonText}>Log In</Text>
+                <Text style={styles.loginBtnText}>Sign In</Text>
               )}
             </TouchableOpacity>
 
             <View style={styles.signupRow}>
-              <Text style={styles.signupText}>Don't have an account? </Text>
+              <Text style={styles.signupPrompt}>New to SiteIQ? </Text>
               <TouchableOpacity onPress={() => router.push('/signup')}>
-                <Text style={styles.signupLink}>Sign up</Text>
+                <Text style={styles.signupLink}>Create account</Text>
               </TouchableOpacity>
             </View>
           </View>
 
+          <Text style={styles.footer}>Structural Inspection Software · NZ</Text>
         </ScrollView>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
@@ -195,41 +194,77 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A1628' },
-  scrollContent: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  appName: { fontSize: 48, fontWeight: 'bold', color: '#FFFFFF', letterSpacing: 4, marginBottom: 8 },
-  tagline: { fontSize: 14, color: '#8899AA', marginBottom: 48, letterSpacing: 2 },
-  biometricButton: {
-    width: '100%', backgroundColor: '#112240', borderRadius: 12,
-    padding: 16, alignItems: 'center', borderWidth: 1.5,
-    borderColor: '#2563EB', gap: 8, marginBottom: 10, flexDirection: 'row',
-    justifyContent: 'center',
+  container: { flex: 1, backgroundColor: '#080C14' },
+  scrollContent: {
+    flexGrow: 1, paddingHorizontal: 28,
+    paddingTop: 80, paddingBottom: 40,
   },
-  biometricIcon: { fontSize: 20 },
-  biometricText: { fontSize: 16, fontWeight: '600', color: '#2563EB' },
-  pinButton: {
-    width: '100%', backgroundColor: '#112240', borderRadius: 12,
-    padding: 16, alignItems: 'center', borderWidth: 1,
-    borderColor: '#1C2E44', gap: 8, marginBottom: 10, flexDirection: 'row',
-    justifyContent: 'center',
+  logoArea: { alignItems: 'center', marginBottom: 48 },
+  logoMark: {
+    width: 64, height: 64, borderRadius: 18,
+    backgroundColor: '#0EA5E9',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: '#0EA5E9',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 12,
   },
-  pinIcon: { fontSize: 20 },
-  pinText: { fontSize: 16, fontWeight: '600', color: '#8899AA' },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginVertical: 20, gap: 10 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#1C2E44' },
-  dividerText: { fontSize: 12, color: '#4A5568' },
-  form: { width: '100%' },
-  label: { fontSize: 13, color: '#8899AA', marginBottom: 6, letterSpacing: 1 },
+  logoMarkText: {
+    fontSize: 32, fontWeight: '900', color: '#FFFFFF', letterSpacing: -1,
+  },
+  appName: {
+    fontSize: 34, fontWeight: '800', color: '#F8FAFC',
+    letterSpacing: -0.5, marginBottom: 6,
+  },
+  tagline: { fontSize: 13, color: '#475569', letterSpacing: 1.5 },
+  biometricArea: { marginBottom: 32, gap: 10 },
+  biometricBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#0F1923', borderRadius: 14, padding: 16, gap: 10,
+    borderWidth: 1.5, borderColor: '#0EA5E9',
+  },
+  biometricBtnIcon: { fontSize: 18 },
+  biometricBtnText: { fontSize: 15, fontWeight: '600', color: '#0EA5E9' },
+  pinBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#0F1923', borderRadius: 14, padding: 14, gap: 10,
+    borderWidth: 1, borderColor: '#1E293B',
+  },
+  pinBtnIcon: { fontSize: 16, color: '#64748B' },
+  pinBtnText: { fontSize: 14, fontWeight: '500', color: '#64748B' },
+  dividerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#1E293B' },
+  dividerText: { fontSize: 11, color: '#334155', letterSpacing: 0.5 },
+  form: { gap: 20 },
+  fieldGroup: { gap: 8 },
+  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  fieldLabel: { fontSize: 11, color: '#475569', fontWeight: '600', letterSpacing: 1.5 },
+  forgotText: { fontSize: 12, color: '#0EA5E9', fontWeight: '500' },
   input: {
-    backgroundColor: '#1C2E44', borderWidth: 1, borderColor: '#2A3F55',
-    borderRadius: 8, padding: 14, fontSize: 15, color: '#FFFFFF', marginBottom: 16,
+    backgroundColor: '#0D1520', borderWidth: 1, borderColor: '#1E293B',
+    borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14,
+    fontSize: 15, color: '#F8FAFC',
   },
-  forgotPassword: { alignSelf: 'flex-end', marginBottom: 16, marginTop: -8 },
-  forgotPasswordText: { fontSize: 13, color: '#2563EB' },
-  button: { backgroundColor: '#2563EB', borderRadius: 8, padding: 16, alignItems: 'center', marginBottom: 20 },
-  buttonDisabled: { backgroundColor: '#1A3A7A', opacity: 0.7 },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', letterSpacing: 1 },
-  signupRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  signupText: { fontSize: 14, color: '#8899AA' },
-  signupLink: { fontSize: 14, color: '#2563EB', fontWeight: '600' },
+  inputFocused: { borderColor: '#0EA5E9', backgroundColor: '#0F1E30' },
+  loginBtn: {
+    backgroundColor: '#0EA5E9', borderRadius: 14, padding: 16,
+    alignItems: 'center', marginTop: 4,
+    shadowColor: '#0EA5E9',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  loginBtnDisabled: { opacity: 0.6 },
+  loginBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
+  signupRow: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 4,
+  },
+  signupPrompt: { fontSize: 14, color: '#475569' },
+  signupLink: { fontSize: 14, color: '#0EA5E9', fontWeight: '600' },
+  footer: { fontSize: 11, color: '#1E293B', textAlign: 'center', marginTop: 48, letterSpacing: 1 },
 });

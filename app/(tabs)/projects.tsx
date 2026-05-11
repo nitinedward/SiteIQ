@@ -1,19 +1,11 @@
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  Alert,
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  TextInput, ActivityIndicator, Alert,
 } from 'react-native';
 import { useState, useCallback } from 'react';
 import { router, useFocusEffect } from 'expo-router';
 import { supabase } from '../../lib/supabase';
-
-// ── TYPE DEFINITION ────────────────────────
-// Tells TypeScript exactly what a Project object looks like
+import { getUserFirm } from '../../lib/firm';
 
 type Project = {
   id: string;
@@ -26,445 +18,268 @@ type Project = {
   last_inspection: string;
 };
 
-// ── STATUS BADGE COMPONENT ─────────────────
-// Small coloured badge showing project status — unchanged
+type FirmInfo = { id: string; name: string; join_code: string } | null;
 
-function StatusBadge({ status }: { status: Project['status'] }) {
-  const colours = {
-    ACTIVE:    { bg: '#0D3B2E', text: '#34D399', dot: '#34D399' },
-    ON_HOLD:   { bg: '#3B2E0D', text: '#FBBF24', dot: '#FBBF24' },
-    COMPLETED: { bg: '#1E3A5F', text: '#60A5FA', dot: '#60A5FA' },
-  };
+const STATUS = {
+  ACTIVE:    { colour: '#10B981', bg: '#022C22', dot: '#10B981', label: 'Active' },
+  ON_HOLD:   { colour: '#F59E0B', bg: '#2D1B00', dot: '#F59E0B', label: 'On Hold' },
+  COMPLETED: { colour: '#0EA5E9', bg: '#082030', dot: '#0EA5E9', label: 'Done' },
+};
 
-  const labels = {
-    ACTIVE: 'Active',
-    ON_HOLD: 'On Hold',
-    COMPLETED: 'Completed',
-  };
-
-  const colour = colours[status];
-
-  return (
-    <View style={[styles.badge, { backgroundColor: colour.bg }]}>
-      <View style={[styles.badgeDot, { backgroundColor: colour.dot }]} />
-      <Text style={[styles.badgeText, { color: colour.text }]}>
-        {labels[status]}
-      </Text>
-    </View>
-  );
-}
-
-// ── PROJECT CARD COMPONENT ─────────────────
-// Now accepts onDelete as a prop so the card knows what to do on long press
-
-function ProjectCard({
-  project,
-  onDelete,
-}: {
-  project: Project;
-  onDelete: (project: Project) => void; // a function that receives the project
+function ProjectCard({ project, onDelete, isAdmin }: {
+  project: Project; onDelete: (p: Project) => void; isAdmin: boolean;
 }) {
+  const s = STATUS[project.status];
   return (
     <TouchableOpacity
       style={styles.card}
-      activeOpacity={0.7}
       onPress={() => router.push(`/project/${project.id}`)}
-      // onLongPress fires when the engineer holds their finger on the card
-      // It calls onDelete and passes the project so we know which one to delete
-      onLongPress={() => onDelete(project)}
+      onLongPress={() => isAdmin && onDelete(project)}
+      activeOpacity={0.85}
     >
-      <View style={styles.cardHeader}>
-        <Text style={styles.projectNumber}>{project.project_number}</Text>
-        <StatusBadge status={project.status} />
+      {/* Status bar on left */}
+      <View style={[styles.cardAccent, { backgroundColor: s.colour }]} />
+
+      <View style={styles.cardContent}>
+        <View style={styles.cardTop}>
+          <Text style={styles.cardNumber}>{project.project_number}</Text>
+          <View style={[styles.statusPill, { backgroundColor: s.bg }]}>
+            <View style={[styles.statusDot, { backgroundColor: s.dot }]} />
+            <Text style={[styles.statusText, { color: s.colour }]}>{s.label}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.cardName} numberOfLines={1}>{project.name}</Text>
+        <Text style={styles.cardAddress} numberOfLines={1}>{project.address || 'No address'}</Text>
+
+        <View style={styles.cardDivider} />
+
+        <View style={styles.cardMeta}>
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>CLIENT</Text>
+            <Text style={styles.metaValue} numberOfLines={1}>{project.client_name || '—'}</Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>DRAWINGS</Text>
+            <Text style={styles.metaValue}>{project.drawing_count ?? 0}</Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>LAST VISIT</Text>
+            <Text style={styles.metaValue}>{project.last_inspection ?? '—'}</Text>
+          </View>
+        </View>
       </View>
 
-      <Text style={styles.projectName}>{project.name}</Text>
-      <Text style={styles.projectAddress}>{project.address}</Text>
-
-      <View style={styles.cardDivider} />
-
-      <View style={styles.cardFooter}>
-        <View style={styles.footerItem}>
-          <Text style={styles.footerLabel}>Client</Text>
-          <Text style={styles.footerValue}>{project.client_name}</Text>
-        </View>
-        <View style={styles.footerItem}>
-          <Text style={styles.footerLabel}>Drawings</Text>
-          <Text style={styles.footerValue}>{project.drawing_count}</Text>
-        </View>
-        <View style={styles.footerItem}>
-          <Text style={styles.footerLabel}>Last Inspection</Text>
-          <Text style={styles.footerValue}>{project.last_inspection ?? '—'}</Text>
-        </View>
-      </View>
-
-      {/* Small hint so engineers know they can long press */}
-      <Text style={styles.longPressHint}>Hold to delete</Text>
+      <Text style={styles.cardChevron}>›</Text>
     </TouchableOpacity>
   );
 }
 
-// ── MAIN SCREEN ────────────────────────────
-
 export default function ProjectsScreen() {
-  const [searchText, setSearchText]   = useState('');
-  const [projects, setProjects]       = useState<Project[]>([]);
-  const [isLoading, setIsLoading]     = useState(true);
-  const [errorMsg, setErrorMsg]       = useState('');
+  const [searchText, setSearchText] = useState('');
+  const [projects, setProjects]     = useState<Project[]>([]);
+  const [isLoading, setIsLoading]   = useState(true);
+  const [errorMsg, setErrorMsg]     = useState('');
+  const [userIsAdmin, setUserIsAdmin] = useState(false);
+  const [firm, setFirm]             = useState<FirmInfo>(null);
 
-  // ── FETCH PROJECTS FROM SUPABASE ──────────
-  // Reads all projects from the database, newest first
   const fetchProjects = async () => {
     setIsLoading(true);
     setErrorMsg('');
 
+    const { firm: userFirm, role } = await getUserFirm();
+    setFirm(userFirm);
+    setUserIsAdmin(role === 'admin');
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setIsLoading(false); return; }
+
+    const { data: memberData } = await supabase
+      .from('project_members').select('project_id').eq('user_id', user.id);
+
+    const projectIds = memberData?.map(m => m.project_id) ?? [];
+    if (projectIds.length === 0) { setProjects([]); setIsLoading(false); return; }
+
     const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .from('projects').select('*').in('id', projectIds).order('created_at', { ascending: false });
 
-    if (error) {
-      setErrorMsg('Could not load projects. Please try again.');
-      console.error('Supabase error:', error);
-    } else {
-      setProjects(data as Project[]);
-    }
-
+    if (error) setErrorMsg('Could not load projects.');
+    else setProjects(data as Project[]);
     setIsLoading(false);
   };
 
-  // ── DELETE A PROJECT ──────────────────────
-  // Called when engineer long presses a card
-  // Shows a confirmation popup before actually deleting
+  useFocusEffect(useCallback(() => { fetchProjects(); }, []));
+
   const handleDelete = (project: Project) => {
-    Alert.alert(
-      'Delete Project',
-      `Are you sure you want to delete "${project.name}"? This cannot be undone.`,
-      [
-        // Cancel button — does nothing
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive', // makes this button red on iOS
-          onPress: async () => {
-            // Tell Supabase to delete the row where id matches this project
-            // .eq('id', project.id) means "where id equals project.id"
-            const { error } = await supabase
-              .from('projects')
-              .delete()
-              .eq('id', project.id);
-
-            if (error) {
-              Alert.alert('Error', 'Could not delete project. Please try again.');
-              return;
-            }
-
-            // Remove it from the local list immediately
-            // This means the screen updates instantly without needing to refetch
-            // .filter() keeps every project EXCEPT the deleted one
-            setProjects(current => current.filter(p => p.id !== project.id));
-          },
+    if (!userIsAdmin) return;
+    Alert.alert('Delete Project', `Delete "${project.name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          await supabase.from('projects').delete().eq('id', project.id);
+          setProjects(current => current.filter(p => p.id !== project.id));
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  // ── useFocusEffect ────────────────────────
-  // Runs fetchProjects every time this screen comes into focus
-  // This means when an engineer creates a project and comes back,
-  // the new project appears automatically in the list
-  // useCallback stops it from running in an infinite loop
-  useFocusEffect(
-    useCallback(() => {
-      fetchProjects();
-    }, [])
-  );
-
-  // Filter projects based on search text
-  const filteredProjects = projects.filter(project =>
-    project.name.toLowerCase().includes(searchText.toLowerCase()) ||
-    project.address?.toLowerCase().includes(searchText.toLowerCase()) ||
-    project.client_name?.toLowerCase().includes(searchText.toLowerCase())
+  const filtered = projects.filter(p =>
+    p.name?.toLowerCase().includes(searchText.toLowerCase()) ||
+    p.address?.toLowerCase().includes(searchText.toLowerCase()) ||
+    p.client_name?.toLowerCase().includes(searchText.toLowerCase())
   );
 
   return (
     <View style={styles.container}>
-
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerGreeting}>Good morning</Text>
+          <Text style={styles.firmLabel}>{firm?.name ?? 'SiteIQ'}</Text>
           <Text style={styles.headerTitle}>Projects</Text>
         </View>
-        <View style={styles.headerRight}>
-          <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>
-              {filteredProjects.length}
-            </Text>
+        <View style={styles.headerActions}>
+          <View style={styles.countBadge}>
+            <Text style={styles.countText}>{filtered.length}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => router.push('/project/create')}
-          >
-            <Text style={styles.addButtonText}>+ New</Text>
-          </TouchableOpacity>
+          {userIsAdmin && (
+            <TouchableOpacity style={styles.newBtn} onPress={() => router.push('/project/create')}>
+              <Text style={styles.newBtnText}>+ New</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
-      {/* Search bar */}
-      <View style={styles.searchContainer}>
-        <Text style={styles.searchIcon}>🔍</Text>
+      {/* Search */}
+      <View style={styles.searchWrap}>
+        <Text style={styles.searchIcon}>⌕</Text>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search projects, clients, addresses..."
-          placeholderTextColor="#4A5568"
+          placeholder="Search projects, clients..."
+          placeholderTextColor="#334155"
           value={searchText}
           onChangeText={setSearchText}
           autoCapitalize="none"
         />
+        {searchText.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchText('')}>
+            <Text style={styles.searchClear}>✕</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Loading spinner */}
       {isLoading && (
-        <View style={styles.centeredMessage}>
-          <ActivityIndicator size="large" color="#2563EB" />
+        <View style={styles.centred}>
+          <ActivityIndicator size="large" color="#0EA5E9" />
           <Text style={styles.loadingText}>Loading projects...</Text>
         </View>
       )}
 
-      {/* Error message */}
       {!isLoading && errorMsg !== '' && (
-        <View style={styles.centeredMessage}>
+        <View style={styles.centred}>
           <Text style={styles.errorText}>{errorMsg}</Text>
-          <TouchableOpacity onPress={fetchProjects} style={styles.retryButton}>
-            <Text style={styles.retryText}>Tap to retry</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={fetchProjects}>
+            <Text style={styles.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Project list */}
       {!isLoading && errorMsg === '' && (
         <FlatList
-          data={filteredProjects}
+          data={filtered}
           renderItem={({ item }) => (
-            <ProjectCard
-              project={item}
-              onDelete={handleDelete}
-            />
+            <ProjectCard project={item} onDelete={handleDelete} isAdmin={userIsAdmin} />
           )}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No projects yet</Text>
-              <Text style={styles.emptySubtext}>
-                Tap + New to create your first project
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyIcon}>📋</Text>
+              <Text style={styles.emptyTitle}>
+                {userIsAdmin ? 'No projects yet' : 'No projects assigned'}
               </Text>
+              <Text style={styles.emptyBody}>
+                {userIsAdmin
+                  ? 'Tap + New to create your first project'
+                  : 'Your admin hasn\'t assigned you to any projects yet'}
+              </Text>
+              {userIsAdmin && (
+                <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push('/project/create')}>
+                  <Text style={styles.emptyBtnText}>Create Project</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
         />
       )}
-
     </View>
   );
 }
 
-// ── STYLES ─────────────────────────────────
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0A1628',
-  },
+  container: { flex: 1, backgroundColor: '#080C14' },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
+    paddingHorizontal: 24, paddingTop: 64, paddingBottom: 20,
   },
-  headerGreeting: {
-    fontSize: 13,
-    color: '#8899AA',
-    marginBottom: 2,
+  firmLabel: { fontSize: 11, color: '#0EA5E9', fontWeight: '700', letterSpacing: 2, marginBottom: 4 },
+  headerTitle: { fontSize: 30, fontWeight: '800', color: '#F8FAFC', letterSpacing: -0.5 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  countBadge: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#0D1520', borderWidth: 1, borderColor: '#1E293B',
+    alignItems: 'center', justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+  countText: { color: '#64748B', fontSize: 14, fontWeight: '600' },
+  newBtn: {
+    backgroundColor: '#0EA5E9', paddingHorizontal: 16,
+    paddingVertical: 9, borderRadius: 10,
+    shadowColor: '#0EA5E9', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25, shadowRadius: 8, elevation: 6,
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  newBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  searchWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#0D1520', marginHorizontal: 24, marginBottom: 16,
+    borderRadius: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: '#1E293B',
   },
-  headerBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1C2E44',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  addButton: {
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1C2E44',
-    marginHorizontal: 20,
-    marginBottom: 16,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: '#2A3F55',
-  },
-  searchIcon: {
-    fontSize: 16,
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: '#FFFFFF',
-  },
-  centeredMessage: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  loadingText: {
-    color: '#8899AA',
-    fontSize: 14,
-  },
-  errorText: {
-    color: '#F87171',
-    fontSize: 14,
-    textAlign: 'center',
-    paddingHorizontal: 40,
-  },
-  retryButton: {
-    backgroundColor: '#1C2E44',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryText: {
-    color: '#2563EB',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
+  searchIcon: { fontSize: 18, color: '#334155', marginRight: 8 },
+  searchInput: { flex: 1, paddingVertical: 13, fontSize: 14, color: '#F8FAFC' },
+  searchClear: { fontSize: 14, color: '#334155', padding: 4 },
+  centred: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText: { color: '#475569', fontSize: 14 },
+  errorText: { color: '#F87171', fontSize: 14, textAlign: 'center' },
+  retryBtn: { backgroundColor: '#0D1520', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+  retryText: { color: '#0EA5E9', fontSize: 14, fontWeight: '500' },
+  list: { paddingHorizontal: 24, paddingBottom: 24, gap: 12 },
   card: {
-    backgroundColor: '#112240',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#1C2E44',
+    backgroundColor: '#0D1520', borderRadius: 16,
+    borderWidth: 1, borderColor: '#1E293B',
+    flexDirection: 'row', alignItems: 'stretch', overflow: 'hidden',
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+  cardAccent: { width: 3 },
+  cardContent: { flex: 1, padding: 16 },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  cardNumber: { fontSize: 11, color: '#475569', fontWeight: '600', letterSpacing: 1 },
+  statusPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  statusDot: { width: 5, height: 5, borderRadius: 3 },
+  statusText: { fontSize: 11, fontWeight: '600' },
+  cardName: { fontSize: 17, fontWeight: '700', color: '#F8FAFC', marginBottom: 3 },
+  cardAddress: { fontSize: 13, color: '#475569', marginBottom: 12 },
+  cardDivider: { height: 1, backgroundColor: '#1E293B', marginBottom: 12 },
+  cardMeta: { flexDirection: 'row' },
+  metaItem: { flex: 1 },
+  metaLabel: { fontSize: 9, color: '#334155', fontWeight: '700', letterSpacing: 1.5, marginBottom: 3 },
+  metaValue: { fontSize: 12, color: '#64748B', fontWeight: '500' },
+  cardChevron: { fontSize: 22, color: '#1E293B', paddingHorizontal: 12, alignSelf: 'center' },
+  emptyWrap: { alignItems: 'center', paddingTop: 80, paddingHorizontal: 40, gap: 10 },
+  emptyIcon: { fontSize: 44, marginBottom: 8 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#F8FAFC', textAlign: 'center' },
+  emptyBody: { fontSize: 14, color: '#475569', textAlign: 'center', lineHeight: 20 },
+  emptyBtn: {
+    backgroundColor: '#0EA5E9', borderRadius: 12, paddingHorizontal: 24,
+    paddingVertical: 12, marginTop: 8,
   },
-  projectNumber: {
-    fontSize: 11,
-    color: '#8899AA',
-    fontWeight: '500',
-    letterSpacing: 0.5,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-    gap: 4,
-  },
-  badgeDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  projectName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  projectAddress: {
-    fontSize: 13,
-    color: '#8899AA',
-    marginBottom: 12,
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: '#1C2E44',
-    marginBottom: 12,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  footerItem: {
-    flex: 1,
-  },
-  footerLabel: {
-    fontSize: 10,
-    color: '#4A5568',
-    marginBottom: 2,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  footerValue: {
-    fontSize: 12,
-    color: '#8899AA',
-    fontWeight: '500',
-  },
-  longPressHint: {
-    fontSize: 10,
-    color: '#2A3F55',
-    textAlign: 'right',
-    marginTop: 8,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingTop: 60,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: '#8899AA',
-  },
+  emptyBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
 });

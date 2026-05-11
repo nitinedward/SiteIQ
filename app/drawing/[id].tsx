@@ -25,11 +25,15 @@ type Zone = {
 };
 
 export default function DrawingViewerScreen() {
-  const params    = useLocalSearchParams();
-  const drawingId = params.id as string;
-  const title     = params.title as string;
-  const fileUrl   = params.file_url as string;
-  const projectId = params.project_id as string;
+  const params       = useLocalSearchParams();
+  const drawingId    = params.id as string;
+  const title        = params.title as string;
+  const fileUrl      = params.file_url as string;
+  const projectId    = params.project_id as string;
+  const inspectionId = params.inspection_id as string;
+  // view_only='true' means read-only from project page — no zones shown
+  // view_only='false' means inside an active inspection — zones shown
+  const viewOnly     = params.view_only === 'true';
 
   const [zones, setZones]               = useState<Zone[]>([]);
   const [isLoading, setIsLoading]       = useState(true);
@@ -40,20 +44,26 @@ export default function DrawingViewerScreen() {
   const [pdfLayout, setPdfLayout]       = useState({ width: SCREEN_WIDTH, height: 500 });
   const [showPdf, setShowPdf]           = useState(false);
 
-  // ── FETCH ZONES ────────────────────────────────────────
-  const fetchZones = async () => {
-    const { data, error } = await supabase
-      .from('zones')
-      .select('*')
-      .eq('drawing_id', drawingId)
-      .order('created_at', { ascending: true });
-    if (!error) setZones(data as Zone[]);
-  };
+  const encodedUrl = encodeURI(decodeURIComponent(fileUrl));
 
+  // ── FETCH ZONES — only when inside an active inspection ──
+ const fetchZones = async () => {
+  if (viewOnly) return;
+  // Only load zones for THIS inspection — not all zones ever created
+  // inspectionId being empty means don't load any zones
+  if (!inspectionId) return;
+  const { data, error } = await supabase
+    .from('zones')
+    .select('*')
+    .eq('drawing_id', drawingId)
+    .eq('inspection_id', inspectionId)
+    .order('created_at', { ascending: true });
+  if (!error) setZones(data as Zone[]);
+};
   useFocusEffect(
     useCallback(() => {
       fetchZones();
-    }, [drawingId])
+    }, [drawingId, viewOnly])
   );
 
   // ── HANDLE TAP ON PDF ──────────────────────────────────
@@ -71,12 +81,13 @@ export default function DrawingViewerScreen() {
       return;
     }
 
-    const { error } = await supabase.from('zones').insert({
-      drawing_id: drawingId,
-      project_id: projectId,
-      label: newZoneLabel.trim(),
-      x_percent: pendingTap?.x ?? 0,
-      y_percent: pendingTap?.y ?? 0,
+  const { error } = await supabase.from('zones').insert({
+      drawing_id:    drawingId,
+      project_id:    projectId,
+      inspection_id: inspectionId || null,
+      label:         newZoneLabel.trim(),
+      x_percent:     pendingTap?.x ?? 0,
+      y_percent:     pendingTap?.y ?? 0,
     });
 
     if (error) { Alert.alert('Error', 'Could not save zone.'); return; }
@@ -113,7 +124,11 @@ export default function DrawingViewerScreen() {
         <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
         <TouchableOpacity
           style={styles.viewToggle}
-          onPress={() => setShowPdf(!showPdf)}
+          onPress={() => {
+            setIsLoading(true);
+            setPdfError('');
+            setShowPdf(!showPdf);
+          }}
         >
           <Text style={styles.viewToggleText}>{showPdf ? 'Zones' : 'Drawing'}</Text>
         </TouchableOpacity>
@@ -124,31 +139,35 @@ export default function DrawingViewerScreen() {
         <View style={styles.pdfContainer}>
           <View style={styles.hintBar}>
             <Text style={styles.hintText}>
-              📍 Tap anywhere on the drawing to mark a zone
+              {viewOnly
+                ? '👁 View only — start an inspection to mark zones'
+                : '📍 Tap anywhere on the drawing to mark a zone · Tap a pin to inspect'}
             </Text>
           </View>
 
-          {/* PDF renderer */}
           <Pdf
-            source={{ uri: fileUrl, cache: true }}
+            source={{
+              uri: encodedUrl,
+              cache: true,
+            }}
             style={styles.pdf}
-            onLoadComplete={(pages, path, { width, height }) => {
+            onLoadComplete={(pages, path, size) => {
               setIsLoading(false);
-              setPdfLayout({ width, height });
+              if (size) setPdfLayout({ width: size.width, height: size.height });
             }}
             onError={(error) => {
               setIsLoading(false);
-              setPdfError('Could not load drawing.');
+              setPdfError('Could not load drawing. Please check your connection.');
               console.error('PDF error:', error);
             }}
-            onPageSingleTap={handlePdfTap}
+            onPageSingleTap={viewOnly ? undefined : handlePdfTap}
             enablePaging={false}
             horizontal={false}
             fitPolicy={0}
             trustAllCerts={false}
           />
 
-          {/* Zone pins on top of PDF */}
+          {/* Zone pins on PDF */}
           {!isLoading && zones.map(zone => (
             <TouchableOpacity
               key={zone.id}
@@ -189,6 +208,15 @@ export default function DrawingViewerScreen() {
           {pdfError ? (
             <View style={styles.loadingOverlay}>
               <Text style={styles.errorText}>{pdfError}</Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={() => {
+                  setPdfError('');
+                  setIsLoading(true);
+                }}
+              >
+                <Text style={styles.retryText}>Tap to retry</Text>
+              </TouchableOpacity>
             </View>
           ) : null}
 
@@ -224,11 +252,14 @@ export default function DrawingViewerScreen() {
         // ── ZONES LIST VIEW ──────────────────────────────
         <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
 
-          {/* Open drawing button */}
           <View style={styles.section}>
             <TouchableOpacity
               style={styles.openPdfButton}
-              onPress={() => setShowPdf(true)}
+              onPress={() => {
+                setIsLoading(true);
+                setPdfError('');
+                setShowPdf(true);
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.openPdfIcon}>📄</Text>
@@ -242,37 +273,48 @@ export default function DrawingViewerScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Zones list */}
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>
-                Inspection Zones ({zones.length})
+                {viewOnly ? 'Reference Drawing' : `Inspection Zones (${zones.length})`}
               </Text>
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => setShowAddZone(true)}
-              >
-                <Text style={styles.addButtonText}>+ Add Zone</Text>
-              </TouchableOpacity>
+              {!viewOnly && (
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={() => setShowAddZone(true)}
+                >
+                  <Text style={styles.addButtonText}>+ Add Zone</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
-            <Text style={styles.hint}>
-              Tap a zone to start an observation. Hold to delete.
-              Or open the drawing and tap directly on it.
-            </Text>
-
-            {zones.length === 0 && (
+            {viewOnly ? (
               <View style={styles.emptyZones}>
-                <Text style={styles.emptyIcon}>📍</Text>
-                <Text style={styles.emptyText}>No zones yet</Text>
+                <Text style={styles.emptyIcon}>👁</Text>
+                <Text style={styles.emptyText}>View only</Text>
                 <Text style={styles.emptyHint}>
-                  Open the drawing and tap on it to mark zones,
-                  or tap + Add Zone to add one manually
+                  Start an inspection from the project page to mark zones on this drawing
                 </Text>
               </View>
-            )}
+            ) : (
+              <>
+                <Text style={styles.hint}>
+                  Tap a zone to start an observation. Hold to delete.
+                  Or open the drawing and tap directly on it to mark zones.
+                </Text>
 
-            {zones.map((zone, index) => (
+                {zones.length === 0 && (
+                  <View style={styles.emptyZones}>
+                    <Text style={styles.emptyIcon}>📍</Text>
+                    <Text style={styles.emptyText}>No zones yet</Text>
+                    <Text style={styles.emptyHint}>
+                      Open the drawing and tap on it to mark zones,
+                      or tap + Add Zone to add one manually
+                    </Text>
+                  </View>
+                )}
+
+                {zones.map((zone, index) => (
               <TouchableOpacity
                 key={zone.id}
                 style={styles.zoneCard}
@@ -298,13 +340,16 @@ export default function DrawingViewerScreen() {
                 <Text style={styles.zoneArrow}>›</Text>
               </TouchableOpacity>
             ))}
+              </>
+            )}
           </View>
 
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
 
-      {/* Add zone modal */}
+      {/* Add zone modal — only shown during active inspection */}
+      {!viewOnly && (
       <Modal
         visible={showAddZone}
         transparent
@@ -350,6 +395,7 @@ export default function DrawingViewerScreen() {
           </View>
         </View>
       </Modal>
+      )}
 
     </View>
   );
@@ -397,9 +443,13 @@ const styles = StyleSheet.create({
   },
   loadingText: { color: '#8899AA', fontSize: 14 },
   errorText: { color: '#F87171', fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
+  retryButton: {
+    backgroundColor: '#1C2E44', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8,
+  },
+  retryText: { color: '#2563EB', fontSize: 14, fontWeight: '500' },
   zonesBar: {
-    backgroundColor: '#112240', borderTopWidth: 1, borderTopColor: '#1C2E44',
-    maxHeight: 50,
+    backgroundColor: '#112240', borderTopWidth: 1,
+    borderTopColor: '#1C2E44', maxHeight: 50,
   },
   zonesScroll: { paddingHorizontal: 16, gap: 8, alignItems: 'center', paddingVertical: 8 },
   zoneChip: {
