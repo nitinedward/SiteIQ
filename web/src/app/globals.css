@@ -1,0 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS VARIABLES ──────────────────────────────────────── */
+:root {
+  --white:   #ffffff;
+  --off:     #f8f7f5;
+  --stone:   #f0ede8;
+  --line:    #e4e0d9;
+  --line2:   #ccc8c0;
+  --mid:     #9b968d;
+  --dark:    #2c2a27;
+  --ink:     #1a1917;
+  --accent:  #2c5282;
+  --accent2: #edf2fb;
+  --red:     #c0392b;
+  --red2:    #fdf0ef;
+  --green:   #27705a;
+  --green2:  #e6f4ef;
+  --amber:   #b8860b;
+  --amber2:  #fef9e7;
+  --orange:  #c05621;
+  --orange2: #fef3e2;
+  --f-serif: 'Cormorant', Georgia, serif;
+  --f-body:  'Outfit', sans-serif;
+  --f-mono:  'JetBrains Mono', monospace;
+}
+
+/* ── BASE TYPOGRAPHY ────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+html, body {
+  font-family: var(--f-body);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--off);
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--f-serif);
+  line-height: 1.2;
+}
+
+button, input, select, textarea { font-family: inherit; }
+
+/* ── SCROLLBARS ─────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #ccc8c0; border-radius: 3px; }
+
+/* ── ANIMATIONS ─────────────────────────────────────────── */
+@keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(.8); } }
+@keyframes spin  { to { transform: rotate(360deg); } }
+
+/* ── TIPTAP EDITOR (report/[id]/page.tsx — do not remove) ── */
+.tiptap-editor .ProseMirror {
+  outline: none;
+  min-height: 100%;
+  padding: 24px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1e293b;
+}
+.tiptap-editor .ProseMirror h1 { font-size: 20px; font-weight: 700; margin: 16px 0 8px; }
+.tiptap-editor .ProseMirror h2 { font-size: 16px; font-weight: 700; margin: 14px 0 6px; color: #2563eb; }
+.tiptap-editor .ProseMirror p  { margin: 0 0 10px; }
+.tiptap-editor .ProseMirror p:last-child { margin-bottom: 0; }
+.tiptap-editor .ProseMirror strong { font-weight: 700; }
