@@ -152,6 +152,11 @@ export default function AdminPage() {
 
   useEffect(() => { loadData() }, [])
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('tab') === 'team') setTab('team')
+  }, [])
+
   // ── existing functions (unchanged) ────────────────────────────────────────
   const loadData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
