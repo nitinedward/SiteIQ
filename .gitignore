@@ -35,6 +35,9 @@ yarn-error.*
 .env.local
 .env*.local
 
+# secrets
+OpenAI API Key.txt
+
 # typescript
 *.tsbuildinfo
 
