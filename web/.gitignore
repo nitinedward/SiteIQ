@@ -3,6 +3,10 @@
 # dependencies
 node_modules/
 
+# OnlyOffice document cache and template cache
+.docs-cache/
+public/templates/
+
 # Expo
 .expo/
 dist/
@@ -36,6 +40,9 @@ yarn-error.*
 .env*.local
 node_modules
 .next
+
+# logs
+*.log
 
 # typescript
 *.tsbuildinfo

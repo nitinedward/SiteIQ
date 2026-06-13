@@ -1,20 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 
-export async function POST(request: NextRequest) {
-  try {
-    const payload = await request.json()
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+}
 
+export async function OPTIONS() {
+  return new NextResponse(null,
+    { status: 200, headers: cors })
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const payload = await req.json()
     const secret = process.env.ONLYOFFICE_JWT_SECRET
+
     if (!secret) {
-      return NextResponse.json({ error: 'JWT secret not configured' }, { status: 500 })
+      console.error('ONLYOFFICE_JWT_SECRET is not set')
+      return NextResponse.json(
+        { error: 'JWT secret not configured' },
+        { status: 500, headers: cors }
+      )
     }
 
-    const token = jwt.sign(payload, secret, { expiresIn: '1d' })
+    console.log(
+      '[token] secret length:', secret.length,
+      '| first 4 chars:', secret.substring(0, 4)
+    )
 
-    return NextResponse.json({ token })
-  } catch (err) {
-    console.error('[docs/token] error:', err)
-    return NextResponse.json({ error: 'Token generation failed' }, { status: 500 })
+    const token = jwt.sign(payload, secret, {
+      algorithm: 'HS256',
+    })
+
+    console.log('[token] generated, length:', token.length)
+
+    return NextResponse.json(
+      { token },
+      { headers: cors }
+    )
+
+  } catch (err: any) {
+    console.error('[token] error:', err.message)
+    return NextResponse.json(
+      { error: err.message },
+      { status: 500, headers: cors }
+    )
   }
 }
