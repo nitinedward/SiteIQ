@@ -69,6 +69,9 @@ export async function POST(
 
   try {
     const body = await request.json()
+    console.log('[callback] Received POST', JSON.stringify(body))
+    console.log('[callback] Status:', body.status)
+    console.log('[callback] URL:', body.url)
     console.log('OnlyOffice callback:', { status: body.status, url: body.url, key: body.key })
 
     if ((body.status === 2 || body.status === 6) && body.url) {
