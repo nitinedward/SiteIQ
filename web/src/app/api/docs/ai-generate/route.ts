@@ -5,15 +5,12 @@ import { fillTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@
 import { writeFile, mkdir } from 'fs/promises'
 import path from 'path'
 
+export const dynamic = 'force-dynamic'
+
 // NOTE: /tmp is ephemeral on Vercel serverless.
 // Documents may not persist between requests.
 // TODO: move to Supabase storage for production.
 const DOCS_DIR = path.join('/tmp', 'siteiq-docs-cache')
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 /** Extract the body text of a named CAPS section from AI output. */
 function parseAISection(text: string, sectionName: string): string {
@@ -36,6 +33,14 @@ function sectionToBulletLines(text: string): string[] {
 }
 
 export async function POST(request: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  if (!supabaseKey) {
+    console.error('SUPABASE_SERVICE_ROLE_KEY not set')
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+  }
+  const supabase = createClient(supabaseUrl, supabaseKey)
+
   try {
     const { inspectionId } = await request.json()
     if (!inspectionId) {

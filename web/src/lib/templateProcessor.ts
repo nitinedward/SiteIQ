@@ -3,10 +3,12 @@ import * as fs from 'fs/promises'
 import * as path from 'path'
 import AdmZip from 'adm-zip'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY not set')
+  return createClient(url, key)
+}
 
 // NOTE: /tmp is ephemeral on Vercel serverless.
 // Documents may not persist between requests.
@@ -101,6 +103,7 @@ async function fetchTemplateBuffer(firmId: string): Promise<Buffer> {
     // Not cached yet
   }
 
+  const supabase = getSupabase()
   const { data: firmData } = await supabase
     .from('firms')
     .select('report_template_url')
@@ -116,7 +119,7 @@ async function fetchTemplateBuffer(firmId: string): Promise<Buffer> {
   console.log('[templateProcessor] Downloading template:', firmData.report_template_url)
   const res = await fetch(firmData.report_template_url, {
     headers: {
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''}`,
     },
   })
   if (!res.ok) {

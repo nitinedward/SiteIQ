@@ -4,14 +4,17 @@ const Docxtemplater = require('docxtemplater')
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PizZip = require('pizzip')
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY not set')
+  return createClient(url, key)
+}
 
 /** Download the firm's .docx template from Supabase storage, or null if not set. */
 export async function fetchFirmTemplate(firmId: string): Promise<Buffer | null> {
   try {
+    const supabase = getSupabase()
     const { data: firmData } = await supabase
       .from('firms')
       .select('report_template_url')
@@ -23,7 +26,7 @@ export async function fetchFirmTemplate(firmId: string): Promise<Buffer | null> 
     console.log('Fetching firm template:', firmData.report_template_url)
     const res = await fetch(firmData.report_template_url, {
       headers: {
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''}`,
       },
     })
     if (!res.ok) {
