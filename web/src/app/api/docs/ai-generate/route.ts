@@ -2,15 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { fillTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
-import { writeFile, mkdir } from 'fs/promises'
-import path from 'path'
+import { saveDoc } from '@/lib/docStorage'
 
 export const dynamic = 'force-dynamic'
-
-// NOTE: /tmp is ephemeral on Vercel serverless.
-// Documents may not persist between requests.
-// TODO: move to Supabase storage for production.
-const DOCS_DIR = path.join('/tmp', 'siteiq-docs-cache')
 
 /** Extract the body text of a named CAPS section from AI output. */
 function parseAISection(text: string, sectionName: string): string {
@@ -147,8 +141,6 @@ Rules:
 
     console.log('AI text generated, length:', aiText.length)
 
-    const outputPath = path.join(DOCS_DIR, `${inspectionId}.docx`)
-
     if (firmId) {
       const purposeText  = parseAISection(aiText, 'PURPOSE OF INSPECTION') || (inspection.purpose ?? '')
       const worksText    = parseAISection(aiText, 'WORKS OBSERVED')
@@ -180,13 +172,13 @@ Rules:
         date:            inspection.date            ?? '',
       }
 
-      await fillTemplate(firmId, templateData, outputPath)
+      const buffer = await fillTemplate(firmId, templateData)
+      await saveDoc(inspectionId, buffer)
       console.log('AI document generated using firm template')
     } else {
       console.log('No firm_id — generating AI doc from scratch')
       const buffer = await generateServerReport(inspection, observations, aiText)
-      await mkdir(DOCS_DIR, { recursive: true })
-      await writeFile(outputPath, buffer)
+      await saveDoc(inspectionId, buffer)
     }
 
     return NextResponse.json({ success: true, preview: aiText.slice(0, 200) })

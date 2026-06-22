@@ -150,8 +150,7 @@ async function fetchTemplateBuffer(firmId: string): Promise<Buffer> {
 export async function fillTemplate(
   firmId: string,
   data: TemplateData,
-  outputPath: string,
-): Promise<void> {
+): Promise<Buffer> {
   const templateBuffer = await fetchTemplateBuffer(firmId)
   const zip = new AdmZip(templateBuffer)
 
@@ -244,9 +243,7 @@ export async function fillTemplate(
     }
   }
 
-  await fs.mkdir(path.dirname(outputPath), { recursive: true })
-  zip.writeZip(outputPath)
-  console.log('[templateProcessor] Filled template saved to:', outputPath)
+  return zip.toBuffer()
 }
 
 /** Bust the local template cache for a firm (call after uploading a new template). */

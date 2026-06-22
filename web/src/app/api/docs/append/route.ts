@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import * as fs from 'fs/promises'
-import * as path from 'path'
 import AdmZip from 'adm-zip'
 import { xmlEscape } from '@/lib/templateProcessor'
-
-// NOTE: /tmp is ephemeral on Vercel serverless.
-// Documents may not persist between requests.
-// TODO: move to Supabase storage for production.
-const DOCS_DIR = path.join('/tmp', 'siteiq-docs-cache')
+import { saveDoc, loadDoc } from '@/lib/docStorage'
 
 const REL_IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 
@@ -161,11 +155,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400, headers: corsHeaders })
     }
 
-    const docPath = path.join(DOCS_DIR, `${inspectionId}.docx`)
-    console.log('[append] Loading:', docPath)
+    console.log('[append] Loading:', inspectionId)
     let docBuffer: Buffer
     try {
-      docBuffer = await fs.readFile(docPath)
+      docBuffer = await loadDoc(inspectionId)
     } catch {
       return NextResponse.json(
         { error: 'Document not found. Generate the report first.' },
@@ -331,7 +324,7 @@ export async function POST(request: NextRequest) {
       zip.updateFile('word/document.xml', Buffer.from(docXml, 'utf-8'))
     }
 
-    zip.writeZip(docPath)
+    await saveDoc(inspectionId, zip.toBuffer())
     console.log(`[append] Saved, photos: ${validPhotos.length}, drawings: ${validDrawings.length}`)
 
     return NextResponse.json(

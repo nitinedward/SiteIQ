@@ -2,15 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { fillTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
-import { writeFile, mkdir } from 'fs/promises'
-import path from 'path'
+import { saveDoc } from '@/lib/docStorage'
 
 export const dynamic = 'force-dynamic'
-
-// NOTE: /tmp is ephemeral on Vercel serverless.
-// Documents may not persist between requests.
-// TODO: move to Supabase storage for production.
-const DOCS_DIR = path.join('/tmp', 'siteiq-docs-cache')
 
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
@@ -75,8 +69,6 @@ export async function POST(request: NextRequest) {
       findingsLines.length > 0 ? findingsLines : ['No specific findings recorded.']
     )
 
-    const outputPath = path.join(DOCS_DIR, `${inspectionId}.docx`)
-
     if (firmId) {
       const templateData: TemplateData = {
         engineer_name:   engineerName,
@@ -96,7 +88,8 @@ export async function POST(request: NextRequest) {
         date:            inspection.date            ?? '',
       }
 
-      await fillTemplate(firmId, templateData, outputPath)
+      const buffer = await fillTemplate(firmId, templateData)
+      await saveDoc(inspectionId, buffer)
       console.log('Document generated from firm template')
     } else {
       // Fallback: generate from scratch when no firm template is set up
@@ -121,8 +114,7 @@ export async function POST(request: NextRequest) {
       }
 
       const buffer = await generateServerReport(inspection, observations, undefined, photoAttachments)
-      await mkdir(DOCS_DIR, { recursive: true })
-      await writeFile(outputPath, buffer)
+      await saveDoc(inspectionId, buffer)
     }
 
     return NextResponse.json({ success: true, inspectionId })

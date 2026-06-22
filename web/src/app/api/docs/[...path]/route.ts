@@ -1,11 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile, readFile, mkdir } from 'fs/promises'
-import path from 'path'
-
-// NOTE: /tmp is ephemeral on Vercel serverless.
-// Documents may not persist between requests.
-// TODO: move to Supabase storage for production.
-const DOCS_DIR = path.join('/tmp', 'siteiq-docs-cache')
+import { saveDoc, loadDoc } from '@/lib/docStorage'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -29,14 +23,13 @@ export async function GET(
   }
 
   const isDownload = request.nextUrl.searchParams.get('download') === 'true'
-  const filePath = path.join(DOCS_DIR, `${inspectionId}.docx`)
 
-  console.log('Doc GET request:', { inspectionId, isDownload, filePath })
+  console.log('Doc GET request:', { inspectionId, isDownload })
 
   try {
-    const fileBuffer = await readFile(filePath)
+    const fileBuffer = await loadDoc(inspectionId)
     console.log('File found, size:', fileBuffer.length)
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(new Uint8Array(fileBuffer), {
       headers: {
         ...CORS_HEADERS,
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -48,7 +41,7 @@ export async function GET(
       },
     })
   } catch (err) {
-    console.error('File not found:', filePath, err)
+    console.error('File not found:', inspectionId, err)
     return NextResponse.json(
       { error: 'Document not found - generate it first' },
       { status: 404, headers: { 'Access-Control-Allow-Origin': '*' } }
@@ -81,10 +74,8 @@ export async function POST(
           console.error('Failed to fetch from OO:', body.url)
         } else {
           const fileBuffer = await fileRes.arrayBuffer()
-          await mkdir(DOCS_DIR, { recursive: true })
-          const filePath = path.join(DOCS_DIR, `${inspectionId}.docx`)
-          await writeFile(filePath, Buffer.from(fileBuffer))
-          console.log('Document saved:', filePath)
+          await saveDoc(inspectionId, Buffer.from(fileBuffer))
+          console.log('[storage] OnlyOffice callback saved:', inspectionId)
         }
       } catch (err) {
         console.error('Save error:', err)
