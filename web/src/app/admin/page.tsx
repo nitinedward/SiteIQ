@@ -5,8 +5,10 @@ import { createClient } from '@supabase/supabase-js'
 import { Shell, Badge, Btn, Spinner, Card } from '@/components/Shell'
 
 const supabase = createClient(
-  'https://vbaewualqaxhbmqgnhdt.supabase.co',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+  process.env.NEXT_PUBLIC_SUPABASE_URL ??
+    'https://vbaewualqaxhbmqgnhdt.supabase.co',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZiYWV3dWFscWF4aGJtcWduaGR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4NzAzNjMsImV4cCI6MjA5MzQ0NjM2M30.8s39SZtGq4r_0NXYhsAU0WdPSGqLfefm2YYK_JXjZbg'
 )
 
 type Project = { id: string; name: string; project_number: string; address: string; client_name: string; status: string; description: string }
