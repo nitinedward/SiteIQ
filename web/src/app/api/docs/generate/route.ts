@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
         .from('observations')
         .select('*')
         .eq('inspection_id', inspectionId)
-        .order('created_at', { ascending: true }),
+        .order('id', { ascending: true }),
     ])
 
     if (!inspRes.data) {
