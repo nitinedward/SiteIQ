@@ -35,11 +35,19 @@ export async function POST(request: NextRequest) {
   }
   const supabase = createClient(supabaseUrl, supabaseKey)
 
+  const anthropicKey = process.env.ANTHROPIC_KEY ?? process.env.ANTHROPIC_API_KEY ?? ''
+  if (!anthropicKey) {
+    console.error('[ai-generate] No Anthropic API key set (ANTHROPIC_KEY / ANTHROPIC_API_KEY)')
+    return NextResponse.json({ error: 'AI service not configured — ANTHROPIC_KEY missing on server' }, { status: 500 })
+  }
+
   try {
     const { inspectionId } = await request.json()
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
     }
+
+    console.log('[ai-generate] Starting for:', inspectionId)
 
     const [inspRes, obsRes] = await Promise.all([
       supabase
@@ -110,11 +118,12 @@ Rules:
 - Under CONTRACTOR TO PROVIDE, write each item as a separate line starting with "- ".
 - Use formal structural engineering language throughout.`
 
+    console.log('[ai-generate] Calling Anthropic, observations:', observations.length)
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type':      'application/json',
-        'x-api-key':         process.env.ANTHROPIC_KEY ?? '',
+        'x-api-key':         anthropicKey,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({

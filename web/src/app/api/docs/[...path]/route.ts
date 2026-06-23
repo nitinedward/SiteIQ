@@ -50,41 +50,47 @@ export async function GET(
 }
 
 // POST /api/docs/[inspectionId]
-// OnlyOffice calls this when document is saved (status 2 or 6)
+// OnlyOffice calls this when document is saved (status 2 or 6).
+// We return { error: 0 } immediately so OO never shows "document could not be saved",
+// then save the document in the background.
+async function saveDocumentInBackground(inspectionId: string, url: string) {
+  try {
+    console.log('[callback] Saving doc:', inspectionId, 'from:', url)
+    const fileRes = await fetch(url)
+    if (!fileRes.ok) {
+      console.error('[callback] Fetch from OO failed:', fileRes.status)
+      return
+    }
+    const buffer = Buffer.from(await fileRes.arrayBuffer())
+    await saveDoc(inspectionId, buffer)
+    console.log('[callback] Saved successfully:', inspectionId)
+  } catch (err) {
+    console.error('[callback] Save error:', err)
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { path: string[] } }
 ) {
   const inspectionId = params.path[0]
-  if (!inspectionId) {
-    return NextResponse.json({ error: 0 }, { headers: CORS_HEADERS })
-  }
 
+  let body: any = {}
   try {
-    const body = await request.json()
-    console.log('[callback] Received POST', JSON.stringify(body))
-    console.log('[callback] Status:', body.status)
-    console.log('[callback] URL:', body.url)
-    console.log('OnlyOffice callback:', { status: body.status, url: body.url, key: body.key })
-
-    if ((body.status === 2 || body.status === 6) && body.url) {
-      try {
-        const fileRes = await fetch(body.url)
-        if (!fileRes.ok) {
-          console.error('Failed to fetch from OO:', body.url)
-        } else {
-          const fileBuffer = await fileRes.arrayBuffer()
-          await saveDoc(inspectionId, Buffer.from(fileBuffer))
-          console.log('[storage] OnlyOffice callback saved:', inspectionId)
-        }
-      } catch (err) {
-        console.error('Save error:', err)
-      }
-    }
-
-    return NextResponse.json({ error: 0 }, { headers: CORS_HEADERS })
-  } catch (err) {
-    console.error('[docs] POST error:', err)
+    body = await request.json()
+  } catch {
     return NextResponse.json({ error: 0 }, { headers: CORS_HEADERS })
   }
+
+  console.log('[callback] POST received, inspectionId:', inspectionId)
+  console.log('[callback] body:', JSON.stringify(body).substring(0, 200))
+  console.log('[callback] status:', body.status)
+
+  // Fire-and-forget: start the save but don't await it so the response
+  // goes back to OnlyOffice in milliseconds.
+  if ((body.status === 2 || body.status === 6) && body.url) {
+    saveDocumentInBackground(inspectionId, body.url)
+  }
+
+  return NextResponse.json({ error: 0 }, { headers: CORS_HEADERS })
 }
