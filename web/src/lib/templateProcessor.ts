@@ -93,22 +93,28 @@ function replaceParagraphWithXml(xml: string, placeholder: string, replacementXm
 
 /** Download the firm's template from Supabase, cache it locally. */
 async function fetchTemplateBuffer(firmId: string): Promise<Buffer> {
-  const cachePath = path.join(DOCS_DIR, `template-${firmId}.docx`)
+  console.log('[template] Loading for firm:', firmId)
 
+  const cachePath = path.join(DOCS_DIR, `template-${firmId}.docx`)
   try {
     const cached = await fs.readFile(cachePath)
-    console.log('[templateProcessor] Using cached template:', cachePath)
+    console.log('[template] Using /tmp cache, size:', cached.length)
     return cached
   } catch {
-    // Not cached yet
+    // Not cached — fetch from Supabase
   }
 
+  const keySet = !!(process.env.SUPABASE_SERVICE_ROLE_KEY)
+  console.log('[template] SUPABASE_SERVICE_ROLE_KEY set:', keySet)
+
   const supabase = getSupabase()
-  const { data: firmData } = await supabase
+  const { data: firmData, error: dbError } = await supabase
     .from('firms')
     .select('report_template_url')
     .eq('id', firmId)
     .single()
+
+  console.log('[template] DB result — url:', firmData?.report_template_url ?? null, '| error:', dbError?.message ?? null)
 
   if (!firmData?.report_template_url) {
     throw new Error(
@@ -116,21 +122,23 @@ async function fetchTemplateBuffer(firmId: string): Promise<Buffer> {
     )
   }
 
-  console.log('[templateProcessor] Downloading template:', firmData.report_template_url)
+  console.log('[template] Fetching from URL:', firmData.report_template_url)
   const res = await fetch(firmData.report_template_url, {
     headers: {
       Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''}`,
     },
   })
+  console.log('[template] Fetch status:', res.status, res.statusText)
+
   if (!res.ok) {
     throw new Error(`Template download failed: ${res.status} ${res.statusText}`)
   }
 
   const buffer = Buffer.from(await res.arrayBuffer())
+  console.log('[template] Downloaded, size:', buffer.length)
 
   await fs.mkdir(DOCS_DIR, { recursive: true })
   await fs.writeFile(cachePath, buffer)
-  console.log('[templateProcessor] Template cached at:', cachePath)
 
   return buffer
 }
