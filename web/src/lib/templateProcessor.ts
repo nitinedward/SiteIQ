@@ -75,6 +75,42 @@ export function buildParagraphXml(text: string): string {
 }
 
 /**
+ * Word frequently splits placeholder text like {{findings}} across multiple
+ * <w:r> runs (e.g. due to spell-check probes, autocorrect, or copy-paste
+ * artefacts). This causes both the paragraph-regex and xml.includes() checks
+ * to fail, leaving the placeholder unreplaced in the output.
+ *
+ * This function scans every <w:p> paragraph. If the paragraph's combined
+ * <w:t> text contains `{{`, it merges all runs into a single run so the
+ * placeholder appears as a continuous string. Paragraphs without `{{` are
+ * left untouched.
+ */
+function mergeRunsContainingPlaceholders(xml: string): string {
+  return xml.replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (para) => {
+    // Concatenate text from every <w:t> in this paragraph
+    const allText = [...para.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)]
+      .map(m => m[1])
+      .join('')
+
+    // Only touch paragraphs that contain placeholder start marker
+    if (!allText.includes('{{')) return para
+
+    // Preserve formatting: grab <w:rPr> from the first run
+    const rPr = para.match(/<w:rPr>[\s\S]*?<\/w:rPr>/)?.[0] ?? ''
+
+    // Strip all runs and run-splitting artefacts, then inject one clean run
+    const stripped = para
+      .replace(/<w:r[ >][\s\S]*?<\/w:r>/g, '')
+      .replace(/<w:proofErr[^/]*\/>/g, '')
+      .replace(/<w:bookmarkStart[^/]*\/>/g, '')
+      .replace(/<w:bookmarkEnd[^/]*\/>/g, '')
+
+    const newRun = `<w:r>${rPr}<w:t xml:space="preserve">${allText}</w:t></w:r>`
+    return stripped.replace(/<\/w:p>/, `${newRun}</w:p>`)
+  })
+}
+
+/**
  * Replace the entire <w:p> block that contains `placeholder` with `replacementXml`.
  * Uses a tempered greedy token to avoid crossing paragraph boundaries.
  * Returns the original xml unchanged if no match is found.
@@ -196,8 +232,15 @@ export async function fillTemplate(
   // Process document.xml: paragraph-level replacement first, then inline
   const docEntry = zip.getEntry('word/document.xml')
   if (docEntry) {
-    let xml = docEntry.getData().toString('utf-8')
+    // Normalise split runs BEFORE any replacement so {{placeholders}} that
+    // Word fragmented across multiple <w:r> elements are reunited.
+    let xml = mergeRunsContainingPlaceholders(docEntry.getData().toString('utf-8'))
     let changed = false
+
+    console.log('[templateProcessor] Normalised doc XML, looking for placeholders...')
+    for (const ph of Object.keys(multiLine)) {
+      console.log(`[templateProcessor] ${ph} present after normalise:`, xml.includes(ph))
+    }
 
     for (const [ph, replacementXml] of Object.entries(multiLine)) {
       const updated = replaceParagraphWithXml(xml, ph, replacementXml)
