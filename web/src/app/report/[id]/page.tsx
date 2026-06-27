@@ -110,6 +110,9 @@ export default function ReportPage() {
       })
       if (!res.ok) throw new Error('Generate failed')
       setDocReady(true)
+      setReloadingEditor(true)
+      setEditorKey(prev => prev + 1)
+      setTimeout(() => setReloadingEditor(false), 4000)
     } catch (err) {
       console.error('[generateDoc] error:', err)
       alert('Could not generate document. Please refresh.')
@@ -128,12 +131,18 @@ export default function ReportPage() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ inspectionId }),
       })
-      if (!res.ok) throw new Error('AI generation failed')
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'AI generation failed')
+      }
+      const data = await res.json()
+      console.log('[ai-generate] Success:', data)
+      setReloadingEditor(true)
       setEditorKey(prev => prev + 1)
-      alert('AI report generated. The editor will reload with the new content.')
-    } catch (err) {
+      setTimeout(() => setReloadingEditor(false), 4000)
+    } catch (err: any) {
       console.error('[generateAIReport] error:', err)
-      alert('AI generation failed. Please try again.')
+      alert('AI generation failed: ' + err.message)
     } finally {
       setGeneratingAI(false)
     }
