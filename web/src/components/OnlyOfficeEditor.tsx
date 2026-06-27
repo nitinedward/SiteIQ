@@ -37,7 +37,8 @@ export default function OnlyOfficeEditor({
 
     const initEditor = async () => {
       try {
-        const docUrl      = `${appUrl}/api/docs/${inspectionId}`
+        // Add timestamp to docUrl so OO always re-fetches fresh content
+        const docUrl      = `${appUrl}/api/docs/${inspectionId}?t=${Date.now()}`
         const callbackUrl = `${appUrl}/api/docs/${inspectionId}`
 
         const config: Record<string, any> = {
