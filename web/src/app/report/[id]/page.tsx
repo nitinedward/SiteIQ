@@ -87,13 +87,10 @@ export default function ReportPage() {
 
   // ── ONLYOFFICE HEALTH CHECK ──────────────────────────────────────────────────
   const checkOnlyOffice = async (): Promise<boolean> => {
-    const ooUrl = process.env.NEXT_PUBLIC_ONLYOFFICE_SERVER_URL ?? 'http://localhost'
     try {
-      const res = await fetch(`${ooUrl}/healthcheck`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(3000),
-      })
-      return res.ok
+      const res = await fetch('/api/docs/health', { signal: AbortSignal.timeout(5000) })
+      const data = await res.json()
+      return data.healthy === true
     } catch {
       return false
     }
