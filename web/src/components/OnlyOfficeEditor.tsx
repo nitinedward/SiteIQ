@@ -31,7 +31,9 @@ export default function OnlyOfficeEditor({
     if (scriptLoaded.current) return
     scriptLoaded.current = true
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const appUrl = typeof window !== 'undefined'
+      ? window.location.origin
+      : (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000')
 
     const initEditor = async () => {
       try {
