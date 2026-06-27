@@ -201,28 +201,11 @@ export default function OnlyOfficeEditor({
 
           <div style={{
             background: '#f0ede8', borderRadius: 10,
-            padding: '16px 20px', marginTop: 16, textAlign: 'left',
+            padding: '16px 20px', marginTop: 16,
+            fontSize: 13, color: '#9b968d', lineHeight: 1.6,
           }}>
-            <div style={{
-              fontFamily: "'JetBrains Mono',monospace",
-              fontSize: 13, color: '#2c2a27', marginBottom: 8,
-            }}>
-              Start OnlyOffice in PowerShell:
-            </div>
-            <div style={{
-              background: '#1a1917', color: '#ffffff',
-              padding: '10px 14px', borderRadius: 6,
-              fontFamily: "'JetBrains Mono',monospace",
-              fontSize: 12, marginBottom: 12,
-            }}>
-              docker start 6e4ec3a27f06
-            </div>
-            <div style={{
-              fontFamily: "'JetBrains Mono',monospace",
-              fontSize: 12, color: '#9b968d',
-            }}>
-              Then refresh this page
-            </div>
+            OnlyOffice Document Server is temporarily unavailable.
+            Please contact your administrator or try again in a few minutes.
           </div>
 
           <button
