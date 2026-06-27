@@ -28,12 +28,25 @@ export async function loadDoc(
   inspectionId: string
 ): Promise<Buffer> {
   const supabase = getSupabase()
-  const { data, error } = await supabase.storage
+  const path = `${inspectionId}.docx`
+
+  // Generate a unique signed URL each call — the unique JWT token means CDN can never
+  // serve a cached copy, so we always get the latest version from storage.
+  const { data: signData, error: signError } = await supabase.storage
     .from('reports')
-    .download(`${inspectionId}.docx`)
-  if (error || !data) throw new Error('Document not found. Generate it first.')
-  const arrayBuffer = await data.arrayBuffer()
-  console.log('[storage] Loaded:', inspectionId)
+    .createSignedUrl(path, 60)
+
+  if (signError || !signData?.signedUrl) {
+    throw new Error('Document not found. Generate it first.')
+  }
+
+  const res = await fetch(signData.signedUrl, { cache: 'no-store' })
+  if (!res.ok) {
+    if (res.status === 404) throw new Error('Document not found. Generate it first.')
+    throw new Error(`Storage download failed: ${res.status}`)
+  }
+  const arrayBuffer = await res.arrayBuffer()
+  console.log('[storage] Loaded:', inspectionId, '—', arrayBuffer.byteLength, 'bytes')
   return Buffer.from(arrayBuffer)
 }
 
