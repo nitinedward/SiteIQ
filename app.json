@@ -14,15 +14,16 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
+      "bundleIdentifier": "com.nitinedward.SiteIQ",
+      "buildNumber": "1",
+      "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "SiteIQ needs camera access to capture site inspection photos.",
         "NSMicrophoneUsageDescription": "SiteIQ needs microphone access to record inspection notes.",
         "NSPhotoLibraryUsageDescription": "SiteIQ needs photo library access to save inspection photos.",
         "NSFaceIDUsageDescription": "SiteIQ uses Face ID to securely unlock the app.",
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "bundleIdentifier": "com.nitinedward.SiteIQ"
+      }
     },
     "android": {
       "package": "com.nitinedward.siteiq",
