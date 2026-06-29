@@ -1,10 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* ── CSS VARIABLES ──────────────────────────────────────── */
 :root {
   --white:   #ffffff;
   --off:     #f8f7f5;
@@ -16,6 +11,7 @@
   --ink:     #1a1917;
   --accent:  #2c5282;
   --accent2: #edf2fb;
+  --accent3: #dbeafe;
   --red:     #c0392b;
   --red2:    #fdf0ef;
   --green:   #27705a;
@@ -24,13 +20,27 @@
   --amber2:  #fef9e7;
   --orange:  #c05621;
   --orange2: #fef3e2;
+
   --f-serif: 'Cormorant', Georgia, serif;
   --f-body:  'Outfit', sans-serif;
   --f-mono:  'JetBrains Mono', monospace;
+
+  --shadow-sm:   0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:   0 4px 12px rgba(0,0,0,.08), 0 2px 4px rgba(0,0,0,.04);
+  --shadow-lg:   0 8px 24px rgba(0,0,0,.10), 0 4px 8px rgba(0,0,0,.04);
+  --shadow-card: 0 0 0 1px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.06);
+
+  --r1: 6px;
+  --r2: 10px;
+  --r3: 14px;
+  --r4: 20px;
 }
 
-/* ── BASE TYPOGRAPHY ────────────────────────────────────── */
-* { box-sizing: border-box; }
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
 html, body {
   font-family: var(--f-body);
@@ -39,38 +49,40 @@ html, body {
   color: var(--ink);
   background: var(--off);
   -webkit-font-smoothing: antialiased;
-  margin: 0;
-  padding: 0;
+  -moz-osx-font-smoothing: grayscale;
   height: 100%;
 }
 
 h1, h2, h3, h4 {
   font-family: var(--f-serif);
   line-height: 1.2;
+  font-weight: 600;
 }
 
-button, input, select, textarea { font-family: inherit; }
+a { color: inherit; text-decoration: none; }
 
-/* ── SCROLLBARS ─────────────────────────────────────────── */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+button { font-family: var(--f-body); cursor: pointer; }
+
+input, textarea, select { font-family: var(--f-body); }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #ccc8c0; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 2px; }
 
-/* ── ANIMATIONS ─────────────────────────────────────────── */
-@keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(.8); } }
-@keyframes spin  { to { transform: rotate(360deg); } }
+@keyframes spin    { to { transform: rotate(360deg); } }
+@keyframes fadeIn  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse   { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-/* ── TIPTAP EDITOR (report/[id]/page.tsx — do not remove) ── */
-.tiptap-editor .ProseMirror {
-  outline: none;
-  min-height: 100%;
-  padding: 24px;
-  font-size: 14px;
-  line-height: 1.7;
-  color: #1e293b;
+.fade-in { animation: fadeIn 0.2s ease-out; }
+
+/* ── Mobile utility classes ─────────────────────────────── */
+.mobile-only   { display: none; }
+.desktop-only  { display: block; }
+
+@media (max-width: 768px) {
+  :root { --sidebar-width: 0px; }
+  .mobile-only  { display: block; }
+  .desktop-only { display: none; }
+  .mobile-flex  { display: flex !important; }
+  .mobile-hidden { display: none !important; }
 }
-.tiptap-editor .ProseMirror h1 { font-size: 20px; font-weight: 700; margin: 16px 0 8px; }
-.tiptap-editor .ProseMirror h2 { font-size: 16px; font-weight: 700; margin: 14px 0 6px; color: #2563eb; }
-.tiptap-editor .ProseMirror p  { margin: 0 0 10px; }
-.tiptap-editor .ProseMirror p:last-child { margin-bottom: 0; }
-.tiptap-editor .ProseMirror strong { font-weight: 700; }

@@ -157,6 +157,12 @@ export default function SettingsPage() {
       const templateUrl = `${SUPABASE_URL}/storage/v1/object/report-templates/${fileName}`
       await supabase.from('firms').update({ report_template_url: templateUrl }).eq('id', firm!.id)
       setFirm(prev => prev ? { ...prev, report_template_url: templateUrl } : prev)
+      // Bust the server-side template cache so the next generate picks up the new file
+      await fetch('/api/docs/cache-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firmId: firm!.id }),
+      }).catch(() => { /* non-critical */ })
       setUploadSuccess('Template uploaded successfully!')
       setTimeout(() => setUploadSuccess(''), 3000)
     } catch { alert('Upload failed. Please try again.') }
@@ -249,7 +255,13 @@ export default function SettingsPage() {
       firmName={firm?.name}
       onSignOut={handleSignOut}
     >
-      <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 24px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .settings-content { padding: 16px !important; }
+          .settings-card > div { padding: 16px !important; }
+        }
+      `}</style>
+      <div className="settings-content" style={{ maxWidth: 680, margin: '0 auto', padding: '32px 24px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
 
         {/* Page heading */}
         <div>
@@ -268,7 +280,7 @@ export default function SettingsPage() {
         )}
 
         {/* ── CARD 1: Firm Details ─────────────────────────── */}
-        <Card>
+        <Card className="settings-card">
           <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--line)' }}>
             <h2 style={{ fontFamily: 'var(--f-serif)', fontSize: 17, fontWeight: 600, color: 'var(--ink)' }}>Firm Details</h2>
           </div>
@@ -308,7 +320,7 @@ export default function SettingsPage() {
         </Card>
 
         {/* ── CARD 2: Report Template ──────────────────────── */}
-        <Card>
+        <Card className="settings-card">
           <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--line)' }}>
             <h2 style={{ fontFamily: 'var(--f-serif)', fontSize: 20, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>Report Template</h2>
             <p style={{ fontSize: 13, color: 'var(--mid)', lineHeight: 1.6, marginBottom: 10 }}>
@@ -364,7 +376,7 @@ export default function SettingsPage() {
         </Card>
 
         {/* ── CARD 3: Microsoft 365 ────────────────────────── */}
-        <Card>
+        <Card className="settings-card">
           <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <h2 style={{ fontFamily: 'var(--f-serif)', fontSize: 20, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>

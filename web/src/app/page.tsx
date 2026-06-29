@@ -26,134 +26,170 @@ export default function LoginPage() {
     }
   }
 
-  const inputStyle = (focused: boolean): React.CSSProperties => ({
-    width: '100%', padding: '12px 16px',
-    background: focused ? 'var(--white)' : 'var(--stone)',
-    border: `1px solid ${focused ? 'var(--accent)' : 'var(--line)'}`,
-    borderRadius: 8, fontSize: 15, color: 'var(--ink)',
-    outline: 'none', transition: 'all .15s',
-  })
-
   const features = [
-    'Field inspection capture',
+    'Field inspection capture on mobile',
     'AI-powered report generation',
     'Structural drawing markup',
   ]
 
   return (
-    <div style={{ display: 'flex', height: '100vh' }}>
+    <>
+      <style>{`
+        @media (max-width: 768px) {
+          .login-left-panel  { display: none !important; }
+          .login-right-panel { width: 100% !important; padding: 40px 28px !important; }
+          .login-heading     { font-size: 32px !important; }
+        }
+      `}</style>
+      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: 'var(--f-body)' }}>
 
-      {/* ── LEFT — brand panel (40%) ──────────────────────── */}
-      <div style={{
-        width: '40%', minWidth: 360, flexShrink: 0,
-        background: 'var(--accent)',
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        padding: '60px',
+      {/* LEFT PANEL (42%) */}
+      <div className="login-left-panel" style={{
+        width: '42%', minWidth: 380, flexShrink: 0,
+        background: 'linear-gradient(145deg, #1e3a5f 0%, #2c5282 60%, #2d6a8f 100%)',
         position: 'relative', overflow: 'hidden',
+        display: 'flex', flexDirection: 'column', justifyContent: 'center',
+        padding: '60px 56px',
       }}>
-        {/* CSS-only grid overlay */}
+
+        {/* Circle 1 */}
+        <div style={{ position: 'absolute', top: -120, right: -120, width: 380, height: 380, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+
+        {/* Circle 2 */}
+        <div style={{ position: 'absolute', bottom: -180, left: -140, width: 520, height: 520, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
+
+        {/* Grid overlay */}
         <div style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
-          backgroundImage: `
-            linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px)`,
-          backgroundSize: '40px 40px',
+          backgroundImage: `linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px)`,
+          backgroundSize: '48px 48px',
         }} />
 
         {/* Content */}
-        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', maxWidth: 340 }}>
-          {/* Logo */}
+        <div style={{ position: 'relative', zIndex: 1 }}>
+
+          {/* Logo mark */}
           <div style={{
-            width: 48, height: 48, borderRadius: 12,
-            background: '#fff',
+            width: 48, height: 48, borderRadius: 14,
+            background: 'rgba(255,255,255,0.12)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            backdropFilter: 'blur(8px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto',
+            marginBottom: 28,
           }}>
-            <svg width="24" height="24" fill="none" stroke="var(--accent)" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-              <polyline points="9 22 9 12 15 12 15 22"/>
+            <svg width="22" height="22" fill="none" stroke="white" strokeWidth="1.8" viewBox="0 0 24 24">
+              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+              <polyline points="9,22 9,12 15,12 15,22"/>
             </svg>
           </div>
 
-          <div style={{ fontFamily: 'var(--f-serif)', fontSize: 52, fontWeight: 600, color: '#fff', marginTop: 20, lineHeight: 1 }}>
+          {/* Brand name */}
+          <div style={{ fontFamily: 'var(--f-serif)', fontSize: 56, fontWeight: 600, color: '#fff', lineHeight: 1, marginBottom: 12 }}>
             SiteIQ
           </div>
-          <div style={{ fontSize: 17, color: 'rgba(255,255,255,0.7)', marginTop: 12 }}>
-            Structural Engineering Inspection Platform
+
+          {/* Tagline */}
+          <div style={{ fontSize: 16, lineHeight: 1.6, color: 'rgba(255,255,255,0.65)', marginBottom: 48 }}>
+            Structural Engineering<br />Inspection Platform
           </div>
 
           {/* Divider */}
-          <div style={{ width: 40, height: 2, background: 'rgba(255,255,255,0.3)', margin: '28px auto' }} />
+          <div style={{ width: 40, height: 2, background: 'rgba(255,255,255,0.25)', borderRadius: 1, marginBottom: 32 }} />
 
-          {/* Feature lines */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
+          {/* Feature list */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {features.map(f => (
               <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{
-                  width: 20, height: 20, borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.15)',
+                  width: 22, height: 22, flexShrink: 0,
+                  background: 'rgba(255,255,255,0.12)', borderRadius: '50%',
+                  border: '1px solid rgba(255,255,255,0.2)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
                 }}>
-                  <svg width="11" height="11" fill="none" stroke="white" strokeWidth="2.5" viewBox="0 0 24 24">
-                    <polyline points="20 6 9 17 4 12"/>
+                  <svg width="10" height="10" fill="none" stroke="white" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <polyline points="20,6 9,17 4,12"/>
                   </svg>
                 </div>
-                <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.85)' }}>{f}</span>
+                <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>{f}</span>
               </div>
             ))}
           </div>
         </div>
+
+        {/* Version tag */}
+        <div style={{
+          position: 'absolute', bottom: 32, left: 56,
+          fontFamily: 'var(--f-mono)', fontSize: 10,
+          textTransform: 'uppercase', letterSpacing: '1.5px',
+          color: 'rgba(255,255,255,0.25)',
+        }}>
+          SiteIQ · v1.0
+        </div>
       </div>
 
-      {/* ── RIGHT — login form (60%) ───────────────────────── */}
-      <div style={{
-        flex: 1, display: 'flex',
-        alignItems: 'center', justifyContent: 'center',
-        background: 'white',
+      {/* RIGHT PANEL (58%) */}
+      <div className="login-right-panel" style={{
+        flex: 1, background: 'white',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '60px',
       }}>
-        <div style={{ width: 420 }}>
+        <div style={{ width: '100%', maxWidth: 400 }}>
 
-          <h2 style={{
-            fontFamily: 'var(--f-serif)', fontSize: 36, fontWeight: 600,
-            color: 'var(--ink)', marginBottom: 8, lineHeight: 1.1,
-          }}>
+          {/* Eyebrow */}
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--mid)', marginBottom: 16 }}>
             Welcome back
+          </div>
+
+          {/* Heading */}
+          <h2 className="login-heading" style={{ fontFamily: 'var(--f-serif)', fontSize: 42, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.1, margin: '0 0 8px 0' }}>
+            Sign in to SiteIQ
           </h2>
-          <p style={{ fontSize: 15, color: 'var(--mid)', marginBottom: 36 }}>
-            Sign in to your SiteIQ account
+
+          {/* Subtext */}
+          <p style={{ fontSize: 15, color: 'var(--mid)', margin: '0 0 40px 0' }}>
+            Enter your credentials to continue
           </p>
 
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--dark)', marginBottom: 6 }}>
-                Email address
-              </label>
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>Email address</label>
               <input
                 type="email" value={email} onChange={e => setEmail(e.target.value)}
                 placeholder="you@firm.com" required
-                style={inputStyle(focusEmail)}
+                style={{
+                  padding: '12px 16px',
+                  background: focusEmail ? 'white' : 'var(--stone)',
+                  border: `1.5px solid ${focusEmail ? 'var(--accent)' : 'var(--line)'}`,
+                  borderRadius: 'var(--r2)', fontSize: 15, color: 'var(--ink)',
+                  outline: 'none', transition: 'all .15s', width: '100%',
+                  boxShadow: focusEmail ? '0 0 0 3px var(--accent2)' : 'none',
+                }}
                 onFocus={() => setFocusEmail(true)}
                 onBlur={() => setFocusEmail(false)}
               />
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--dark)', marginBottom: 6 }}>
-                Password
-              </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>Password</label>
               <input
                 type="password" value={password} onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••" required
-                style={inputStyle(focusPass)}
+                style={{
+                  padding: '12px 16px',
+                  background: focusPass ? 'white' : 'var(--stone)',
+                  border: `1.5px solid ${focusPass ? 'var(--accent)' : 'var(--line)'}`,
+                  borderRadius: 'var(--r2)', fontSize: 15, color: 'var(--ink)',
+                  outline: 'none', transition: 'all .15s', width: '100%',
+                  boxShadow: focusPass ? '0 0 0 3px var(--accent2)' : 'none',
+                }}
                 onFocus={() => setFocusPass(true)}
                 onBlur={() => setFocusPass(false)}
               />
             </div>
 
             {error && (
-              <div style={{ background: 'var(--red2)', border: '1px solid #f5c6c0', borderRadius: 6, padding: '10px 14px', fontSize: 13, color: 'var(--red)' }}>
+              <div style={{ background: 'var(--red2)', border: '1px solid rgba(192,57,43,.2)', borderRadius: 'var(--r1)', padding: '10px 14px', fontSize: 13, color: 'var(--red)' }}>
                 {error}
               </div>
             )}
@@ -162,33 +198,45 @@ export default function LoginPage() {
               type="submit"
               disabled={loading}
               style={{
-                width: '100%', padding: '13px 20px',
-                background: loading ? 'var(--stone)' : 'var(--accent)',
-                color: loading ? 'var(--mid)' : '#fff',
-                border: 'none', borderRadius: 8,
-                fontSize: 15, fontWeight: 600,
+                width: '100%', padding: '13px 24px', marginTop: 8,
+                background: 'var(--accent)', color: 'white',
+                border: 'none', borderRadius: 'var(--r2)',
+                fontSize: 15, fontWeight: 600, letterSpacing: '0.3px',
                 cursor: loading ? 'not-allowed' : 'pointer',
-                transition: 'all .15s', marginTop: 24,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                transition: 'all .2s', opacity: loading ? 0.7 : 1,
               }}
-              onMouseEnter={e => { if (!loading) e.currentTarget.style.background = '#1e3a5f' }}
-              onMouseLeave={e => { if (!loading) e.currentTarget.style.background = 'var(--accent)' }}
+              onMouseEnter={e => {
+                if (!loading) {
+                  e.currentTarget.style.background = '#1e3a5f'
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+                }
+              }}
+              onMouseLeave={e => {
+                if (!loading) {
+                  e.currentTarget.style.background = 'var(--accent)'
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = 'none'
+                }
+              }}
+              onMouseDown={e => { if (!loading) e.currentTarget.style.transform = 'translateY(0)' }}
             >
-              {loading && (
-                <span style={{ width: 14, height: 14, border: '2px solid var(--mid)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin .8s linear infinite', display: 'inline-block' }} />
-              )}
-              {loading ? 'Signing in…' : 'Sign In'}
+              {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
 
-          <p style={{ marginTop: 20, fontSize: 14, color: 'var(--mid)', textAlign: 'center' }}>
+          <p style={{ marginTop: 24, fontSize: 14, color: 'var(--mid)', textAlign: 'center' }}>
             New to SiteIQ?{' '}
-            <a href="/signup" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>
+            <button
+              onClick={() => router.push('/signup')}
+              style={{ color: 'var(--accent)', fontWeight: 500, cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline', fontSize: 14 }}
+            >
               Create an account
-            </a>
+            </button>
           </p>
         </div>
       </div>
     </div>
+    </>
   )
 }

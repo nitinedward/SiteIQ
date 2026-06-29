@@ -454,6 +454,13 @@ export default function AdminPage() {
       onSignOut={handleSignOut}
     >
 
+      <style>{`
+        @media (max-width: 768px) {
+          .admin-layout  { flex-direction: column !important; height: auto !important; }
+          .admin-sidebar { width: 100% !important; height: auto !important; border-right: none !important; border-bottom: 1px solid var(--line) !important; max-height: 220px !important; }
+          .admin-panel   { width: 100% !important; }
+        }
+      `}</style>
       {/* ── Main tab bar ─────────────────────────────────── */}
       <div style={{ borderBottom: '1px solid var(--line)', background: 'var(--white)', padding: '0 28px', display: 'flex', gap: 4 }}>
         <button style={tabBtn(tab === 'projects')} onClick={() => setTab('projects')}>Projects</button>
@@ -464,10 +471,10 @@ export default function AdminPage() {
           PROJECTS TAB
       ══════════════════════════════════════════════════════ */}
       {tab === 'projects' && (
-        <div style={{ display: 'flex', height: 'calc(100vh - 64px - 49px)', overflow: 'hidden' }}>
+        <div className="admin-layout" style={{ display: 'flex', height: 'calc(100vh - 64px - 49px)', overflow: 'hidden' }}>
 
           {/* Left — project list (300px fixed) */}
-          <div style={{
+          <div className="admin-sidebar" style={{
             width: 300, flexShrink: 0,
             borderRight: '1px solid var(--line)',
             background: 'var(--white)',
@@ -569,7 +576,7 @@ export default function AdminPage() {
           </div>
 
           {/* Right — project detail */}
-          <div style={{ flex: 1, overflowY: 'auto', background: 'var(--off)' }}>
+          <div className="admin-panel" style={{ flex: 1, overflowY: 'auto', background: 'var(--off)' }}>
             {!selectedProject ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
                 <svg width="40" height="40" fill="none" stroke="var(--line2)" strokeWidth="1.5" viewBox="0 0 24 24">

@@ -128,18 +128,32 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
   const initials = fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '240px 1fr',
-      gridTemplateRows: '60px 1fr',
-      height: '100vh',
-      overflow: 'hidden',
-      fontFamily: 'var(--f-body)',
-      background: 'var(--off)',
-    }}>
+    <>
+      <style>{`
+        @media (max-width: 768px) {
+          .shell-grid        { grid-template-columns: 1fr !important; }
+          .shell-sidebar     { display: none !important; }
+          .shell-main        { grid-column: 1 / -1 !important; }
+          .shell-topbar      { grid-column: 1 / -1 !important; padding: 0 16px !important; }
+          .shell-content     { padding-bottom: 70px !important; }
+          .bottom-nav        { display: flex !important; }
+          .topbar-firm-pill  { display: none !important; }
+          .topbar-brand      { font-size: 18px !important; }
+          .topbar-user-name  { display: none !important; }
+        }
+      `}</style>
+      <div className="shell-grid" style={{
+        display: 'grid',
+        gridTemplateColumns: '240px 1fr',
+        gridTemplateRows: '60px 1fr',
+        height: '100vh',
+        overflow: 'hidden',
+        fontFamily: 'var(--f-body)',
+        background: 'var(--off)',
+      }}>
 
       {/* ── TOPBAR ───────────────────────────────────────────── */}
-      <div style={{
+      <div className="shell-topbar" style={{
         gridColumn: '1 / -1',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 28px',
@@ -161,13 +175,13 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
               <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
           </div>
-          <span style={{ fontFamily: 'var(--f-serif)', fontSize: 22, fontWeight: 600, color: 'var(--ink)' }}>
+          <span className="topbar-brand" style={{ fontFamily: 'var(--f-serif)', fontSize: 22, fontWeight: 600, color: 'var(--ink)' }}>
             Site<span style={{ color: 'var(--accent)' }}>IQ</span>
           </span>
         </div>
 
         {/* CENTRE — live pill */}
-        <div style={{
+        <div className="topbar-firm-pill" style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: 'var(--stone)',
           border: '1px solid var(--line)',
@@ -195,7 +209,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
           background: 'var(--stone)', borderRadius: 'var(--r4)', border: '1px solid var(--line)',
         }}>
           <div style={{ lineHeight: 1.25 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{fullName}</div>
+            <div className="topbar-user-name" style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{fullName}</div>
             <div style={{
               fontFamily: 'var(--f-mono)', fontSize: 10,
               textTransform: 'uppercase', letterSpacing: '1px',
@@ -217,7 +231,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
       </div>
 
       {/* ── SIDEBAR ──────────────────────────────────────────── */}
-      <div style={{
+      <div className="shell-sidebar" style={{
         background: 'var(--white)',
         borderRight: '1px solid var(--line)',
         display: 'flex', flexDirection: 'column',
@@ -271,11 +285,71 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
       </div>
 
       {/* ── MAIN ─────────────────────────────────────────────── */}
-      <div style={{ overflowY: 'auto', background: 'var(--off)', animation: 'fadeIn 0.2s ease-out' }}>
+      <div className="shell-main shell-content" style={{ overflowY: 'auto', background: 'var(--off)', animation: 'fadeIn 0.2s ease-out' }}>
         {children}
       </div>
 
     </div>
+
+    {/* ── BOTTOM NAV (mobile only) ─────────────────────────── */}
+    <nav className="bottom-nav" style={{
+      display: 'none',
+      position: 'fixed',
+      bottom: 0, left: 0, right: 0,
+      height: 60,
+      background: 'var(--white)',
+      borderTop: '1px solid var(--line)',
+      zIndex: 100,
+      alignItems: 'center',
+      justifyContent: 'space-around',
+      padding: '0 8px',
+    }}>
+      <button onClick={() => router.push('/dashboard')} style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+        background: 'none', border: 'none', cursor: 'pointer', padding: '8px 16px',
+        color: activePage === 'dashboard' ? 'var(--accent)' : 'var(--mid)', flex: 1,
+      }}>
+        <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        <span style={{ fontSize: 10, fontWeight: activePage === 'dashboard' ? 600 : 400 }}>Dashboard</span>
+      </button>
+      <button onClick={() => router.push('/admin')} style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+        background: 'none', border: 'none', cursor: 'pointer', padding: '8px 16px',
+        color: activePage === 'projects' ? 'var(--accent)' : 'var(--mid)', flex: 1,
+      }}>
+        <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+          <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+        </svg>
+        <span style={{ fontSize: 10, fontWeight: activePage === 'projects' ? 600 : 400 }}>Projects</span>
+      </button>
+      <button onClick={() => router.push('/admin?tab=team')} style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+        background: 'none', border: 'none', cursor: 'pointer', padding: '8px 16px',
+        color: activePage === 'team' ? 'var(--accent)' : 'var(--mid)', flex: 1,
+      }}>
+        <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+        </svg>
+        <span style={{ fontSize: 10, fontWeight: activePage === 'team' ? 600 : 400 }}>Team</span>
+      </button>
+      <button onClick={() => router.push('/settings')} style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+        background: 'none', border: 'none', cursor: 'pointer', padding: '8px 16px',
+        color: activePage === 'settings' ? 'var(--accent)' : 'var(--mid)', flex: 1,
+      }}>
+        <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+        <span style={{ fontSize: 10, fontWeight: activePage === 'settings' ? 600 : 400 }}>Settings</span>
+      </button>
+    </nav>
+    </>
   )
 }
 

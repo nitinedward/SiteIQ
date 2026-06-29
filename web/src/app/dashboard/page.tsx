@@ -183,70 +183,132 @@ export default function DashboardPage() {
 
   return (
     <Shell activePage="dashboard" role={role} fullName={fullName} firmName={firmName} onSignOut={handleSignOut}>
-      <div style={{ padding: 32 }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .dash-content  { padding: 16px !important; }
+          .dash-header   { flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
+          .dash-title    { font-size: 32px !important; }
+          .stat-grid     { grid-template-columns: 1fr !important; gap: 10px !important; }
+          .panel-grid    { grid-template-columns: 1fr !important; gap: 14px !important; }
+        }
+      `}</style>
+      <div className="dash-content" style={{ padding: '32px 36px' }}>
 
-        {/* Page heading */}
-        <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontFamily: 'var(--f-serif)', fontSize: 36, fontWeight: 500, color: 'var(--ink)', lineHeight: 1 }}>Dashboard</h1>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--mid)', marginTop: 8 }}>
-            {projects.length} project{projects.length !== 1 ? 's' : ''} · {firmName}
+        {/* PAGE HEADER */}
+        <div className="dash-header" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 36 }}>
+          <div>
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--mid)', marginBottom: 8 }}>
+              {new Date().toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()}
+            </div>
+            <h1 className="dash-title" style={{ fontFamily: 'var(--f-serif)', fontSize: 44, fontWeight: 600, color: 'var(--ink)', lineHeight: 1, margin: 0 }}>
+              Dashboard
+            </h1>
+            <div style={{ fontSize: 14, color: 'var(--mid)', marginTop: 8 }}>
+              {projects.length} project{projects.length !== 1 ? 's' : ''} · {firmName}
+            </div>
+          </div>
+          {role === 'admin' && (
+            <button
+              onClick={() => router.push('/admin')}
+              style={{
+                background: 'var(--accent)', color: 'white',
+                padding: '10px 22px', borderRadius: 'var(--r2)',
+                fontSize: 14, fontWeight: 600, border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}
+            >
+              ＋ New Project
+            </button>
+          )}
+        </div>
+
+        {/* STAT CARDS */}
+        <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 36 }}>
+
+          {/* Card 1 — Active Projects */}
+          <div
+            onClick={() => router.push('/admin')}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'var(--shadow-card)' }}
+            style={{
+              background: 'var(--white)', border: '1px solid var(--line)',
+              borderRadius: 'var(--r3)', boxShadow: 'var(--shadow-card)',
+              padding: '28px 32px', cursor: 'pointer',
+              transition: 'all .2s', position: 'relative', overflow: 'hidden',
+            }}
+          >
+            <div style={{ position: 'absolute', bottom: -24, right: -24, width: 110, height: 110, borderRadius: '50%', opacity: 0.07, background: 'var(--green)', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'var(--green)', opacity: 0.5 }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--mid)' }}>ACTIVE PROJECTS</div>
+              <div style={{ width: 28, height: 28, borderRadius: 'var(--r1)', background: 'var(--green2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green)', flexShrink: 0 }}>
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                  <rect x="2" y="7" width="20" height="15"/><polyline points="17,22 17,7 7,7 7,22"/><polyline points="7,2 12,7 17,2"/>
+                </svg>
+              </div>
+            </div>
+            <div style={{ fontFamily: 'var(--f-serif)', fontSize: 56, fontWeight: 600, lineHeight: 1, color: 'var(--green)', marginBottom: 8 }}>{activeProjects.length}</div>
+            <div style={{ fontSize: 13, color: 'var(--mid)' }}>Currently on site</div>
+          </div>
+
+          {/* Card 2 — On Hold */}
+          <div
+            onClick={() => router.push('/admin')}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'var(--shadow-card)' }}
+            style={{
+              background: 'var(--white)', border: '1px solid var(--line)',
+              borderRadius: 'var(--r3)', boxShadow: 'var(--shadow-card)',
+              padding: '28px 32px', cursor: 'pointer',
+              transition: 'all .2s', position: 'relative', overflow: 'hidden',
+            }}
+          >
+            <div style={{ position: 'absolute', bottom: -24, right: -24, width: 110, height: 110, borderRadius: '50%', opacity: 0.07, background: 'var(--amber)', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'var(--amber)', opacity: 0.5 }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--mid)' }}>ON HOLD</div>
+              <div style={{ width: 28, height: 28, borderRadius: 'var(--r1)', background: 'var(--amber2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--amber)', flexShrink: 0 }}>
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                  <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+                </svg>
+              </div>
+            </div>
+            <div style={{ fontFamily: 'var(--f-serif)', fontSize: 56, fontWeight: 600, lineHeight: 1, color: 'var(--amber)', marginBottom: 8 }}>{onHoldProjects.length}</div>
+            <div style={{ fontSize: 13, color: 'var(--mid)' }}>Awaiting client</div>
+          </div>
+
+          {/* Card 3 — Site Visits */}
+          <div
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'var(--shadow-card)' }}
+            style={{
+              background: 'var(--white)', border: '1px solid var(--line)',
+              borderRadius: 'var(--r3)', boxShadow: 'var(--shadow-card)',
+              padding: '28px 32px',
+              transition: 'all .2s', position: 'relative', overflow: 'hidden',
+            }}
+          >
+            <div style={{ position: 'absolute', bottom: -24, right: -24, width: 110, height: 110, borderRadius: '50%', opacity: 0.07, background: 'var(--accent)', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 3, background: 'var(--accent)', opacity: 0.5 }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--mid)' }}>SITE VISITS THIS WEEK</div>
+              <div style={{ width: 28, height: 28, borderRadius: 'var(--r1)', background: 'var(--accent2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)', flexShrink: 0 }}>
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+              </div>
+            </div>
+            <div style={{ fontFamily: 'var(--f-serif)', fontSize: 56, fontWeight: 600, lineHeight: 1, color: 'var(--accent)', marginBottom: 8 }}>{siteVisitsThisWeek}</div>
+            <div style={{ fontSize: 13, color: 'var(--mid)' }}>Inspections recorded</div>
           </div>
         </div>
 
-        {/* ── 3 stat cards ─────────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 32 }}>
-
-          <Card style={{ padding: 36, cursor: 'pointer', transition: 'all .15s' }}
-            // @ts-ignore — inline onMouseEnter handled via JS
-          >
-            <div
-              onClick={() => router.push('/admin')}
-              onMouseEnter={e => { const el = e.currentTarget.parentElement as HTMLElement; if (el) { el.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)'; el.style.transform = 'translateY(-1px)' } }}
-              onMouseLeave={e => { const el = e.currentTarget.parentElement as HTMLElement; if (el) { el.style.boxShadow = '0 1px 3px rgba(0,0,0,.06)'; el.style.transform = 'none' } }}
-              style={{ cursor: 'pointer' }}
-            >
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--mid)', marginBottom: 16 }}>ACTIVE PROJECTS</div>
-              <div style={{ fontFamily: 'var(--f-serif)', fontSize: 64, fontWeight: 600, color: 'var(--green)', lineHeight: 1 }}>{activeProjects.length}</div>
-              <div style={{ fontSize: 14, color: 'var(--mid)', marginTop: 10 }}>Currently on site</div>
-            </div>
-          </Card>
-
-          <Card style={{ padding: 36, cursor: 'pointer', transition: 'all .15s' }}>
-            <div
-              onClick={() => router.push('/admin')}
-              onMouseEnter={e => { const el = e.currentTarget.parentElement as HTMLElement; if (el) { el.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)'; el.style.transform = 'translateY(-1px)' } }}
-              onMouseLeave={e => { const el = e.currentTarget.parentElement as HTMLElement; if (el) { el.style.boxShadow = '0 1px 3px rgba(0,0,0,.06)'; el.style.transform = 'none' } }}
-              style={{ cursor: 'pointer' }}
-            >
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--mid)', marginBottom: 16 }}>ON HOLD</div>
-              <div style={{ fontFamily: 'var(--f-serif)', fontSize: 64, fontWeight: 600, color: 'var(--amber)', lineHeight: 1 }}>{onHoldProjects.length}</div>
-              <div style={{ fontSize: 14, color: 'var(--mid)', marginTop: 10 }}>Awaiting client</div>
-            </div>
-          </Card>
-
-          <Card style={{ padding: 36, borderLeft: '3px solid var(--accent)', cursor: 'pointer', transition: 'all .15s' }}>
-            <div
-              onMouseEnter={e => { const el = e.currentTarget.parentElement as HTMLElement; if (el) { el.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)'; el.style.transform = 'translateY(-1px)' } }}
-              onMouseLeave={e => { const el = e.currentTarget.parentElement as HTMLElement; if (el) { el.style.boxShadow = '0 1px 3px rgba(0,0,0,.06)'; el.style.transform = 'none' } }}
-              style={{ cursor: 'pointer' }}
-            >
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--mid)', marginBottom: 16 }}>SITE VISITS THIS WEEK</div>
-              <div style={{ fontFamily: 'var(--f-serif)', fontSize: 64, fontWeight: 600, color: 'var(--accent)', lineHeight: 1 }}>{siteVisitsThisWeek}</div>
-              <div style={{ fontSize: 14, color: 'var(--mid)', marginTop: 10 }}>inspections recorded</div>
-            </div>
-          </Card>
-        </div>
-
-        {/* ── 2×2 panel grid ───────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        {/* 2×2 PANEL GRID */}
+        <div className="panel-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
 
           {/* Panel 1 — Active Projects */}
-          <Card>
-            <PanelHeader
-              dot="var(--green)"
-              title="Active Projects"
-              action={{ label: 'View all →', onClick: () => router.push('/admin') }}
-            />
+          <Card style={{ overflow: 'hidden' }}>
+            <PanelHeader dot="var(--green)" title="Active Projects" action={{ label: 'View all →', onClick: () => router.push('/admin') }} />
             {activeProjects.length === 0 ? (
               <div style={{ padding: '32px 24px', textAlign: 'center', fontSize: 14, color: 'var(--mid)' }}>No active projects</div>
             ) : activeProjects.slice(0, 5).map(p => {
@@ -255,91 +317,60 @@ export default function DashboardPage() {
                 <div
                   key={p.id}
                   onClick={() => router.push('/admin')}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '16px 24px', borderBottom: '1px solid var(--line)',
-                    cursor: 'pointer', transition: 'background .12s',
-                  }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid var(--line)', cursor: 'pointer', transition: 'background .12s' }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--stone)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                 >
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{p.name}</div>
-                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--mid)', marginTop: 3 }}>#{p.project_number}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{p.name}</div>
+                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--mid)', marginTop: 2 }}>#{p.project_number}</div>
                   </div>
                   {pCount > 0
-                    ? <span style={{ background: 'var(--orange2)', color: 'var(--orange)', fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>{pCount} pending</span>
-                    : <span style={{ background: 'var(--green2)', color: 'var(--green)', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 99 }}>Up to date</span>
+                    ? <span style={{ background: 'var(--orange2)', color: 'var(--orange)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>{pCount} pending</span>
+                    : <span style={{ background: 'var(--green2)', color: 'var(--green)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>Up to date</span>
                   }
                 </div>
               )
             })}
           </Card>
 
-          {/* Panel 2 — Pending Reports (MOST IMPORTANT) */}
-          <Card style={{ borderTop: '3px solid var(--orange)' }}>
-            <PanelHeader
-              dot="var(--orange)"
-              title="Pending Reports"
-              count={pendingReports.length}
-              action={{ label: 'View all →', onClick: () => router.push('/admin') }}
-            />
-            {/* Orange info bar */}
-            <div style={{
-              background: 'var(--orange2)', padding: '12px 20px',
-              fontSize: 13, color: 'var(--orange)',
-              borderBottom: '1px solid var(--line)',
-            }}>
-              ⚡ These inspections were completed on mobile and are ready for AI report generation
+          {/* Panel 2 — Pending Reports */}
+          <Card style={{ overflow: 'hidden', borderTop: '3px solid var(--orange)' }}>
+            <PanelHeader dot="var(--orange)" title="Pending Reports" count={pendingReports.length} />
+            <div style={{ background: 'var(--orange2)', padding: '10px 24px', fontSize: 12, color: 'var(--orange)', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid rgba(192,86,33,0.15)' }}>
+              ⚡ Completed on mobile — ready for AI report generation
             </div>
             {pendingReports.length === 0 ? (
-              <div style={{ padding: '32px 24px', textAlign: 'center', fontSize: 14, color: 'var(--mid)' }}>No pending reports</div>
-            ) : pendingReports.slice(0, 6).map(ins => (
+              <div style={{ padding: '32px 24px', textAlign: 'center', fontSize: 14, color: 'var(--mid)' }}>No pending reports — all caught up ✓</div>
+            ) : pendingReports.slice(0, 5).map(ins => (
               <div
                 key={ins.id}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '14px 24px', borderBottom: '1px solid var(--line)',
-                  gap: 12,
-                }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid var(--line)', gap: 12 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    background: 'var(--accent2)', color: 'var(--accent)',
-                    fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 500,
-                    padding: '4px 8px', borderRadius: 5, flexShrink: 0,
-                  }}>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600, background: 'var(--accent2)', color: 'var(--accent)', padding: '3px 8px', borderRadius: 'var(--r1)', flexShrink: 0 }}>
                     #{ins.report_no}
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
                       {(ins.projects as any)?.name ?? '—'}
                     </div>
-                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--mid)', marginTop: 2 }}>{ins.date}</div>
+                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--mid)', marginTop: 1 }}>{ins.date}</div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 7, flexShrink: 0 }}>
                   <button
                     onClick={() => router.push(`/report/${ins.id}?project_name=${encodeURIComponent((ins.projects as any)?.name ?? '')}`)}
-                    style={{
-                      background: 'var(--accent)', color: '#fff',
-                      border: 'none', borderRadius: 6, padding: '7px 16px',
-                      fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                    }}
+                    style={{ background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 'var(--r1)', fontSize: 12, fontWeight: 600, padding: '6px 12px', cursor: 'pointer' }}
                   >
-                    Generate Report
+                    Generate
                   </button>
                   <button
                     onClick={() => deleteInspection(ins.id)}
                     disabled={deletingId === ins.id}
-                    style={{
-                      background: 'var(--red2)', color: 'var(--red)',
-                      border: '1px solid #f5c6c0', borderRadius: 6, padding: '7px 12px',
-                      fontSize: 13, fontWeight: 500, cursor: deletingId === ins.id ? 'not-allowed' : 'pointer',
-                      opacity: deletingId === ins.id ? 0.6 : 1,
-                    }}
+                    style={{ background: 'var(--red2)', color: 'var(--red)', border: '1px solid rgba(192,57,43,0.15)', borderRadius: 'var(--r1)', fontSize: 12, padding: '6px 9px', cursor: deletingId === ins.id ? 'not-allowed' : 'pointer', opacity: deletingId === ins.id ? 0.6 : 1 }}
                   >
-                    {deletingId === ins.id ? '…' : 'Delete'}
+                    ✕
                   </button>
                 </div>
               </div>
@@ -347,74 +378,52 @@ export default function DashboardPage() {
           </Card>
 
           {/* Panel 3 — On Hold */}
-          <Card>
+          <Card style={{ overflow: 'hidden' }}>
             <PanelHeader dot="var(--amber)" title="On Hold" />
             {onHoldProjects.length === 0 ? (
               <div style={{ padding: '32px 24px', textAlign: 'center', fontSize: 14, color: 'var(--mid)' }}>No projects on hold</div>
             ) : onHoldProjects.slice(0, 5).map(p => (
               <div
                 key={p.id}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '16px 24px', borderBottom: '1px solid var(--line)',
-                }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid var(--line)', cursor: 'pointer', transition: 'background .12s' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--stone)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
               >
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{p.name}</div>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--mid)', marginTop: 3 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{p.name}</div>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--mid)', marginTop: 2 }}>
                     #{p.project_number}{p.client_name ? ` · ${p.client_name}` : ''}
                   </div>
                 </div>
-                <span style={{ background: 'var(--amber2)', color: 'var(--amber)', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 99, flexShrink: 0 }}>
-                  On Hold
-                </span>
+                <span style={{ background: 'var(--amber2)', color: 'var(--amber)', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, flexShrink: 0 }}>On Hold</span>
               </div>
             ))}
           </Card>
 
           {/* Panel 4 — Recent Completed */}
-          <Card>
-            <PanelHeader
-              dot="var(--green)"
-              title="Recent Completed"
-              action={{ label: 'View all →', onClick: () => router.push('/admin') }}
-            />
-            {recentCompleted.length === 0 ? (
-              <div style={{ padding: '32px 24px', textAlign: 'center', fontSize: 14, color: 'var(--mid)' }}>No completed inspections yet</div>
-            ) : recentCompleted.map(ins => (
+          <Card style={{ overflow: 'hidden' }}>
+            <PanelHeader dot="var(--green)" title="Recent Completed" action={{ label: 'View all →', onClick: () => router.push('/admin') }} />
+            {(finalisedReports ?? recentCompleted).length === 0 ? (
+              <div style={{ padding: '32px 24px', textAlign: 'center', fontSize: 14, color: 'var(--mid)' }}>No completed reports yet</div>
+            ) : (finalisedReports ?? recentCompleted).slice(0, 4).map(ins => (
               <div
                 key={ins.id}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '14px 24px', borderBottom: '1px solid var(--line)',
-                  gap: 12,
-                }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid var(--line)', gap: 12 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    background: 'var(--green2)', color: 'var(--green)',
-                    fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 500,
-                    padding: '4px 8px', borderRadius: 5, flexShrink: 0,
-                  }}>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600, background: 'var(--green2)', color: 'var(--green)', padding: '3px 8px', borderRadius: 'var(--r1)', flexShrink: 0 }}>
                     #{ins.report_no}
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {(ins.projects as any)?.name ?? '—'}
                     </div>
-                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 13, color: 'var(--mid)', marginTop: 2 }}>
-                      {ins.date}{ins.site_contact ? ` · ${ins.site_contact}` : ''}
-                    </div>
+                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--mid)', marginTop: 1 }}>{ins.date}</div>
                   </div>
                 </div>
                 <button
                   onClick={() => router.push(`/report/${ins.id}`)}
-                  style={{
-                    background: 'none', color: 'var(--accent)',
-                    border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
-                    fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
-                    transition: 'background .12s',
-                  }}
+                  style={{ background: 'none', border: '1px solid var(--line)', color: 'var(--accent)', borderRadius: 'var(--r1)', fontSize: 12, padding: '6px 12px', cursor: 'pointer', transition: 'background .12s', flexShrink: 0 }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent2)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}
                 >
