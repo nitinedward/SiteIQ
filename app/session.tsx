@@ -8,10 +8,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as SecureStore from 'expo-secure-store';
 import { Audio } from 'expo-av';
+import ReactNativeBlobUtil from 'react-native-blob-util';
 
 const SITE_CONTACT_KEY  = 'last_site_contact';
 const CONTACT_PHONE_KEY = 'last_contact_phone';
-const APP_URL           = process.env.EXPO_PUBLIC_APP_URL ?? 'https://site-iq.co.nz';
+const ANTHROPIC_KEY     = process.env.EXPO_PUBLIC_ANTHROPIC_KEY ?? '';
 const BAR_COUNT = 24;
 
 const WEATHER_OPTIONS = [
@@ -139,14 +140,36 @@ export default function SessionScreen() {
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
       const uri = recording.getURI(); setRecording(null);
       if (!uri) { setIsTranscribing(false); return; }
-      console.log('[transcribe] Session: sending audio to server');
-      const formData = new FormData();
-      formData.append('file', { uri, type: 'audio/m4a', name: 'audio.m4a' } as any);
-      const res = await fetch(`${APP_URL}/api/transcribe`, { method: 'POST', body: formData });
+      console.log('[transcribe] Session: reading audio file');
+      const base64Audio = await ReactNativeBlobUtil.fs.readFile(
+        uri.replace('file://', ''), 'base64'
+      );
+      console.log('[transcribe] Session: calling Anthropic, size:', base64Audio.length);
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'audio-20250501',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 2048,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'input_audio', input_audio: { data: base64Audio, format: 'mp4' } },
+              { type: 'text', text: 'Transcribe this audio recording exactly as spoken. Return only the transcribed text with no commentary or labels.' },
+            ],
+          }],
+        }),
+      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
-      if (data.text) setPurpose(prev => prev ? prev + ' ' + data.text : data.text);
-      console.log('[transcribe] Session: success, chars:', data.text?.length);
+      if (!res.ok) throw new Error(data.error?.message || `Transcription failed (${res.status})`);
+      const text: string = data.content?.[0]?.text ?? '';
+      if (text) setPurpose(prev => prev ? prev + ' ' + text : text);
+      console.log('[transcribe] Session: success, chars:', text.length);
     } catch (err: any) {
       console.error('[transcribe] Session error:', err);
       Alert.alert('Transcription Failed', err.message || 'Could not transcribe audio. Please try again.');
