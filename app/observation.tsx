@@ -7,7 +7,6 @@ import { useState, useRef, useEffect } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 
 const BAR_COUNT = 24;
 const SUPABASE_URL = 'https://vbaewualqaxhbmqgnhdt.supabase.co';
@@ -103,6 +102,15 @@ export default function ObservationScreen() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const isRecordingRef                       = useRef(false);
   const baseTextRef                          = useRef('');
+  const speechModuleRef                      = useRef<any>(null);
+  const subscriptionsRef                     = useRef<any[]>([]);
+
+  useEffect(() => {
+    return () => {
+      subscriptionsRef.current.forEach(s => s?.remove?.());
+      speechModuleRef.current?.stop?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isEditMode) return;
@@ -159,49 +167,64 @@ export default function ObservationScreen() {
     if (!r.canceled) for (const a of r.assets) await uploadPhoto(a.uri);
   };
 
-  useSpeechRecognitionEvent('result', (event) => {
-    if (!isRecordingRef.current) return;
-    const text = event.results[0]?.transcript ?? '';
-    if (event.isFinal) {
-      baseTextRef.current = (baseTextRef.current + ' ' + text).trim();
-      setTranscript(baseTextRef.current);
-    } else {
-      setTranscript((baseTextRef.current + ' ' + text).trim());
-    }
-  });
-
-  useSpeechRecognitionEvent('end', () => {
-    isRecordingRef.current = false;
-    setIsRecording(false);
-    setIsTranscribing(false);
-  });
-
-  useSpeechRecognitionEvent('error', (event) => {
-    if (!isRecordingRef.current) return;
-    console.error('[speech] Observation error:', event.error);
-    isRecordingRef.current = false;
-    setIsRecording(false);
-    setIsTranscribing(false);
-    if (event.error !== 'aborted') {
-      Alert.alert('Transcription Failed', 'Could not recognise speech. Please try again.');
-    }
-  });
-
   const startRecording = async () => {
     try {
-      const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!speechModuleRef.current) {
+        const mod = await import('expo-speech-recognition');
+        speechModuleRef.current = mod.ExpoSpeechRecognitionModule;
+      }
+      const ESR = speechModuleRef.current;
+
+      const { granted } = await ESR.requestPermissionsAsync();
       if (!granted) { Alert.alert('Permission Required', 'Please allow microphone and speech recognition access.'); return; }
+
+      subscriptionsRef.current.forEach(s => s?.remove?.());
+      subscriptionsRef.current = [];
+
+      const s1 = ESR.addListener('result', (event: any) => {
+        if (!isRecordingRef.current) return;
+        const text = event.results[0]?.transcript ?? '';
+        if (event.isFinal) {
+          baseTextRef.current = (baseTextRef.current + ' ' + text).trim();
+          setTranscript(baseTextRef.current);
+        } else {
+          setTranscript((baseTextRef.current + ' ' + text).trim());
+        }
+      });
+
+      const s2 = ESR.addListener('end', () => {
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        setIsTranscribing(false);
+      });
+
+      const s3 = ESR.addListener('error', (event: any) => {
+        if (!isRecordingRef.current) return;
+        console.error('[speech] Observation error:', event.error);
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        setIsTranscribing(false);
+        if (event.error !== 'aborted') {
+          Alert.alert('Transcription Failed', 'Could not recognise speech. Please try again.');
+        }
+      });
+
+      subscriptionsRef.current = [s1, s2, s3];
       baseTextRef.current = transcript.trim();
       isRecordingRef.current = true;
       setIsRecording(true);
-      ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: true });
-    } catch { Alert.alert('Error', 'Could not start speech recognition.'); }
+      ESR.start({ lang: 'en-US', interimResults: true, continuous: true });
+    } catch (err: any) {
+      console.error('[speech] startRecording error:', err);
+      setIsRecording(false);
+      Alert.alert('Error', err.message || 'Could not start speech recognition.');
+    }
   };
 
   const stopRecording = () => {
     setIsRecording(false);
     setIsTranscribing(true);
-    ExpoSpeechRecognitionModule.stop();
+    speechModuleRef.current?.stop?.();
   };
 
   const addMeasurement = () => {
