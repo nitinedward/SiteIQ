@@ -194,7 +194,10 @@ export default function ReportPage() {
         }
       }
 
-      const res = await fetch(`/api/docs/${inspectionId}?download=true`)
+      const res = await fetch(
+        `/api/docs/${inspectionId}?download=true&t=${Date.now()}`,
+        { cache: 'no-store' }
+      )
       if (!res.ok) throw new Error('Document not ready. Generate the report first.')
 
       const blob = await res.blob()

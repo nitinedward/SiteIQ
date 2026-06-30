@@ -27,17 +27,19 @@ export async function GET(
   console.log('Doc GET request:', { inspectionId, isDownload })
 
   try {
+    console.log('[download] Request for:', inspectionId, '| isDownload:', isDownload)
     const fileBuffer = await loadDoc(inspectionId)
-    console.log('File found, size:', fileBuffer.length)
+    console.log('[download] File size:', fileBuffer.length, 'bytes')
     return new NextResponse(new Uint8Array(fileBuffer), {
       headers: {
         ...CORS_HEADERS,
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'Content-Disposition': isDownload
-          ? `attachment; filename="report-${inspectionId}.docx"`
+          ? `attachment; filename="SiteReport_${inspectionId}.docx"`
           : 'inline',
         'Content-Length': fileBuffer.length.toString(),
-        'Cache-Control': 'no-store',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
       },
     })
   } catch (err) {
