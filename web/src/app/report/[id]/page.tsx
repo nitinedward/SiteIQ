@@ -49,6 +49,7 @@ export default function ReportPage() {
   const [editorError,        setEditorError]         = useState(false)
   const [inserting,          setInserting]           = useState(false)
   const [reloadingEditor,    setReloadingEditor]     = useState(false)
+  const [mobileTab,          setMobileTab]            = useState<'document' | 'attachments'>('document')
 
   // ── LOAD DATA ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -257,6 +258,7 @@ export default function ReportPage() {
 
       setReloadingEditor(true)
       setEditorKey(prev => prev + 1)
+      setMobileTab('document')
       setTimeout(() => setReloadingEditor(false), 3000)
 
     } catch (err: any) {
@@ -454,12 +456,40 @@ export default function ReportPage() {
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
         html,body{height:100%;font-family:'Outfit',sans-serif;background:#f8f7f5;-webkit-font-smoothing:antialiased;}
         @keyframes spin{to{transform:rotate(360deg)}}
+
+        /* ── Mobile tab bar (hidden on desktop) ── */
+        .mobile-tab-bar { display: none; }
+
+        @media (max-width: 768px) {
+          /* Tab bar */
+          .mobile-tab-bar { display: flex !important; }
+
+          /* Layout becomes vertical, panels toggled by JS class */
+          .report-layout { flex-direction: column !important; }
+
+          /* Document tab active */
+          .panel-show-document .report-left-panel  { display: none !important; }
+          .panel-show-document .report-editor-area { display: flex !important; width: 100% !important; }
+
+          /* Attachments tab active */
+          .panel-show-attachments .report-left-panel  { display: flex !important; width: 100% !important; height: 100% !important; border-right: none !important; border-bottom: 1px solid #e4e0d9; }
+          .panel-show-attachments .report-editor-area { display: none !important; }
+
+          /* Topbar */
+          .report-topbar          { padding: 0 12px !important; flex-wrap: wrap !important; height: auto !important; min-height: 52px !important; gap: 6px !important; }
+          .report-topbar-actions  { gap: 6px !important; }
+          .report-breadcrumb      { display: none !important; }
+          .report-btn-text        { display: none !important; }
+
+          /* Sticky footer on attachments tab */
+          .report-panel-footer { position: sticky !important; bottom: 0 !important; z-index: 10 !important; }
+        }
       `}</style>
 
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#f8f7f5', overflow: 'hidden' }}>
 
         {/* ── TOPBAR ───────────────────────────────────────────────────────── */}
-        <header style={{
+        <header className="report-topbar" style={{
           height: 56, display: 'flex', alignItems: 'center',
           padding: '0 20px', gap: 12, background: '#ffffff',
           borderBottom: '1px solid #e4e0d9', flexShrink: 0, zIndex: 20,
@@ -474,7 +504,7 @@ export default function ReportPage() {
             </span>
           </div>
 
-          <div style={{ width: 1, height: 18, background: '#e4e0d9' }} />
+          <div className="report-breadcrumb" style={{ width: 1, height: 18, background: '#e4e0d9' }} />
 
           <button
             onClick={() => router.push('/dashboard')}
@@ -483,7 +513,7 @@ export default function ReportPage() {
             ← Dashboard
           </button>
 
-          <div style={{ width: 1, height: 18, background: '#e4e0d9' }} />
+          <div className="report-breadcrumb" style={{ width: 1, height: 18, background: '#e4e0d9' }} />
 
           {/* Title */}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -503,7 +533,7 @@ export default function ReportPage() {
           </div>
 
           {/* Action buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div className="report-topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             {editorError && (
               <button
                 onClick={() => { setEditorError(false); setEditorKey(prev => prev + 1) }}
@@ -528,7 +558,9 @@ export default function ReportPage() {
                   fontFamily: "'Outfit',sans-serif", opacity: finalisingReport ? 0.6 : 1,
                 }}
               >
-                {finalisingReport ? 'Finalising…' : '✓ Finalise Report'}
+                {finalisingReport
+                  ? <>⏳<span className="report-btn-text"> Finalising…</span></>
+                  : <>✓<span className="report-btn-text"> Finalise Report</span></>}
               </button>
             ) : (
               <button
@@ -540,7 +572,7 @@ export default function ReportPage() {
                   cursor: 'pointer', fontFamily: "'Outfit',sans-serif",
                 }}
               >
-                ✏ Edit Report
+                ✏<span className="report-btn-text"> Edit Report</span>
               </button>
             )}
             <button
@@ -573,22 +605,68 @@ export default function ReportPage() {
                     animation: 'spin 0.7s linear infinite',
                     flexShrink: 0,
                   }} />
-                  Preparing...
+                  <span className="report-btn-text">Preparing...</span>
                 </>
               ) : totalAttachments > 0 ? (
-                <>⬇ Download with {totalAttachments}{totalAttachments === 1 ? ' attachment' : ' attachments'}</>
+                <>⬇<span className="report-btn-text"> Download with {totalAttachments}{totalAttachments === 1 ? ' attachment' : ' attachments'}</span></>
               ) : (
-                <>⬇ Download</>
+                <>⬇<span className="report-btn-text"> Download</span></>
               )}
             </button>
           </div>
         </header>
 
+        {/* ── MOBILE TAB BAR ───────────────────────────────────────────────── */}
+        <div className="mobile-tab-bar" style={{ borderBottom: '1px solid #e4e0d9', background: '#ffffff', flexShrink: 0 }}>
+          <button
+            onClick={() => setMobileTab('document')}
+            style={{
+              flex: 1, padding: '12px 16px', background: 'none', border: 'none',
+              borderBottom: mobileTab === 'document' ? '2px solid #2c5282' : '2px solid transparent',
+              color: mobileTab === 'document' ? '#2c5282' : '#9b968d',
+              fontSize: 14, fontWeight: mobileTab === 'document' ? 600 : 400,
+              cursor: 'pointer', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', gap: 6, fontFamily: "'Outfit',sans-serif",
+            }}
+          >
+            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14,2 14,8 20,8"/>
+            </svg>
+            Document
+          </button>
+          <button
+            onClick={() => setMobileTab('attachments')}
+            style={{
+              flex: 1, padding: '12px 16px', background: 'none', border: 'none',
+              borderBottom: mobileTab === 'attachments' ? '2px solid #2c5282' : '2px solid transparent',
+              color: mobileTab === 'attachments' ? '#2c5282' : '#9b968d',
+              fontSize: 14, fontWeight: mobileTab === 'attachments' ? 600 : 400,
+              cursor: 'pointer', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', gap: 6, fontFamily: "'Outfit',sans-serif",
+            }}
+          >
+            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+            </svg>
+            Attachments
+            {totalAttachments > 0 && (
+              <span style={{
+                background: '#2c5282', color: 'white', borderRadius: 99,
+                fontSize: 10, fontWeight: 700, padding: '1px 6px',
+                fontFamily: "'JetBrains Mono',monospace",
+              }}>
+                {totalAttachments}
+              </span>
+            )}
+          </button>
+        </div>
+
         {/* ── BODY ─────────────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#e8e4de' }}>
+        <div className={`report-layout ${mobileTab === 'document' ? 'panel-show-document' : 'panel-show-attachments'}`} style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#e8e4de' }}>
 
           {/* ── LEFT PANEL ───────────────────────────────────────────────── */}
-          <div style={{
+          <div className="report-left-panel" style={{
             width: 272,
             background: 'var(--white)',
             borderRight: '1px solid var(--line)',
@@ -1010,7 +1088,7 @@ export default function ReportPage() {
             </div>
 
             {/* ── FOOTER ──────────────────────────────────────────────── */}
-            <div style={{
+            <div className="report-panel-footer" style={{
               padding: '12px 14px',
               borderTop: '1px solid var(--line)',
               background: 'var(--stone)',
@@ -1130,7 +1208,7 @@ export default function ReportPage() {
           </div>
 
           {/* ── ONLYOFFICE EDITOR ────────────────────────────────────────── */}
-          <div style={{ flex: 1, overflow: 'hidden', position: 'relative', background: '#e8e4de' }}>
+          <div className="report-editor-area" style={{ flex: 1, overflow: 'hidden', position: 'relative', background: '#e8e4de' }}>
             {generating ? (
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
