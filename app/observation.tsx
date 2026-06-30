@@ -7,12 +7,12 @@ import { useState, useRef, useEffect } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 
 const BAR_COUNT = 24;
 const SUPABASE_URL = 'https://vbaewualqaxhbmqgnhdt.supabase.co';
 const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
-const APP_URL      = process.env.EXPO_PUBLIC_APP_URL ?? 'https://site-iq.co.nz';
+
 
 type Severity = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 type Measurement = { id: string; type: string; value: string; unit: string };
@@ -99,10 +99,10 @@ export default function ObservationScreen() {
   const [newMeasUnit, setNewMeasUnit]   = useState(MEASUREMENT_TYPES[0].unit);
   const [customLabel, setCustomLabel]   = useState('');
   const [customUnit, setCustomUnit]     = useState('mm');
-  const [isRecording, setIsRecording]   = useState(false);
+  const [isRecording, setIsRecording]       = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [recording, setRecording]       = useState<Audio.Recording | null>(null);
-  const [metering, setMetering]         = useState(-60);
+  const isRecordingRef                       = useRef(false);
+  const baseTextRef                          = useRef('');
 
   useEffect(() => {
     if (!isEditMode) return;
@@ -159,40 +159,49 @@ export default function ObservationScreen() {
     if (!r.canceled) for (const a of r.assets) await uploadPhoto(a.uri);
   };
 
+  useSpeechRecognitionEvent('result', (event) => {
+    if (!isRecordingRef.current) return;
+    const text = event.results[0]?.transcript ?? '';
+    if (event.isFinal) {
+      baseTextRef.current = (baseTextRef.current + ' ' + text).trim();
+      setTranscript(baseTextRef.current);
+    } else {
+      setTranscript((baseTextRef.current + ' ' + text).trim());
+    }
+  });
+
+  useSpeechRecognitionEvent('end', () => {
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    setIsTranscribing(false);
+  });
+
+  useSpeechRecognitionEvent('error', (event) => {
+    if (!isRecordingRef.current) return;
+    console.error('[speech] Observation error:', event.error);
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    setIsTranscribing(false);
+    if (event.error !== 'aborted') {
+      Alert.alert('Transcription Failed', 'Could not recognise speech. Please try again.');
+    }
+  });
+
   const startRecording = async () => {
     try {
-      const { granted } = await Audio.requestPermissionsAsync();
-      if (!granted) { Alert.alert('Permission Required', 'Please allow microphone access.'); return; }
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording: r } = await Audio.Recording.createAsync(
-        { android: { extension: '.m4a', outputFormat: Audio.AndroidOutputFormat.MPEG_4, audioEncoder: Audio.AndroidAudioEncoder.AAC, sampleRate: 44100, numberOfChannels: 2, bitRate: 128000 },
-          ios: { extension: '.m4a', outputFormat: Audio.IOSOutputFormat.MPEG4AAC, audioQuality: Audio.IOSAudioQuality.HIGH, sampleRate: 44100, numberOfChannels: 2, bitRate: 128000, linearPCMBitDepth: 16, linearPCMIsBigEndian: false, linearPCMIsFloat: false }, web: {} },
-        (s) => { if (s.metering !== undefined) setMetering(s.metering); }, 100
-      );
-      setRecording(r); setIsRecording(true);
-    } catch { Alert.alert('Error', 'Could not start recording.'); }
+      const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!granted) { Alert.alert('Permission Required', 'Please allow microphone and speech recognition access.'); return; }
+      baseTextRef.current = transcript.trim();
+      isRecordingRef.current = true;
+      setIsRecording(true);
+      ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: true });
+    } catch { Alert.alert('Error', 'Could not start speech recognition.'); }
   };
 
-  const stopRecording = async () => {
-    if (!recording) return;
-    setIsRecording(false); setIsTranscribing(true);
-    try {
-      await recording.stopAndUnloadAsync();
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-      const uri = recording.getURI(); setRecording(null);
-      if (!uri) { setIsTranscribing(false); return; }
-      console.log('[transcribe] Observation: sending audio to server');
-      const fd = new FormData();
-      fd.append('file', { uri, type: 'audio/m4a', name: 'audio.m4a' } as any);
-      const res = await fetch(`${APP_URL}/api/transcribe`, { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
-      if (data.text) setTranscript(prev => prev ? prev + ' ' + data.text : data.text);
-      console.log('[transcribe] Observation: success, chars:', data.text?.length);
-    } catch (err: any) {
-      console.error('[transcribe] Observation error:', err);
-      Alert.alert('Transcription Failed', err.message || 'Could not transcribe audio. Please try again.');
-    } finally { setIsTranscribing(false); }
+  const stopRecording = () => {
+    setIsRecording(false);
+    setIsTranscribing(true);
+    ExpoSpeechRecognitionModule.stop();
   };
 
   const addMeasurement = () => {
@@ -275,8 +284,8 @@ export default function ObservationScreen() {
           </View>
           {(isRecording || isTranscribing) && (
             <View style={S.waveBox}>
-              <WaveformVisualiser isRecording={isRecording} metering={metering} />
-              <Text style={S.waveHint}>{isRecording ? '🔴 Recording — tap Stop when done' : '⏳ Transcribing...'}</Text>
+              <WaveformVisualiser isRecording={isRecording} metering={isRecording ? -20 : -60} />
+              <Text style={S.waveHint}>{isRecording ? '🔴 Listening — tap Stop when done' : '⏳ Processing...'}</Text>
             </View>
           )}
           {transcript ? (

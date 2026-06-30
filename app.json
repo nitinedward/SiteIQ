@@ -15,11 +15,12 @@
     },
     "ios": {
       "bundleIdentifier": "com.nitinedward.SiteIQ",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "SiteIQ needs camera access to capture site inspection photos.",
         "NSMicrophoneUsageDescription": "SiteIQ needs microphone access to record inspection notes.",
+        "NSSpeechRecognitionUsageDescription": "SiteIQ uses speech recognition to transcribe voice notes into text.",
         "NSPhotoLibraryUsageDescription": "SiteIQ needs photo library access to save inspection photos.",
         "NSFaceIDUsageDescription": "SiteIQ uses Face ID to securely unlock the app.",
         "ITSAppUsesNonExemptEncryption": false
@@ -57,7 +58,8 @@
           "photosPermission": "Allow SiteIQ to access your photos for inspection records.",
           "cameraPermission": "Allow SiteIQ to use the camera to photograph inspection findings."
         }
-      ]
+      ],
+      "expo-speech-recognition"
     ],
     "extra": {
       "router": {},
