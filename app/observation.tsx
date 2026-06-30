@@ -12,7 +12,7 @@ import { Audio } from 'expo-av';
 const BAR_COUNT = 24;
 const SUPABASE_URL = 'https://vbaewualqaxhbmqgnhdt.supabase.co';
 const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
-const OPENAI_KEY   = process.env.EXPO_PUBLIC_OPENAI_KEY ?? '';
+const APP_URL      = process.env.EXPO_PUBLIC_APP_URL ?? 'https://site-iq.co.nz';
 
 type Severity = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 type Measurement = { id: string; type: string; value: string; unit: string };
@@ -181,13 +181,18 @@ export default function ObservationScreen() {
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
       const uri = recording.getURI(); setRecording(null);
       if (!uri) { setIsTranscribing(false); return; }
+      console.log('[transcribe] Observation: sending audio to server');
       const fd = new FormData();
       fd.append('file', { uri, type: 'audio/m4a', name: 'audio.m4a' } as any);
-      fd.append('model', 'whisper-1'); fd.append('language', 'en');
-      const res = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${OPENAI_KEY}` }, body: fd });
+      const res = await fetch(`${APP_URL}/api/transcribe`, { method: 'POST', body: fd });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
       if (data.text) setTranscript(prev => prev ? prev + ' ' + data.text : data.text);
-    } catch { } finally { setIsTranscribing(false); }
+      console.log('[transcribe] Observation: success, chars:', data.text?.length);
+    } catch (err: any) {
+      console.error('[transcribe] Observation error:', err);
+      Alert.alert('Transcription Failed', err.message || 'Could not transcribe audio. Please try again.');
+    } finally { setIsTranscribing(false); }
   };
 
   const addMeasurement = () => {
