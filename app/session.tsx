@@ -8,7 +8,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as SecureStore from 'expo-secure-store';
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
 
 const SITE_CONTACT_KEY  = 'last_site_contact';
 const CONTACT_PHONE_KEY = 'last_contact_phone';
@@ -164,7 +163,6 @@ export default function SessionScreen() {
 
   const stopRecording = async () => {
     try {
-      console.log('[dictate] Stopping recording...')
       setIsRecording(false)
       setIsTranscribing(true)
 
@@ -182,105 +180,100 @@ export default function SessionScreen() {
       const uri = recordingRef.current.getURI()
       recordingRef.current = null
 
-      console.log('[dictate] Recording saved:', uri)
-
       if (!uri) {
         setIsTranscribing(false)
-        Alert.alert('Error', 'No audio recorded.')
-        return
-      }
-
-      await transcribeAudio(uri)
-
-    } catch (err: any) {
-      console.error('[dictate] Stop error:', err)
-      setIsTranscribing(false)
-      Alert.alert(
-        'Recording Failed',
-        err.message || 'Could not stop recording.'
-      )
-    }
-  };
-
-  const transcribeAudio = async (uri: string) => {
-    try {
-      console.log('[dictate] Transcribing:', uri)
-
-      const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_KEY
-
-      if (!apiKey) {
-        setIsTranscribing(false)
         Alert.alert(
-          'Configuration Error',
-          'Transcription service not configured.'
+          'No Audio',
+          'No audio was recorded. Please try again.'
         )
         return
       }
 
-      const audioFile = new FileSystem.File(uri)
-      const base64Audio = await audioFile.base64()
+      console.log('[dictate] Audio saved:', uri)
 
-      console.log('[dictate] Sending to API...')
+      const transcript = await transcribeAudio(uri)
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-beta': 'audio-2025-01-15',
-        },
-        body: JSON.stringify({
-          model: 'claude-opus-4-5',
-          max_tokens: 1024,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'document',
-                  source: {
-                    type: 'base64',
-                    media_type: 'audio/mp4',
-                    data: base64Audio,
-                  },
-                },
-                {
-                  type: 'text',
-                  text: 'Please transcribe this audio recording accurately. Return only the transcribed text, nothing else.',
-                },
-              ],
-            },
-          ],
-        }),
-      })
+      if (transcript) {
+        setPurpose(prev =>
+          prev ? prev + ' ' + transcript : transcript
+        )
+        console.log('[dictate] Purpose updated')
+      } else {
+        Alert.alert(
+          'No Speech Detected',
+          'Could not detect speech. Please speak clearly and try again.'
+        )
+      }
 
-      console.log('[dictate] API response:', response.status)
+    } catch (err: any) {
+      console.error('[dictate] Stop error:', err)
+      Alert.alert(
+        'Transcription Failed',
+        err.message || 'Please try again.'
+      )
+    } finally {
+      setIsTranscribing(false)
+    }
+  };
+
+  const transcribeAudio = async (uri: string): Promise<string> => {
+    try {
+      console.log('[whisper] Starting:', uri)
+
+      const apiKey = process.env.EXPO_PUBLIC_OPENAI_KEY
+
+      if (!apiKey) {
+        throw new Error(
+          'OpenAI API key not configured. Please contact your administrator.'
+        )
+      }
+
+      const formData = new FormData()
+      formData.append('file', {
+        uri,
+        type: 'audio/m4a',
+        name: 'recording.m4a',
+      } as any)
+      formData.append('model', 'whisper-1')
+      formData.append('language', 'en')
+      formData.append(
+        'prompt',
+        'This is a structural engineering site inspection recording. ' +
+        'Technical terms may include: reinforcement, concrete, beam, ' +
+        'column, foundation, slab, rebar, stirrup, spacing, compliance.'
+      )
+
+      console.log('[whisper] Sending to API...')
+
+      const response = await fetch(
+        'https://api.openai.com/v1/audio/transcriptions',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: formData,
+        }
+      )
+
+      console.log('[whisper] Response:', response.status)
 
       if (!response.ok) {
-        const errData = await response.json()
-        console.error('[dictate] API error:', errData)
-        throw new Error(errData.error?.message || 'Transcription failed')
+        const errText = await response.text()
+        console.error('[whisper] Error:', errText)
+        throw new Error(`Whisper API error: ${response.status}`)
       }
 
       const data = await response.json()
-      const transcript = data.content?.[0]?.text
+      const transcript = data.text?.trim() ?? ''
 
-      console.log('[dictate] Transcript:', transcript?.substring(0, 100))
+      console.log('[whisper] Transcript:', transcript.substring(0, 100))
 
-      if (transcript) {
-        setPurpose(prev => prev ? prev + ' ' + transcript : transcript)
-      }
-
-      setIsTranscribing(false)
+      return transcript
 
     } catch (err: any) {
-      console.error('[dictate] Transcribe error:', err)
-      setIsTranscribing(false)
-      Alert.alert(
-        'Transcription Failed',
-        err.message || 'Could not transcribe audio.'
-      )
+      console.error('[whisper] Failed:', err)
+      throw err
     }
   };
 

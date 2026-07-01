@@ -6,6 +6,7 @@ import {
   ScrollView,
   Animated,
   Easing,
+  Alert,
 } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { Audio } from 'expo-av';
@@ -164,12 +165,10 @@ export default function RecorderScreen() {
     if (!recording) return;
 
     try {
-      // Stop the timer
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
 
-      // Stop the recording and get the file URI
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
 
@@ -180,8 +179,22 @@ export default function RecorderScreen() {
 
       if (uri) {
         setAudioUri(uri);
-        // Simulate transcription (fake for now)
-        await simulateTranscription();
+        setIsTranscribing(true);
+        try {
+          const result = await transcribeAudio(uri);
+          if (result) {
+            setTranscript(result);
+          } else {
+            Alert.alert(
+              'No Speech Detected',
+              'Could not detect speech. Please speak clearly and try again.'
+            );
+          }
+        } catch (err: any) {
+          Alert.alert('Transcription Failed', err.message || 'Please try again.');
+        } finally {
+          setIsTranscribing(false);
+        }
       }
 
     } catch (error) {
@@ -189,19 +202,66 @@ export default function RecorderScreen() {
     }
   };
 
-  // ── SIMULATE TRANSCRIPTION ───────────────────────────
-  // This is a fake transcription for now.
-  // Later we will send the audio to Whisper API and get real text back.
-  const simulateTranscription = async () => {
-    setIsTranscribing(true);
+  // ── WHISPER TRANSCRIPTION ────────────────────────────
+  const transcribeAudio = async (uri: string): Promise<string> => {
+    try {
+      console.log('[whisper] Starting:', uri)
 
-    // Wait 2 seconds to simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
+      const apiKey = process.env.EXPO_PUBLIC_OPENAI_KEY
 
-    setTranscript(
-      'Column C3 on Level 2 shows minor vertical surface cracking approximately 0.2mm width running for 300mm. No spalling observed. Reinforcement not exposed. Recommend monitoring at next inspection.'
-    );
-    setIsTranscribing(false);
+      if (!apiKey) {
+        throw new Error(
+          'OpenAI API key not configured. Please contact your administrator.'
+        )
+      }
+
+      const formData = new FormData()
+      formData.append('file', {
+        uri,
+        type: 'audio/m4a',
+        name: 'recording.m4a',
+      } as any)
+      formData.append('model', 'whisper-1')
+      formData.append('language', 'en')
+      formData.append(
+        'prompt',
+        'This is a structural engineering site inspection recording. ' +
+        'Technical terms may include: reinforcement, concrete, beam, ' +
+        'column, foundation, slab, rebar, stirrup, spacing, compliance.'
+      )
+
+      console.log('[whisper] Sending to API...')
+
+      const response = await fetch(
+        'https://api.openai.com/v1/audio/transcriptions',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: formData,
+        }
+      )
+
+      console.log('[whisper] Response:', response.status)
+
+      if (!response.ok) {
+        const errText = await response.text()
+        console.error('[whisper] Error:', errText)
+        throw new Error(`Whisper API error: ${response.status}`)
+      }
+
+      const data = await response.json()
+      const transcript = data.text?.trim() ?? ''
+
+      console.log('[whisper] Transcript:', transcript.substring(0, 100))
+
+      return transcript
+
+    } catch (err: any) {
+      console.error('[whisper] Failed:', err)
+      throw err
+    }
   };
 
   // ── CLEAN UP TIMER ON UNMOUNT ────────────────────────
