@@ -5,6 +5,7 @@ interface OnlyOfficeEditorProps {
   inspectionId: string
   fileName: string
   editable: boolean
+  sessionKey: number
   onReady?: () => void
   onError?: () => void
 }
@@ -13,6 +14,7 @@ export default function OnlyOfficeEditor({
   inspectionId,
   fileName,
   editable,
+  sessionKey,
   onReady,
   onError,
 }: OnlyOfficeEditorProps) {
@@ -44,7 +46,7 @@ export default function OnlyOfficeEditor({
         const config: Record<string, any> = {
           document: {
             fileType: 'docx',
-            key: `doc-${inspectionId}-${Date.now()}`,
+            key: `doc-${inspectionId}-${sessionKey}`,
             title: fileName,
             url: docUrl,
             permissions: {

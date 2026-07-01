@@ -22,6 +22,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
     }
 
+    // Only generate if no document exists yet — preserves any edits made in OnlyOffice
+    const { error: existErr } = await supabase.storage
+      .from('reports')
+      .createSignedUrl(`${inspectionId}.docx`, 10)
+    if (!existErr) {
+      console.log('[generate] Doc already exists, skipping to preserve OO edits')
+      return NextResponse.json({ success: true, inspectionId, skipped: true })
+    }
+
     const [inspRes, obsRes] = await Promise.all([
       supabase
         .from('inspections')

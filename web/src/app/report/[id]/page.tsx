@@ -275,13 +275,38 @@ export default function ReportPage() {
   const finaliseReport = async () => {
     if (!confirm('Finalise this report? It will move to Completed. You can still edit it later.')) return
     setFinalisingReport(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    await supabase
-      .from('inspections')
-      .update({ report_status: 'finalised', finalised_at: new Date().toISOString(), finalised_by: user?.id })
-      .eq('id', id)
-    setReportStatus('finalised')
-    setFinalisingReport(false)
+    try {
+      // Force-save the OO document before updating status.
+      // Without this, edits in OO memory may not yet be in Supabase.
+      const docKey = `doc-${inspectionId}-${editorKey}`
+      console.log('[finalise] Force saving OO doc, key:', docKey)
+      try {
+        await fetch('/api/docs/forcesave', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: docKey }),
+        })
+        console.log('[finalise] Force save requested, waiting for callback...')
+        await new Promise(r => setTimeout(r, 3000))
+      } catch (fsErr) {
+        console.warn('[finalise] Force save failed, continuing:', fsErr)
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+      const { error } = await supabase
+        .from('inspections')
+        .update({ report_status: 'finalised', finalised_at: new Date().toISOString(), finalised_by: user?.id })
+        .eq('id', id)
+      if (error) throw error
+
+      setReportStatus('finalised')
+      console.log('[finalise] Done')
+    } catch (err: any) {
+      console.error('[finalise] Error:', err)
+      alert('Could not finalise report: ' + err.message)
+    } finally {
+      setFinalisingReport(false)
+    }
   }
 
   const reopenReport = async () => {
@@ -1252,6 +1277,7 @@ export default function ReportPage() {
                 }}>
                   <OnlyOfficeEditor
                     key={editorKey}
+                    sessionKey={editorKey}
                     inspectionId={inspectionId}
                     fileName={`Report_${reportNo || inspectionId}.docx`}
                     editable={reportStatus !== 'finalised'}
