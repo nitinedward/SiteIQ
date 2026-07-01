@@ -183,7 +183,7 @@ export default function SettingsPage() {
       })
       if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
       const fileUrl = `${SUPABASE_URL}/storage/v1/object/public/drawings/${fileName}`
-      const { data: newDrawing } = await supabase.from('drawings').insert({ title: drawingTitle.trim(), number: drawingNumber.trim() || '—', file_url: fileUrl, project_id: selectedProject }).select().single()
+      const { data: newDrawing } = await supabase.from('drawings').insert({ title: drawingTitle.trim(), number: drawingNumber.trim() || '-', file_url: fileUrl, project_id: selectedProject }).select().single()
       if (newDrawing) setDrawings(prev => [newDrawing as Drawing, ...prev])
       setPendingDrawing(null); setDrawingTitle(''); setDrawingNumber('')
       setUploadSuccess('Drawing uploaded successfully!')
