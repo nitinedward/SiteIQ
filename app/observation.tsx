@@ -7,6 +7,8 @@ import { useState, useRef, useEffect } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 
 const BAR_COUNT = 24;
 const SUPABASE_URL = 'https://vbaewualqaxhbmqgnhdt.supabase.co';
@@ -100,15 +102,13 @@ export default function ObservationScreen() {
   const [customUnit, setCustomUnit]     = useState('mm');
   const [isRecording, setIsRecording]       = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const isRecordingRef                       = useRef(false);
-  const baseTextRef                          = useRef('');
-  const speechModuleRef                      = useRef<any>(null);
-  const subscriptionsRef                     = useRef<any[]>([]);
+  const recordingRef                         = useRef<Audio.Recording | null>(null);
 
   useEffect(() => {
     return () => {
-      subscriptionsRef.current.forEach(s => s?.remove?.());
-      speechModuleRef.current?.stop?.();
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync().catch(() => {});
+      }
     };
   }, []);
 
@@ -169,62 +169,140 @@ export default function ObservationScreen() {
 
   const startRecording = async () => {
     try {
-      if (!speechModuleRef.current) {
-        const mod = await import('expo-speech-recognition');
-        speechModuleRef.current = mod.ExpoSpeechRecognitionModule;
+      console.log('[voice] Requesting permission...')
+
+      const { granted } = await Audio.requestPermissionsAsync()
+
+      if (!granted) {
+        Alert.alert(
+          'Permission Required',
+          'Please allow microphone access in Settings to record voice notes.'
+        )
+        return
       }
-      const ESR = speechModuleRef.current;
 
-      const { granted } = await ESR.requestPermissionsAsync();
-      if (!granted) { Alert.alert('Permission Required', 'Please allow microphone and speech recognition access.'); return; }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      })
 
-      subscriptionsRef.current.forEach(s => s?.remove?.());
-      subscriptionsRef.current = [];
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      )
 
-      const s1 = ESR.addListener('result', (event: any) => {
-        if (!isRecordingRef.current) return;
-        const text = event.results[0]?.transcript ?? '';
-        if (event.isFinal) {
-          baseTextRef.current = (baseTextRef.current + ' ' + text).trim();
-          setTranscript(baseTextRef.current);
-        } else {
-          setTranscript((baseTextRef.current + ' ' + text).trim());
-        }
-      });
+      recordingRef.current = recording
+      setIsRecording(true)
 
-      const s2 = ESR.addListener('end', () => {
-        isRecordingRef.current = false;
-        setIsRecording(false);
-        setIsTranscribing(false);
-      });
+      console.log('[voice] Recording started')
 
-      const s3 = ESR.addListener('error', (event: any) => {
-        if (!isRecordingRef.current) return;
-        console.error('[speech] Observation error:', event.error);
-        isRecordingRef.current = false;
-        setIsRecording(false);
-        setIsTranscribing(false);
-        if (event.error !== 'aborted') {
-          Alert.alert('Transcription Failed', 'Could not recognise speech. Please try again.');
-        }
-      });
-
-      subscriptionsRef.current = [s1, s2, s3];
-      baseTextRef.current = transcript.trim();
-      isRecordingRef.current = true;
-      setIsRecording(true);
-      ESR.start({ lang: 'en-US', interimResults: true, continuous: true });
     } catch (err: any) {
-      console.error('[speech] startRecording error:', err);
-      setIsRecording(false);
-      Alert.alert('Error', err.message || 'Could not start speech recognition.');
+      console.error('[voice] Start error:', err)
+      setIsRecording(false)
+      Alert.alert('Recording Failed', err.message || 'Could not start recording.')
     }
   };
 
-  const stopRecording = () => {
-    setIsRecording(false);
-    setIsTranscribing(true);
-    speechModuleRef.current?.stop?.();
+  const stopRecording = async () => {
+    try {
+      console.log('[voice] Stopping recording...')
+      setIsRecording(false)
+      setIsTranscribing(true)
+
+      if (!recordingRef.current) {
+        setIsTranscribing(false)
+        return
+      }
+
+      await recordingRef.current.stopAndUnloadAsync()
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+      })
+
+      const uri = recordingRef.current.getURI()
+      recordingRef.current = null
+
+      if (!uri) {
+        setIsTranscribing(false)
+        Alert.alert('Error', 'No audio recorded.')
+        return
+      }
+
+      await transcribeAudio(uri)
+
+    } catch (err: any) {
+      console.error('[voice] Stop error:', err)
+      setIsTranscribing(false)
+      Alert.alert('Recording Failed', err.message || 'Could not stop recording.')
+    }
+  };
+
+  const transcribeAudio = async (uri: string) => {
+    try {
+      const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_KEY
+
+      if (!apiKey) {
+        setIsTranscribing(false)
+        Alert.alert('Configuration Error', 'Transcription service not configured.')
+        return
+      }
+
+      const base64Audio = await FileSystem.readAsStringAsync(uri, {
+        encoding: 'base64' as any,
+      })
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'audio-2025-01-15',
+        },
+        body: JSON.stringify({
+          model: 'claude-opus-4-5',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'document',
+                  source: {
+                    type: 'base64',
+                    media_type: 'audio/mp4',
+                    data: base64Audio,
+                  },
+                },
+                {
+                  type: 'text',
+                  text: 'Please transcribe this audio recording accurately. Return only the transcribed text, nothing else.',
+                },
+              ],
+            },
+          ],
+        }),
+      })
+
+      if (!response.ok) {
+        const errData = await response.json()
+        throw new Error(errData.error?.message || 'Transcription failed')
+      }
+
+      const data = await response.json()
+      const transcribed = data.content?.[0]?.text
+
+      if (transcribed) {
+        setTranscript(prev => prev ? prev + ' ' + transcribed : transcribed)
+      }
+
+      setIsTranscribing(false)
+
+    } catch (err: any) {
+      console.error('[voice] Transcribe error:', err)
+      setIsTranscribing(false)
+      Alert.alert('Transcription Failed', err.message || 'Could not transcribe audio.')
+    }
   };
 
   const addMeasurement = () => {
