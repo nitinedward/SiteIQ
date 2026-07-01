@@ -1,3 +1,4 @@
+import { C } from '../lib/theme'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard,
@@ -48,7 +49,7 @@ export default function SignupScreen() {
       setIsLoading(false);
       if (!result) { Alert.alert('Error', 'Account created but could not set up firm.'); return; }
       Alert.alert(
-        '✅ Firm Created!',
+        'Firm Created!',
         `Welcome to SiteIQ!\n\nYour join code is: ${result.joinCode}\n\nShare this with your engineers.`,
         [{ text: 'Continue', onPress: () => router.replace('/(tabs)/projects') }]
       );
@@ -56,7 +57,7 @@ export default function SignupScreen() {
       const result = await joinFirm(joinCode.trim(), userId, email.trim(), fullName.trim());
       setIsLoading(false);
       if (!result) { Alert.alert('Invalid Code', 'The join code is incorrect. Please check with your admin.'); return; }
-      Alert.alert('✅ Joined!', `Welcome to ${result.firmName}!`,
+      Alert.alert('Joined!', `Welcome to ${result.firmName}!`,
         [{ text: 'Continue', onPress: () => router.replace('/(tabs)/projects') }]
       );
     }
@@ -91,7 +92,7 @@ export default function SignupScreen() {
               onPress={() => setMode('create')}
             >
               <Text style={[styles.modeBtnText, mode === 'create' && styles.modeBtnTextActive]}>
-                🏢  Create Firm
+                Create Firm
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -99,7 +100,7 @@ export default function SignupScreen() {
               onPress={() => setMode('join')}
             >
               <Text style={[styles.modeBtnText, mode === 'join' && styles.modeBtnTextActive]}>
-                🔑  Join Firm
+                Join Firm
               </Text>
             </TouchableOpacity>
           </View>
@@ -107,7 +108,7 @@ export default function SignupScreen() {
           {mode === 'create' && (
             <View style={styles.adminNote}>
               <Text style={styles.adminNoteText}>
-                👑  You'll be the Admin — create projects and manage your team
+                You'll be the Admin - create projects and manage your team
               </Text>
             </View>
           )}
@@ -116,7 +117,7 @@ export default function SignupScreen() {
           <View style={styles.form}>
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>FULL NAME</Text>
-              <TextInput style={inputStyle('name')} placeholder="Sarah Chen" placeholderTextColor="#334155"
+              <TextInput style={inputStyle('name')} placeholder="Sarah Chen" placeholderTextColor={C.textMuted}
                 value={fullName} onChangeText={setFullName} autoCapitalize="words"
                 onFocus={() => setFocusedField('name')} onBlur={() => setFocusedField(null)} />
             </View>
@@ -124,7 +125,7 @@ export default function SignupScreen() {
             {mode === 'create' ? (
               <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>FIRM NAME</Text>
-                <TextInput style={inputStyle('firm')} placeholder="Chen Structural Engineers" placeholderTextColor="#334155"
+                <TextInput style={inputStyle('firm')} placeholder="Chen Structural Engineers" placeholderTextColor={C.textMuted}
                   value={firmName} onChangeText={setFirmName} autoCapitalize="words"
                   onFocus={() => setFocusedField('firm')} onBlur={() => setFocusedField(null)} />
               </View>
@@ -133,7 +134,7 @@ export default function SignupScreen() {
                 <Text style={styles.fieldLabel}>JOIN CODE</Text>
                 <Text style={styles.fieldHint}>6-digit code from your firm admin</Text>
                 <TextInput style={[inputStyle('code'), styles.joinCodeInput]}
-                  placeholder="ABC123" placeholderTextColor="#334155"
+                  placeholder="ABC123" placeholderTextColor={C.textMuted}
                   value={joinCode} onChangeText={t => setJoinCode(t.toUpperCase())}
                   autoCapitalize="characters" maxLength={6}
                   onFocus={() => setFocusedField('code')} onBlur={() => setFocusedField(null)} />
@@ -142,21 +143,21 @@ export default function SignupScreen() {
 
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>EMAIL</Text>
-              <TextInput style={inputStyle('email')} placeholder="engineer@yourfirm.com" placeholderTextColor="#334155"
+              <TextInput style={inputStyle('email')} placeholder="engineer@yourfirm.com" placeholderTextColor={C.textMuted}
                 value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none"
                 onFocus={() => setFocusedField('email')} onBlur={() => setFocusedField(null)} />
             </View>
 
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>PASSWORD</Text>
-              <TextInput style={inputStyle('pass')} placeholder="At least 6 characters" placeholderTextColor="#334155"
+              <TextInput style={inputStyle('pass')} placeholder="At least 6 characters" placeholderTextColor={C.textMuted}
                 value={password} onChangeText={setPassword} secureTextEntry
                 onFocus={() => setFocusedField('pass')} onBlur={() => setFocusedField(null)} />
             </View>
 
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>CONFIRM PASSWORD</Text>
-              <TextInput style={inputStyle('confirm')} placeholder="Re-enter password" placeholderTextColor="#334155"
+              <TextInput style={inputStyle('confirm')} placeholder="Re-enter password" placeholderTextColor={C.textMuted}
                 value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry
                 onFocus={() => setFocusedField('confirm')} onBlur={() => setFocusedField(null)} />
             </View>
@@ -188,50 +189,32 @@ export default function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#080C14' },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 28, paddingBottom: 40 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, marginBottom: 32 },
-  backBtn: { padding: 8 },
-  backArrow: { fontSize: 22, color: '#0EA5E9' },
-  logoMark: {
-    width: 40, height: 40, borderRadius: 12, backgroundColor: '#0EA5E9',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  logoMarkText: { fontSize: 20, fontWeight: '900', color: '#FFFFFF' },
-  title: { fontSize: 30, fontWeight: '800', color: '#F8FAFC', letterSpacing: -0.5, marginBottom: 8 },
-  subtitle: { fontSize: 14, color: '#475569', marginBottom: 28, lineHeight: 20 },
-  modeToggle: {
-    flexDirection: 'row', backgroundColor: '#0D1520', borderRadius: 14,
-    padding: 4, marginBottom: 16, borderWidth: 1, borderColor: '#1E293B',
-  },
-  modeBtn: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  modeBtnActive: { backgroundColor: '#0EA5E9' },
-  modeBtnText: { fontSize: 14, fontWeight: '600', color: '#475569' },
-  modeBtnTextActive: { color: '#FFFFFF' },
-  adminNote: {
-    backgroundColor: '#0F1E30', borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: '#1E3A5F', marginBottom: 20,
-  },
-  adminNoteText: { fontSize: 13, color: '#7DD3FC', lineHeight: 18 },
-  form: { gap: 18 },
-  fieldGroup: { gap: 8 },
-  fieldLabel: { fontSize: 11, color: '#475569', fontWeight: '600', letterSpacing: 1.5 },
-  fieldHint: { fontSize: 12, color: '#334155', fontStyle: 'italic' },
-  input: {
-    backgroundColor: '#0D1520', borderWidth: 1, borderColor: '#1E293B',
-    borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14,
-    fontSize: 15, color: '#F8FAFC',
-  },
-  inputFocused: { borderColor: '#0EA5E9', backgroundColor: '#0F1E30' },
-  joinCodeInput: { fontSize: 22, fontWeight: '700', letterSpacing: 10, textAlign: 'center', color: '#0EA5E9' },
-  submitBtn: {
-    backgroundColor: '#0EA5E9', borderRadius: 14, padding: 16,
-    alignItems: 'center', marginTop: 8,
-    shadowColor: '#0EA5E9', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
-  },
-  submitBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  loginRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  loginPrompt: { fontSize: 14, color: '#475569' },
-  loginLink: { fontSize: 14, color: '#0EA5E9', fontWeight: '600' },
+  container:         { flex: 1, backgroundColor: C.bgPage },
+  scrollContent:     { flexGrow: 1, paddingHorizontal: 28, paddingBottom: 40 },
+  header:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 60, marginBottom: 32 },
+  backBtn:           { padding: 8 },
+  backArrow:         { fontSize: 22, color: C.blue },
+  logoMark:          { width: 40, height: 40, borderRadius: 12, backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center' },
+  logoMarkText:      { fontSize: 20, fontWeight: '900', color: C.textInverse },
+  title:             { fontSize: 30, fontWeight: '800', color: C.textPrimary, letterSpacing: -0.5, marginBottom: 8 },
+  subtitle:          { fontSize: 14, color: C.textSecondary, marginBottom: 28, lineHeight: 20 },
+  modeToggle:        { flexDirection: 'row', backgroundColor: C.bgMuted, borderRadius: 14, padding: 4, marginBottom: 16, borderWidth: 1, borderColor: C.border },
+  modeBtn:           { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  modeBtnActive:     { backgroundColor: C.blue },
+  modeBtnText:       { fontSize: 14, fontWeight: '600', color: C.textSecondary },
+  modeBtnTextActive: { color: C.textInverse },
+  adminNote:         { backgroundColor: C.blueLight, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: C.blueMid, marginBottom: 20 },
+  adminNoteText:     { fontSize: 13, color: C.blue, lineHeight: 18 },
+  form:              { gap: 18 },
+  fieldGroup:        { gap: 8 },
+  fieldLabel:        { fontSize: 11, color: C.textSecondary, fontWeight: '600', letterSpacing: 1.5 },
+  fieldHint:         { fontSize: 12, color: C.textMuted, fontStyle: 'italic' },
+  input:             { backgroundColor: C.bgMuted, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: C.textPrimary },
+  inputFocused:      { borderColor: C.borderFocus, backgroundColor: C.bgCard },
+  joinCodeInput:     { fontSize: 22, fontWeight: '700', letterSpacing: 10, textAlign: 'center', color: C.blue },
+  submitBtn:         { backgroundColor: C.blue, borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 8, shadowColor: C.blue, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
+  submitBtnText:     { color: C.textInverse, fontSize: 16, fontWeight: '700' },
+  loginRow:          { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  loginPrompt:       { fontSize: 14, color: C.textSecondary },
+  loginLink:         { fontSize: 14, color: C.blue, fontWeight: '600' },
 });

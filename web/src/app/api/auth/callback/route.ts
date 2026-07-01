@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL
-    ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-    ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL
+      ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+      ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZiYWV3dWFscWF4aGJtcWduaGR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4NzAzNjMsImV4cCI6MjA5MzQ0NjM2M30.8s39SZtGq4r_0NXYhsAU0WdPSGqLfefm2YYK_JXjZbg'
+  )
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -96,7 +99,7 @@ export async function GET(request: NextRequest) {
 
     // Save to microsoft_tokens table
     // state = firm_id passed from settings page
-    const { error: dbError } = await supabase
+    const { error: dbError } = await getSupabase()
       .from('microsoft_tokens')
       .upsert({
         firm_id:         state,

@@ -1,3 +1,4 @@
+import { C } from '../lib/theme'
 import {
   View,
   Text,
@@ -6,7 +7,6 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  TextInput,
   Modal,
   Share,
 } from 'react-native';
@@ -14,6 +14,11 @@ import { useState, useCallback } from 'react';
 import { router, useFocusEffect } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { getUserFirm } from '../lib/firm';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+
+const SUPABASE_URL = 'https://vbaewualqaxhbmqgnhdt.supabase.co';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
 type Member = {
   id: string;
@@ -30,45 +35,54 @@ type Project = {
   project_number: string;
 };
 
+type Firm = {
+  id: string;
+  name: string;
+  join_code: string;
+  report_template_url: string | null;
+};
+
 export default function FirmSettingsScreen() {
-  const [firm, setFirm]           = useState<{ id: string; name: string; join_code: string } | null>(null);
+  const [firm, setFirm]           = useState<Firm | null>(null);
   const [members, setMembers]     = useState<Member[]>([]);
   const [projects, setProjects]   = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState('');
+  const [isUploadingTemplate, setIsUploadingTemplate] = useState(false);
 
   // Assign engineer modal
-  const [showAssign, setShowAssign]       = useState(false);
+  const [showAssign, setShowAssign]           = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projectMembers, setProjectMembers]   = useState<string[]>([]);
 
   const fetchData = async () => {
     setIsLoading(true);
-
     const { data: { user } } = await supabase.auth.getUser();
     if (user) setCurrentUserId(user.id);
 
     const { firm: userFirm } = await getUserFirm();
-    setFirm(userFirm);
-
     if (!userFirm) { setIsLoading(false); return; }
 
-    // Fetch all members of this firm
+    // Fetch full firm record including report_template_url
+    const { data: fullFirm } = await supabase
+      .from('firms')
+      .select('id, name, join_code, report_template_url')
+      .eq('id', userFirm.id)
+      .single();
+    setFirm(fullFirm as Firm);
+
     const { data: membersData } = await supabase
       .from('firm_members')
       .select('*')
       .eq('firm_id', userFirm.id)
       .order('joined_at', { ascending: true });
-
     setMembers(membersData as Member[] ?? []);
 
-    // Fetch all projects for this firm
     const { data: projectsData } = await supabase
       .from('projects')
       .select('id, name, project_number')
       .eq('firm_id', userFirm.id)
       .order('created_at', { ascending: false });
-
     setProjects(projectsData as Project[] ?? []);
     setIsLoading(false);
   };
@@ -84,200 +98,264 @@ export default function FirmSettingsScreen() {
     });
   };
 
+  // ── UPLOAD REPORT TEMPLATE ────────────────────────────
+  const handleUploadTemplate = async () => {
+    if (!firm) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const file = result.assets[0];
+      setIsUploadingTemplate(true);
+
+      // Read file as base64
+      const base64 = await FileSystem.readAsStringAsync(file.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const fileName = `template-${firm.id}.docx`;
+
+      // Upload to Supabase Storage
+      const response = await fetch(
+        `${SUPABASE_URL}/storage/v1/object/report-templates/${fileName}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'x-upsert': 'true',
+          },
+          body: Uint8Array.from(atob(base64), c => c.charCodeAt(0)),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      // Save URL to firms table
+      const templateUrl = `${SUPABASE_URL}/storage/v1/object/report-templates/${fileName}`;
+      await supabase.from('firms').update({ report_template_url: templateUrl }).eq('id', firm.id);
+      setFirm(prev => prev ? { ...prev, report_template_url: templateUrl } : prev);
+
+      Alert.alert('✅ Template Uploaded', 'Your report template has been saved. Engineers can now generate AI reports using this template.');
+    } catch (err) {
+      Alert.alert('Upload Failed', 'Could not upload template. Make sure it is a .docx file.');
+    } finally {
+      setIsUploadingTemplate(false);
+    }
+  };
+
+  // ── REMOVE TEMPLATE ────────────────────────────────────
+  const handleRemoveTemplate = () => {
+    Alert.alert('Remove Template', 'Are you sure? Engineers will not be able to generate AI reports until a new template is uploaded.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove', style: 'destructive',
+        onPress: async () => {
+          await supabase.from('firms').update({ report_template_url: null }).eq('id', firm!.id);
+          setFirm(prev => prev ? { ...prev, report_template_url: null } : prev);
+        },
+      },
+    ]);
+  };
+
   // ── REMOVE MEMBER ──────────────────────────────────────
   const handleRemoveMember = (member: Member) => {
     if (member.role === 'admin') {
       Alert.alert('Cannot Remove', 'You cannot remove the admin from the firm.');
       return;
     }
-    Alert.alert(
-      'Remove Member',
-      `Remove ${member.full_name} from your firm? They will lose access to all projects.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove', style: 'destructive',
-          onPress: async () => {
-            await supabase.from('firm_members').delete().eq('id', member.id);
-            setMembers(current => current.filter(m => m.id !== member.id));
-          },
+    Alert.alert('Remove Member', `Remove ${member.full_name} from your firm?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove', style: 'destructive',
+        onPress: async () => {
+          await supabase.from('firm_members').delete().eq('id', member.id);
+          setMembers(current => current.filter(m => m.id !== member.id));
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  // ── OPEN ASSIGN MODAL ──────────────────────────────────
+  // ── ASSIGN PROJECT ─────────────────────────────────────
   const handleAssignProject = async (project: Project) => {
     setSelectedProject(project);
-
-    // Fetch current members of this project
-    const { data } = await supabase
-      .from('project_members')
-      .select('user_id')
-      .eq('project_id', project.id);
-
+    const { data } = await supabase.from('project_members').select('user_id').eq('project_id', project.id);
     setProjectMembers(data?.map(m => m.user_id) ?? []);
     setShowAssign(true);
   };
 
-  // ── TOGGLE PROJECT MEMBER ──────────────────────────────
   const handleToggleMember = async (member: Member) => {
     if (!selectedProject) return;
     const isAssigned = projectMembers.includes(member.user_id);
-
     if (isAssigned) {
-      // Remove from project
-      await supabase
-        .from('project_members')
-        .delete()
-        .eq('project_id', selectedProject.id)
-        .eq('user_id', member.user_id);
+      await supabase.from('project_members').delete().eq('project_id', selectedProject.id).eq('user_id', member.user_id);
       setProjectMembers(current => current.filter(id => id !== member.user_id));
     } else {
-      // Add to project
-      await supabase.from('project_members').insert({
-        project_id: selectedProject.id,
-        user_id:    member.user_id,
-        added_by:   currentUserId,
-      });
+      await supabase.from('project_members').insert({ project_id: selectedProject.id, user_id: member.user_id, added_by: currentUserId });
       setProjectMembers(current => [...current, member.user_id]);
     }
   };
 
   if (isLoading) {
     return (
-      <View style={[styles.container, styles.centred]}>
+      <View style={[S.container, S.centred]}>
         <ActivityIndicator size="large" color="#2563EB" />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backArrow}>←</Text>
-          <Text style={styles.backText}>Back</Text>
+    <View style={S.container}>
+      <View style={S.header}>
+        <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
+          <Text style={S.backArrow}>←</Text>
+          <Text style={S.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Firm Settings</Text>
+        <Text style={S.headerTitle}>Firm Settings</Text>
         <View style={{ width: 60 }} />
       </View>
 
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView style={S.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* Firm info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Firm</Text>
-          <View style={styles.firmCard}>
-            <Text style={styles.firmName}>{firm?.name}</Text>
-            <Text style={styles.firmLabel}>Join Code</Text>
-            <Text style={styles.joinCode}>{firm?.join_code}</Text>
-            <TouchableOpacity style={styles.shareButton} onPress={handleShareCode}>
-              <Text style={styles.shareButtonText}>Share Join Code</Text>
+        {/* Firm Info */}
+        <View style={S.section}>
+          <Text style={S.sectionTitle}>Your Firm</Text>
+          <View style={S.card}>
+            <Text style={S.firmName}>{firm?.name}</Text>
+            <Text style={S.label}>Join Code</Text>
+            <Text style={S.joinCode}>{firm?.join_code}</Text>
+            <TouchableOpacity style={S.shareBtn} onPress={handleShareCode}>
+              <Text style={S.shareBtnText}>Share Join Code</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Members */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Engineers ({members.length})</Text>
-          {members.map(member => (
-            <View key={member.id} style={styles.memberRow}>
-              <View style={styles.memberAvatar}>
-                <Text style={styles.memberAvatarText}>
-                  {member.full_name ? member.full_name[0].toUpperCase() : '?'}
-                </Text>
+        {/* Report Template */}
+        <View style={S.section}>
+          <Text style={S.sectionTitle}>Report Template</Text>
+          <Text style={S.sectionDesc}>
+            Upload your firm's Word document template (.docx). Use these placeholders where AI content should appear:{'\n\n'}
+            {'{{project_name}}  {{date}}  {{report_no}}\n{{engineer_name}}  {{site_contact}}\n{{weather}}  {{purpose}}\n{{executive_summary}}\n{{findings}}\n{{recommendations}}'}
+          </Text>
+
+          {firm?.report_template_url ? (
+            <View style={S.templateCard}>
+              <View style={S.templateIconRow}>
+                <Text style={S.templateIcon}>📄</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={S.templateName}>Report Template</Text>
+                  <Text style={S.templateSub}>✅ Template uploaded — AI reports enabled</Text>
+                </View>
               </View>
-              <View style={styles.memberInfo}>
-                <View style={styles.memberNameRow}>
-                  <Text style={styles.memberName}>{member.full_name}</Text>
+              <View style={S.templateBtns}>
+                <TouchableOpacity style={S.replaceBtn} onPress={handleUploadTemplate} disabled={isUploadingTemplate}>
+                  {isUploadingTemplate
+                    ? <ActivityIndicator size="small" color="#2563EB" />
+                    : <Text style={S.replaceBtnText}>Replace</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity style={S.removeBtn} onPress={handleRemoveTemplate}>
+                  <Text style={S.removeBtnText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity style={S.uploadTemplateBtn} onPress={handleUploadTemplate} disabled={isUploadingTemplate} activeOpacity={0.8}>
+              {isUploadingTemplate ? (
+                <ActivityIndicator size="small" color="#2563EB" />
+              ) : (
+                <>
+                  <Text style={S.uploadTemplateIcon}>⬆</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={S.uploadTemplateTitle}>Upload Word Template</Text>
+                    <Text style={S.uploadTemplateSub}>Upload a .docx file with placeholders</Text>
+                  </View>
+                  <Text style={S.uploadTemplateArrow}>›</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Members */}
+        <View style={S.section}>
+          <Text style={S.sectionTitle}>Engineers ({members.length})</Text>
+          {members.map(member => (
+            <View key={member.id} style={S.memberRow}>
+              <View style={S.avatar}>
+                <Text style={S.avatarText}>{member.full_name?.[0]?.toUpperCase() ?? '?'}</Text>
+              </View>
+              <View style={S.memberInfo}>
+                <View style={S.memberNameRow}>
+                  <Text style={S.memberName}>{member.full_name}</Text>
                   {member.role === 'admin' && (
-                    <View style={styles.adminBadge}>
-                      <Text style={styles.adminBadgeText}>Admin</Text>
+                    <View style={S.adminBadge}>
+                      <Text style={S.adminBadgeText}>Admin</Text>
                     </View>
                   )}
                 </View>
-                <Text style={styles.memberEmail}>{member.email}</Text>
+                <Text style={S.memberEmail}>{member.email}</Text>
               </View>
-              {member.role !== 'admin' && member.user_id !== currentUserId && (
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() => handleRemoveMember(member)}
-                >
-                  <Text style={styles.removeButtonText}>Remove</Text>
+              {member.user_id !== currentUserId && member.role !== 'admin' && (
+                <TouchableOpacity style={S.removeBtn} onPress={() => handleRemoveMember(member)}>
+                  <Text style={S.removeBtnText}>Remove</Text>
                 </TouchableOpacity>
               )}
             </View>
           ))}
         </View>
 
-        {/* Project access */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Project Access</Text>
-          <Text style={styles.hint}>
-            Tap a project to assign or remove engineers
-          </Text>
+        {/* Projects */}
+        <View style={S.section}>
+          <Text style={S.sectionTitle}>Projects ({projects.length})</Text>
           {projects.map(project => (
-            <TouchableOpacity
-              key={project.id}
-              style={styles.projectRow}
-              onPress={() => handleAssignProject(project)}
-            >
-              <View style={styles.projectInfo}>
-                <Text style={styles.projectName}>{project.name}</Text>
-                <Text style={styles.projectNumber}>{project.project_number}</Text>
+            <TouchableOpacity key={project.id} style={S.projectRow} onPress={() => handleAssignProject(project)}>
+              <View style={{ flex: 1 }}>
+                <Text style={S.projectName}>{project.name}</Text>
+                <Text style={S.projectNumber}>#{project.project_number}</Text>
               </View>
-              <Text style={styles.manageText}>Manage →</Text>
+              <Text style={S.projectArrow}>Assign Engineers ›</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 50 }} />
       </ScrollView>
 
-      {/* Assign engineers modal */}
-      <Modal
-        visible={showAssign}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowAssign(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={() => setShowAssign(false)}
-          />
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{selectedProject?.name}</Text>
-            <Text style={styles.modalSub}>
-              Toggle engineers to grant or remove access to this project
-            </Text>
-            {members.map(member => {
-              const assigned = projectMembers.includes(member.user_id);
-              return (
-                <TouchableOpacity
-                  key={member.id}
-                  style={[styles.assignRow, assigned && styles.assignRowActive]}
-                  onPress={() => handleToggleMember(member)}
-                >
-                  <View style={styles.memberAvatar}>
-                    <Text style={styles.memberAvatarText}>
-                      {member.full_name ? member.full_name[0].toUpperCase() : '?'}
-                    </Text>
-                  </View>
-                  <View style={styles.memberInfo}>
-                    <Text style={styles.memberName}>{member.full_name}</Text>
-                    <Text style={styles.memberEmail}>{member.email}</Text>
-                  </View>
-                  <View style={[styles.checkbox, assigned && styles.checkboxActive]}>
-                    {assigned && <Text style={styles.checkmark}>✓</Text>}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-            <TouchableOpacity style={styles.doneButton} onPress={() => setShowAssign(false)}>
-              <Text style={styles.doneButtonText}>Done</Text>
+      {/* Assign modal */}
+      <Modal visible={showAssign} transparent animationType="slide">
+        <View style={S.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowAssign(false)} />
+          <View style={S.modalCard}>
+            <Text style={S.modalTitle}>Assign to {selectedProject?.name}</Text>
+            <Text style={S.modalSub}>Tap to toggle access</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {members.map(member => {
+                const assigned = projectMembers.includes(member.user_id);
+                return (
+                  <TouchableOpacity key={member.id} style={S.assignRow} onPress={() => handleToggleMember(member)}>
+                    <View style={[S.assignCheck, assigned && S.assignCheckOn]}>
+                      {assigned && <Text style={S.assignCheckText}>✓</Text>}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={S.memberName}>{member.full_name}</Text>
+                      <Text style={S.memberEmail}>{member.email}</Text>
+                    </View>
+                    {member.role === 'admin' && (
+                      <View style={S.adminBadge}>
+                        <Text style={S.adminBadgeText}>Admin</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={S.doneBtn} onPress={() => setShowAssign(false)}>
+              <Text style={S.doneBtnText}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -286,90 +364,60 @@ export default function FirmSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A1628' },
-  centred: { alignItems: 'center', justifyContent: 'center' },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
-    borderBottomWidth: 1, borderBottomColor: '#1C2E44',
-  },
-  backButton: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 60 },
-  backArrow: { fontSize: 20, color: '#2563EB' },
-  backText: { fontSize: 16, color: '#2563EB' },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: '#FFFFFF' },
-  scroll: { flex: 1 },
-  section: { padding: 20, paddingBottom: 8 },
-  sectionTitle: {
-    fontSize: 13, fontWeight: '600', color: '#8899AA',
-    textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12,
-  },
-  hint: { fontSize: 12, color: '#4A5568', marginBottom: 10, fontStyle: 'italic' },
-  firmCard: {
-    backgroundColor: '#112240', borderRadius: 14, padding: 20,
-    borderWidth: 1, borderColor: '#1C2E44', alignItems: 'center', gap: 8,
-  },
-  firmName: { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
-  firmLabel: { fontSize: 11, color: '#4A5568', textTransform: 'uppercase', letterSpacing: 1 },
-  joinCode: {
-    fontSize: 32, fontWeight: '700', color: '#2563EB',
-    letterSpacing: 8, backgroundColor: '#0A1628',
-    paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10,
-  },
-  shareButton: {
-    backgroundColor: '#2563EB', borderRadius: 8,
-    paddingHorizontal: 20, paddingVertical: 10, marginTop: 4,
-  },
-  shareButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  memberRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#112240',
-    borderRadius: 10, padding: 12, marginBottom: 8,
-    borderWidth: 1, borderColor: '#1C2E44', gap: 12,
-  },
-  memberAvatar: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: '#2563EB', alignItems: 'center', justifyContent: 'center',
-  },
-  memberAvatarText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
-  memberInfo: { flex: 1 },
-  memberNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
-  memberName: { fontSize: 14, fontWeight: '500', color: '#FFFFFF' },
-  adminBadge: { backgroundColor: '#1E3A5F', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  adminBadgeText: { fontSize: 10, color: '#60A5FA', fontWeight: '600' },
-  memberEmail: { fontSize: 12, color: '#4A5568' },
-  removeButton: { backgroundColor: '#3B1A1A', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  removeButtonText: { fontSize: 12, color: '#F87171', fontWeight: '500' },
-  projectRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#112240',
-    borderRadius: 10, padding: 14, marginBottom: 8,
-    borderWidth: 1, borderColor: '#1C2E44',
-  },
-  projectInfo: { flex: 1 },
-  projectName: { fontSize: 14, fontWeight: '500', color: '#FFFFFF', marginBottom: 2 },
-  projectNumber: { fontSize: 12, color: '#4A5568' },
-  manageText: { fontSize: 13, color: '#2563EB', fontWeight: '500' },
-  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
-  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)' },
-  modalCard: {
-    backgroundColor: '#112240', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 24, gap: 10,
-  },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#FFFFFF' },
-  modalSub: { fontSize: 13, color: '#8899AA', marginBottom: 4 },
-  assignRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#0A1628',
-    borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#1C2E44', gap: 12,
-  },
-  assignRowActive: { borderColor: '#2563EB', backgroundColor: '#1E3A5F' },
-  checkbox: {
-    width: 24, height: 24, borderRadius: 6, borderWidth: 2,
-    borderColor: '#2A3F55', alignItems: 'center', justifyContent: 'center',
-  },
-  checkboxActive: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
-  checkmark: { fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
-  doneButton: {
-    backgroundColor: '#2563EB', borderRadius: 10, padding: 14,
-    alignItems: 'center', marginTop: 8,
-  },
-  doneButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+const S = StyleSheet.create({
+  container:           { flex: 1, backgroundColor: C.bgPage },
+  centred:             { alignItems: 'center', justifyContent: 'center' },
+  header:              { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.bgCard },
+  backBtn:             { flexDirection: 'row', alignItems: 'center', gap: 4, width: 60 },
+  backArrow:           { fontSize: 20, color: C.blue },
+  backText:            { fontSize: 14, color: C.blue },
+  headerTitle:         { fontSize: 17, fontWeight: '700', color: C.textPrimary },
+  scroll:              { flex: 1 },
+  section:             { padding: 20, paddingBottom: 8 },
+  sectionTitle:        { fontSize: 13, fontWeight: '700', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+  sectionDesc:         { fontSize: 12, color: C.textSecondary, lineHeight: 20, marginBottom: 14, backgroundColor: C.bgMuted, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: C.border, fontFamily: 'monospace' },
+  card:                { backgroundColor: C.bgCard, borderRadius: 14, padding: 18, borderWidth: 1, borderColor: C.border, gap: 8 },
+  firmName:            { fontSize: 20, fontWeight: '700', color: C.textPrimary },
+  label:               { fontSize: 12, color: C.textSecondary, marginTop: 4 },
+  joinCode:            { fontSize: 28, fontWeight: '800', color: C.blue, letterSpacing: 4 },
+  shareBtn:            { backgroundColor: C.blueLight, borderRadius: 10, padding: 12, alignItems: 'center', marginTop: 4, borderWidth: 1, borderColor: C.blue },
+  shareBtnText:        { color: C.blue, fontSize: 14, fontWeight: '600' },
+  templateCard:        { backgroundColor: C.successBg, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.success, gap: 12 },
+  templateIconRow:     { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  templateIcon:        { fontSize: 32 },
+  templateName:        { fontSize: 15, fontWeight: '700', color: C.textPrimary },
+  templateSub:         { fontSize: 12, color: C.success, marginTop: 2 },
+  templateBtns:        { flexDirection: 'row', gap: 10 },
+  replaceBtn:          { flex: 1, backgroundColor: C.blueLight, borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: C.blue },
+  replaceBtnText:      { color: C.blue, fontSize: 13, fontWeight: '600' },
+  uploadTemplateBtn:   { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgCard, borderRadius: 14, padding: 18, borderWidth: 1.5, borderColor: C.blue, borderStyle: 'dashed', gap: 14 },
+  uploadTemplateIcon:  { fontSize: 24, color: C.blue },
+  uploadTemplateTitle: { fontSize: 15, fontWeight: '700', color: C.textPrimary },
+  uploadTemplateSub:   { fontSize: 12, color: C.textSecondary, marginTop: 2 },
+  uploadTemplateArrow: { fontSize: 22, color: C.blue },
+  memberRow:           { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgCard, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border, gap: 12 },
+  avatar:              { width: 40, height: 40, borderRadius: 20, backgroundColor: C.blueLight, alignItems: 'center', justifyContent: 'center' },
+  avatarText:          { fontSize: 16, fontWeight: '700', color: C.blue },
+  memberInfo:          { flex: 1 },
+  memberNameRow:       { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  memberName:          { fontSize: 15, fontWeight: '600', color: C.textPrimary },
+  memberEmail:         { fontSize: 12, color: C.textSecondary, marginTop: 2 },
+  adminBadge:          { backgroundColor: C.blueLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1, borderColor: C.blue },
+  adminBadgeText:      { fontSize: 10, color: C.blue, fontWeight: '700' },
+  removeBtn:           { backgroundColor: C.dangerBg, borderRadius: 8, padding: 8 },
+  removeBtnText:       { color: C.danger, fontSize: 12, fontWeight: '600' },
+  projectRow:          { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgCard, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border },
+  projectName:         { fontSize: 14, fontWeight: '600', color: C.textPrimary },
+  projectNumber:       { fontSize: 12, color: C.textSecondary, marginTop: 2 },
+  projectArrow:        { fontSize: 12, color: C.blue, fontWeight: '500' },
+  modalOverlay:        { flex: 1, justifyContent: 'flex-end' },
+  modalCard:           { backgroundColor: C.bgCard, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, borderTopWidth: 1, borderColor: C.border, gap: 12 },
+  modalTitle:          { fontSize: 18, fontWeight: '700', color: C.textPrimary },
+  modalSub:            { fontSize: 13, color: C.textSecondary },
+  assignRow:           { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border, gap: 12 },
+  assignCheck:         { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  assignCheckOn:       { backgroundColor: C.blue, borderColor: C.blue },
+  assignCheckText:     { color: C.textInverse, fontSize: 14, fontWeight: '700' },
+  doneBtn:             { backgroundColor: C.blue, borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 8 },
+  doneBtnText:         { color: C.textInverse, fontSize: 15, fontWeight: '700' },
 });

@@ -4,9 +4,9 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { C, FONT, RADIUS } from '../lib/theme';
 
 // Mock drawings per project
 // Later: GET /api/projects/:id/drawings
@@ -123,140 +123,28 @@ export default function DrawingsPickerScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0A1628',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1C2E44',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    width: 60,
-  },
-  backArrow: {
-    fontSize: 20,
-    color: '#2563EB',
-  },
-  backText: {
-    fontSize: 16,
-    color: '#2563EB',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  scroll: {
-    flex: 1,
-  },
-  projectBanner: {
-    backgroundColor: '#112240',
-    margin: 20,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-    borderLeftWidth: 4,
-    borderLeftColor: '#2563EB',
-  },
-  projectBannerName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  projectBannerSub: {
-    fontSize: 13,
-    color: '#8899AA',
-  },
-  section: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8899AA',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 12,
-  },
-  drawingCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#112240',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-    gap: 12,
-  },
-  drawingIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#1C2E44',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  drawingIcon: {
-    fontSize: 22,
-  },
-  drawingInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  drawingTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  drawingMeta: {
-    fontSize: 12,
-    color: '#8899AA',
-  },
-  drawingZones: {
-    fontSize: 11,
-    color: '#2563EB',
-    marginTop: 2,
-  },
-  drawingArrow: {
-    fontSize: 20,
-    color: '#4A5568',
-  },
-  emptyCard: {
-    backgroundColor: '#112240',
-    borderRadius: 12,
-    padding: 32,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-    borderStyle: 'dashed',
-    gap: 8,
-  },
-  emptyIcon: {
-    fontSize: 40,
-  },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  emptySub: {
-    fontSize: 13,
-    color: '#4A5568',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
+  container:         { flex: 1, backgroundColor: C.bgPage },
+  header:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.bgCard },
+  backButton:        { flexDirection: 'row', alignItems: 'center', gap: 6, width: 60 },
+  backArrow:         { fontSize: 20, color: C.blue },
+  backText:          { fontSize: 16, color: C.blue },
+  headerTitle:       { fontSize: 18, fontWeight: '600', color: C.textPrimary },
+  scroll:            { flex: 1 },
+  projectBanner:     { backgroundColor: C.blueLight, margin: 20, borderRadius: RADIUS.md, padding: 16, borderWidth: 1, borderColor: C.blueMid, borderLeftWidth: 4, borderLeftColor: C.blue },
+  projectBannerName: { fontSize: FONT.md, fontWeight: '700', color: C.textPrimary, marginBottom: 4 },
+  projectBannerSub:  { fontSize: FONT.sm, color: C.textSecondary },
+  section:           { paddingHorizontal: 20, paddingBottom: 16 },
+  sectionTitle:      { fontSize: FONT.xs, fontWeight: '600', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
+  drawingCard:       { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgCard, borderRadius: RADIUS.md, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: C.border, gap: 12 },
+  drawingIconBox:    { width: 44, height: 44, borderRadius: RADIUS.sm, backgroundColor: C.blueLight, alignItems: 'center', justifyContent: 'center' },
+  drawingIcon:       { fontSize: 22 },
+  drawingInfo:       { flex: 1, gap: 2 },
+  drawingTitle:      { fontSize: FONT.sm, fontWeight: '600', color: C.textPrimary },
+  drawingMeta:       { fontSize: FONT.xs, color: C.textSecondary },
+  drawingZones:      { fontSize: FONT.xs, color: C.blue, marginTop: 2 },
+  drawingArrow:      { fontSize: 20, color: C.textMuted },
+  emptyCard:         { backgroundColor: C.bgCard, borderRadius: RADIUS.md, padding: 32, alignItems: 'center', borderWidth: 1, borderColor: C.border, borderStyle: 'dashed', gap: 8 },
+  emptyIcon:         { fontSize: 40 },
+  emptyTitle:        { fontSize: FONT.md, fontWeight: '600', color: C.textPrimary },
+  emptySub:          { fontSize: FONT.sm, color: C.textSecondary, textAlign: 'center', lineHeight: 18 },
 });

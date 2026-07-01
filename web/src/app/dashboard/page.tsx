@@ -217,7 +217,7 @@ export default function DashboardPage() {
                 display: 'flex', alignItems: 'center', gap: 8,
               }}
             >
-              ＋ New Project
+              + New Project
             </button>
           )}
         </div>
@@ -308,7 +308,7 @@ export default function DashboardPage() {
 
           {/* Panel 1 — Active Projects */}
           <Card style={{ overflow: 'hidden' }}>
-            <PanelHeader dot="var(--green)" title="Active Projects" action={{ label: 'View all →', onClick: () => router.push('/admin') }} />
+            <PanelHeader dot="var(--green)" title="Active Projects" action={{ label: 'View all >', onClick: () => router.push('/admin') }} />
             {activeProjects.length === 0 ? (
               <div style={{ padding: '32px 24px', textAlign: 'center', fontSize: 14, color: 'var(--mid)' }}>No active projects</div>
             ) : activeProjects.slice(0, 5).map(p => {
@@ -338,10 +338,10 @@ export default function DashboardPage() {
           <Card style={{ overflow: 'hidden', borderTop: '3px solid var(--orange)' }}>
             <PanelHeader dot="var(--orange)" title="Pending Reports" count={pendingReports.length} />
             <div style={{ background: 'var(--orange2)', padding: '10px 24px', fontSize: 12, color: 'var(--orange)', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid rgba(192,86,33,0.15)' }}>
-              ⚡ Completed on mobile — ready for AI report generation
+              Completed on mobile - ready for AI report generation
             </div>
             {pendingReports.length === 0 ? (
-              <div style={{ padding: '32px 24px', textAlign: 'center', fontSize: 14, color: 'var(--mid)' }}>No pending reports — all caught up ✓</div>
+              <div style={{ padding: '32px 24px', textAlign: 'center', fontSize: 14, color: 'var(--mid)' }}>No pending reports - all caught up</div>
             ) : pendingReports.slice(0, 5).map(ins => (
               <div
                 key={ins.id}
@@ -370,7 +370,7 @@ export default function DashboardPage() {
                     disabled={deletingId === ins.id}
                     style={{ background: 'var(--red2)', color: 'var(--red)', border: '1px solid rgba(192,57,43,0.15)', borderRadius: 'var(--r1)', fontSize: 12, padding: '6px 9px', cursor: deletingId === ins.id ? 'not-allowed' : 'pointer', opacity: deletingId === ins.id ? 0.6 : 1 }}
                   >
-                    ✕
+                    x
                   </button>
                 </div>
               </div>
@@ -402,7 +402,7 @@ export default function DashboardPage() {
 
           {/* Panel 4 — Recent Completed */}
           <Card style={{ overflow: 'hidden' }}>
-            <PanelHeader dot="var(--green)" title="Recent Completed" action={{ label: 'View all →', onClick: () => router.push('/admin') }} />
+            <PanelHeader dot="var(--green)" title="Recent Completed" action={{ label: 'View all >', onClick: () => router.push('/admin') }} />
             {(finalisedReports ?? recentCompleted).length === 0 ? (
               <div style={{ padding: '32px 24px', textAlign: 'center', fontSize: 14, color: 'var(--mid)' }}>No completed reports yet</div>
             ) : (finalisedReports ?? recentCompleted).slice(0, 4).map(ins => (

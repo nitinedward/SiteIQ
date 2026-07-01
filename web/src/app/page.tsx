@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
@@ -11,6 +11,36 @@ export default function LoginPage() {
   const [error, setError]             = useState('')
   const [focusEmail, setFocusEmail]   = useState(false)
   const [focusPass, setFocusPass]     = useState(false)
+
+  // DIAGNOSTIC — Step 5: intercept all fetch calls and log any non-ISO-8859-1 header values
+  useEffect(() => {
+    const orig = window.fetch.bind(window)
+    window.fetch = function (url: RequestInfo | URL, opts?: RequestInit) {
+      try {
+        const hdrs = opts?.headers
+        if (hdrs) {
+          const entries =
+            hdrs instanceof Headers
+              ? Array.from((hdrs as Headers).entries())
+              : Object.entries(hdrs as Record<string, string>)
+          for (const [k, v] of entries) {
+            let bad = ''
+            for (let i = 0; i < v.length; i++) {
+              if (v.charCodeAt(i) > 255) {
+                bad += ` [${k}: char@${i}="${v[i]}" U+${v.charCodeAt(i).toString(16).toUpperCase()}]`
+              }
+            }
+            if (bad) console.error('[FETCH-DEBUG] BAD HEADER in', String(url), bad)
+          }
+          console.log('[FETCH-DEBUG]', String(url), JSON.stringify(Object.fromEntries(entries)))
+        }
+      } catch (ex) {
+        console.error('[FETCH-DEBUG] inspect error', ex)
+      }
+      return orig(url, opts)
+    }
+    return () => { window.fetch = orig }
+  }, [])
 
   // ── auth logic unchanged ──────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {

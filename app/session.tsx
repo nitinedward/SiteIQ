@@ -14,12 +14,12 @@ const CONTACT_PHONE_KEY = 'last_contact_phone';
 const BAR_COUNT = 24;
 
 const WEATHER_OPTIONS = [
-  { label: 'Fine', icon: '☀️' },
-  { label: 'Partly Cloudy', icon: '⛅' },
-  { label: 'Overcast', icon: '☁️' },
-  { label: 'Raining', icon: '🌧️' },
-  { label: 'Windy', icon: '💨' },
-  { label: 'Cold', icon: '🥶' },
+  { label: 'Fine', icon: 'Fine' },
+  { label: 'Partly Cloudy', icon: 'Partly Cloudy' },
+  { label: 'Overcast', icon: 'Overcast' },
+  { label: 'Raining', icon: 'Raining' },
+  { label: 'Windy', icon: 'Windy' },
+  { label: 'Cold', icon: 'Cold' },
 ];
 
 type Step = 'details' | 'capture';
@@ -209,7 +209,7 @@ export default function SessionScreen() {
       { text: 'Keep Capturing', style: 'cancel' },
       { text: 'Complete', onPress: async () => {
         if (inspectionId) await supabase.from('inspections').update({ status: 'COMPLETED' }).eq('id', inspectionId);
-        Alert.alert('✅ Session Complete', 'Your inspection has been saved.', [{ text: 'OK', onPress: () => router.replace('/(tabs)/projects') }]);
+        Alert.alert('Session Complete', 'Your inspection has been saved.', [{ text: 'OK', onPress: () => router.replace('/(tabs)/projects') }]);
       }},
     ]);
   };
@@ -281,13 +281,13 @@ export default function SessionScreen() {
             <View style={S.sectionRow}>
               <Text style={S.sectionTitle}>Purpose of Inspection</Text>
               <TouchableOpacity style={[S.recordBtn, isRecording && S.recordBtnActive, isTranscribing && S.recordBtnTranscribing]} onPress={toggleRecording} disabled={isTranscribing}>
-                {isTranscribing ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={S.recordBtnText}>{isRecording ? '⏹ Stop' : '🎙 Dictate'}</Text>}
+                {isTranscribing ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={S.recordBtnText}>{isRecording ? 'Stop' : 'Dictate'}</Text>}
               </TouchableOpacity>
             </View>
             {(isRecording || isTranscribing) && (
               <View style={S.waveBox}>
                 <WaveformVisualiser isRecording={isRecording} metering={isRecording ? -20 : -60} />
-                <Text style={S.recordHint}>{isRecording ? '🔴 Listening — tap Stop when finished' : '⏳ Processing...'}</Text>
+                <Text style={S.recordHint}>{isRecording ? 'Listening...' : 'Processing...'}</Text>
               </View>
             )}
             <TextInput style={S.textArea} placeholder="Describe the purpose of this inspection..." placeholderTextColor="#94A3B8" value={purpose} onChangeText={setPurpose} multiline numberOfLines={4} textAlignVertical="top" />
@@ -296,7 +296,7 @@ export default function SessionScreen() {
           {/* Start */}
           <View style={S.section}>
             <TouchableOpacity style={[S.startBtn, isSaving && { opacity: 0.6 }]} onPress={startCapturing} disabled={isSaving} activeOpacity={0.85}>
-              {isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={S.startBtnText}>Start Capturing Observations →</Text>}
+              {isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={S.startBtnText}>{'Start Capturing Observations >'}</Text>}
             </TouchableOpacity>
             <Text style={S.startHint}>Site contact details saved automatically for next time</Text>
           </View>
@@ -357,7 +357,6 @@ export default function SessionScreen() {
         <View style={S.section}>
           <Text style={S.sectionTitle}>General Observations</Text>
           <TouchableOpacity style={S.addCard} onPress={() => router.push({ pathname: '/observation', params: { inspection_id: inspectionId, project_id: String(project_id), zone_id: 'general', zone_label: 'General Site Observation' } })} activeOpacity={0.7}>
-            <Text style={S.addCardIcon}>📋</Text>
             <View style={{ flex: 1 }}>
               <Text style={S.addCardTitle}>General Observation</Text>
               <Text style={S.addCardSub}>Site-wide notes not tied to a specific drawing</Text>

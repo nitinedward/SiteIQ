@@ -10,6 +10,7 @@ import {
 import { useState, useEffect, useRef } from 'react';
 import { Audio } from 'expo-av';
 import { router } from 'expo-router';
+import { C, FONT, RADIUS } from '../lib/theme';
 
 export default function RecorderScreen() {
   // Permission to use microphone
@@ -217,7 +218,6 @@ export default function RecorderScreen() {
   if (permission === false) {
     return (
       <View style={styles.permissionContainer}>
-        <Text style={styles.permissionIcon}>🎤</Text>
         <Text style={styles.permissionTitle}>Microphone Access Required</Text>
         <Text style={styles.permissionText}>
           SiteIQ needs microphone access to record inspection notes.
@@ -256,9 +256,7 @@ export default function RecorderScreen() {
       >
 
         {/* Microphone icon */}
-        <View style={styles.micContainer}>
-          <Text style={styles.micIcon}>🎤</Text>
-        </View>
+        <View style={styles.micContainer} />
 
         {/* Waveform */}
         <View style={styles.waveform}>
@@ -287,7 +285,7 @@ export default function RecorderScreen() {
         {/* Status text */}
         <Text style={styles.statusText}>
           {isRecording
-            ? 'Recording — speak clearly...'
+            ? 'Recording - speak clearly...'
             : audioUri
             ? 'Recording complete'
             : 'Tap to start recording'}
@@ -303,9 +301,6 @@ export default function RecorderScreen() {
             onPress={isRecording ? stopRecording : startRecording}
             activeOpacity={0.8}
           >
-            <Text style={styles.recordButtonIcon}>
-              {isRecording ? '⏹' : '⏺'}
-            </Text>
             <Text style={styles.recordButtonText}>
               {isRecording ? 'Stop' : 'Record'}
             </Text>
@@ -349,197 +344,36 @@ export default function RecorderScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0A1628',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1C2E44',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    width: 60,
-  },
-  backArrow: {
-    fontSize: 20,
-    color: '#2563EB',
-  },
-  backText: {
-    fontSize: 16,
-    color: '#2563EB',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    alignItems: 'center',
-    paddingTop: 40,
-    paddingHorizontal: 24,
-  },
-  micContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#112240',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 32,
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-  },
-  micIcon: {
-    fontSize: 36,
-  },
-  waveform: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 50,
-    marginBottom: 20,
-  },
-  waveBar: {
-    width: 6,
-    borderRadius: 3,
-  },
-  timer: {
-    fontSize: 48,
-    fontWeight: '200',
-    color: '#FFFFFF',
-    fontVariant: ['tabular-nums'],
-    marginBottom: 8,
-    letterSpacing: 2,
-  },
-  statusText: {
-    fontSize: 14,
-    color: '#8899AA',
-    marginBottom: 40,
-    textAlign: 'center',
-  },
-  recordButton: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#2563EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 40,
-    gap: 4,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  recordButtonActive: {
-    backgroundColor: '#DC2626',
-    shadowColor: '#DC2626',
-  },
-  recordButtonIcon: {
-    fontSize: 32,
-  },
-  recordButtonText: {
-    fontSize: 13,
-    color: '#FFFFFF',
-    fontWeight: '600',
-    letterSpacing: 1,
-  },
-  transcriptContainer: {
-    width: '100%',
-    backgroundColor: '#112240',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#1C2E44',
-  },
-  transcriptLabel: {
-    fontSize: 11,
-    color: '#8899AA',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 10,
-    fontWeight: '600',
-  },
-  transcribingContainer: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  transcribingDots: {
-    fontSize: 24,
-    color: '#2563EB',
-    letterSpacing: 8,
-    marginBottom: 8,
-  },
-  transcribingText: {
-    fontSize: 13,
-    color: '#8899AA',
-  },
-  transcriptText: {
-    fontSize: 14,
-    color: '#CBD5E1',
-    lineHeight: 22,
-  },
-  saveButton: {
-    backgroundColor: '#059669',
-    borderRadius: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    width: '100%',
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  permissionContainer: {
-    flex: 1,
-    backgroundColor: '#0A1628',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  permissionIcon: {
-    fontSize: 56,
-    marginBottom: 20,
-  },
-  permissionTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  permissionText: {
-    fontSize: 15,
-    color: '#8899AA',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-  },
-  permissionButton: {
-    backgroundColor: '#2563EB',
-    borderRadius: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-  },
-  permissionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  container:            { flex: 1, backgroundColor: C.bgPage },
+  header:               { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.bgCard },
+  backButton:           { flexDirection: 'row', alignItems: 'center', gap: 6, width: 60 },
+  backArrow:            { fontSize: 20, color: C.blue },
+  backText:             { fontSize: 16, color: C.blue },
+  headerTitle:          { fontSize: 18, fontWeight: '600', color: C.textPrimary },
+  scroll:               { flex: 1 },
+  scrollContent:        { alignItems: 'center', paddingTop: 40, paddingHorizontal: 24 },
+  micContainer:         { width: 80, height: 80, borderRadius: 40, backgroundColor: C.blueLight, alignItems: 'center', justifyContent: 'center', marginBottom: 32, borderWidth: 1, borderColor: C.blueMid },
+  micIcon:              { fontSize: 36 },
+  waveform:             { flexDirection: 'row', alignItems: 'center', gap: 6, height: 50, marginBottom: 20 },
+  waveBar:              { width: 6, borderRadius: 3 },
+  timer:                { fontSize: 48, fontWeight: '200', color: C.textPrimary, fontVariant: ['tabular-nums'], marginBottom: 8, letterSpacing: 2 },
+  statusText:           { fontSize: 14, color: C.textSecondary, marginBottom: 40, textAlign: 'center' },
+  recordButton:         { width: 120, height: 120, borderRadius: 60, backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center', marginBottom: 40, gap: 4, shadowColor: C.blue, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
+  recordButtonActive:   { backgroundColor: C.danger, shadowColor: C.danger },
+  recordButtonIcon:     { fontSize: 32 },
+  recordButtonText:     { fontSize: 13, color: C.textInverse, fontWeight: '600', letterSpacing: 1 },
+  transcriptContainer:  { width: '100%', backgroundColor: C.bgCard, borderRadius: RADIUS.md, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.border },
+  transcriptLabel:      { fontSize: 11, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, fontWeight: '600' },
+  transcribingContainer:{ alignItems: 'center', paddingVertical: 12 },
+  transcribingDots:     { fontSize: 24, color: C.blue, letterSpacing: 8, marginBottom: 8 },
+  transcribingText:     { fontSize: 13, color: C.textSecondary },
+  transcriptText:       { fontSize: 14, color: C.textPrimary, lineHeight: 22 },
+  saveButton:           { backgroundColor: C.success, borderRadius: RADIUS.md, paddingVertical: 14, paddingHorizontal: 32, width: '100%', alignItems: 'center' },
+  saveButtonText:       { color: C.textInverse, fontSize: 16, fontWeight: '600' },
+  permissionContainer:  { flex: 1, backgroundColor: C.bgPage, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  permissionIcon:       { fontSize: 56, marginBottom: 20 },
+  permissionTitle:      { fontSize: 22, fontWeight: '700', color: C.textPrimary, marginBottom: 12, textAlign: 'center' },
+  permissionText:       { fontSize: 15, color: C.textSecondary, textAlign: 'center', lineHeight: 24, marginBottom: 32 },
+  permissionButton:     { backgroundColor: C.blue, borderRadius: RADIUS.md, paddingVertical: 14, paddingHorizontal: 32 },
+  permissionButtonText: { color: C.textInverse, fontSize: 16, fontWeight: '600' },
 });

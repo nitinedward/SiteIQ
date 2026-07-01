@@ -1,3 +1,4 @@
+import { C } from '../lib/theme'
 import {
   View,
   Text,
@@ -67,7 +68,7 @@ export default function SetupPinScreen() {
     }
 
     Alert.alert(
-      '✅ Setup Complete',
+      'Setup Complete',
       biometricAvailable
         ? 'Face ID and PIN are now enabled. You can log in with Face ID or your PIN next time.'
         : 'PIN is now enabled. You can log in with your PIN next time.',
@@ -84,7 +85,7 @@ export default function SetupPinScreen() {
     ['1', '2', '3'],
     ['4', '5', '6'],
     ['7', '8', '9'],
-    ['', '0', '⌫'],
+    ['', '0', 'DEL'],
   ];
 
   return (
@@ -128,13 +129,13 @@ export default function SetupPinScreen() {
                 key={keyIndex}
                 style={[styles.key, key === '' && styles.keyEmpty]}
                 onPress={() => {
-                  if (key === '⌫') handleDelete();
+                  if (key === 'DEL') handleDelete();
                   else if (key !== '') handlePress(key);
                 }}
                 disabled={key === ''}
                 activeOpacity={0.6}
               >
-                <Text style={[styles.keyText, key === '⌫' && styles.keyDelete]}>
+                <Text style={[styles.keyText, key === 'DEL' && styles.keyDelete]}>
                   {key}
                 </Text>
               </TouchableOpacity>
@@ -152,30 +153,20 @@ export default function SetupPinScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1, backgroundColor: '#0A1628',
-    alignItems: 'center', justifyContent: 'center', padding: 24,
-  },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 8, textAlign: 'center' },
-  subtitle: { fontSize: 14, color: '#8899AA', marginBottom: 40, textAlign: 'center', lineHeight: 20 },
-  dotsRow: { flexDirection: 'row', gap: 20, marginBottom: 12 },
-  dot: {
-    width: 18, height: 18, borderRadius: 9,
-    borderWidth: 2, borderColor: '#2A3F55', backgroundColor: 'transparent',
-  },
-  dotFilled: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
-  dotError: { borderColor: '#F87171' },
-  errorText: { fontSize: 13, color: '#F87171', marginBottom: 32, height: 18 },
-  keypad: { width: '80%', gap: 12 },
-  keyRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  key: {
-    width: 72, height: 72, borderRadius: 36,
-    backgroundColor: '#112240', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#1C2E44',
-  },
-  keyEmpty: { backgroundColor: 'transparent', borderColor: 'transparent' },
-  keyText: { fontSize: 24, fontWeight: '300', color: '#FFFFFF' },
-  keyDelete: { fontSize: 20 },
+  container:  { flex: 1, backgroundColor: C.bgPage, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  title:      { fontSize: 26, fontWeight: '700', color: C.textPrimary, marginBottom: 8, textAlign: 'center' },
+  subtitle:   { fontSize: 14, color: C.textSecondary, marginBottom: 40, textAlign: 'center', lineHeight: 20 },
+  dotsRow:    { flexDirection: 'row', gap: 20, marginBottom: 12 },
+  dot:        { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: C.blue, backgroundColor: 'transparent' },
+  dotFilled:  { backgroundColor: C.blue, borderColor: C.blue },
+  dotError:   { borderColor: C.danger },
+  errorText:  { fontSize: 13, color: C.danger, marginBottom: 32, height: 18 },
+  keypad:     { width: '80%', gap: 12 },
+  keyRow:     { flexDirection: 'row', justifyContent: 'space-between' },
+  key:        { width: 72, height: 72, borderRadius: 36, backgroundColor: C.bgCard, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.border },
+  keyEmpty:   { backgroundColor: 'transparent', borderColor: 'transparent' },
+  keyText:    { fontSize: 24, fontWeight: '300', color: C.textPrimary },
+  keyDelete:  { fontSize: 20 },
   skipButton: { marginTop: 40 },
-  skipText: { fontSize: 14, color: '#4A5568' },
+  skipText:   { fontSize: 14, color: C.textSecondary },
 });
