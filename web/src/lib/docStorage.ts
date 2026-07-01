@@ -21,7 +21,7 @@ export async function saveDoc(
       }
     )
   if (error) throw new Error('Failed to save doc: ' + error.message)
-  console.log('[storage] Saved:', inspectionId)
+  console.log('[storage] Saved:', inspectionId, 'size:', buffer.length)
 }
 
 export async function loadDoc(
@@ -40,7 +40,10 @@ export async function loadDoc(
     throw new Error('Document not found. Generate it first.')
   }
 
-  const res = await fetch(signData.signedUrl, { cache: 'no-store' })
+  // Append a timestamp to bust any intermediate CDN or proxy cache on the
+  // signed URL path — Supabase storage ignores unknown query parameters.
+  const bustedUrl = `${signData.signedUrl}&t=${Date.now()}`
+  const res = await fetch(bustedUrl, { cache: 'no-store' })
   if (!res.ok) {
     if (res.status === 404) throw new Error('Document not found. Generate it first.')
     throw new Error(`Storage download failed: ${res.status}`)

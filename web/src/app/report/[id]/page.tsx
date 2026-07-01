@@ -107,10 +107,20 @@ export default function ReportPage() {
         body:    JSON.stringify({ inspectionId }),
       })
       if (!res.ok) throw new Error('Generate failed')
+      const data = await res.json()
       setDocReady(true)
-      setReloadingEditor(true)
-      setEditorKey(prev => prev + 1)
-      setTimeout(() => setReloadingEditor(false), 4000)
+      if (data.skipped) {
+        // Doc already exists — show the editor without changing the OO session key.
+        // A stable editorKey means force-save in finaliseReport always targets
+        // the correct active OO session.
+        console.log('[generateDoc] Doc exists, showing without remount')
+      } else {
+        // Newly created — remount editor so OO loads the fresh file.
+        console.log('[generateDoc] New doc generated, remounting editor')
+        setReloadingEditor(true)
+        setEditorKey(prev => prev + 1)
+        setTimeout(() => setReloadingEditor(false), 4000)
+      }
     } catch (err) {
       console.error('[generateDoc] error:', err)
       alert('Could not generate document. Please refresh.')
@@ -281,13 +291,18 @@ export default function ReportPage() {
       const docKey = `doc-${inspectionId}-${editorKey}`
       console.log('[finalise] Force saving OO doc, key:', docKey)
       try {
-        await fetch('/api/docs/forcesave', {
+        const fsRes = await fetch('/api/docs/forcesave', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key: docKey }),
         })
-        console.log('[finalise] Force save requested, waiting for callback...')
-        await new Promise(r => setTimeout(r, 3000))
+        const fsData = await fsRes.json().catch(() => ({}))
+        console.log('[finalise] Force save response:', JSON.stringify(fsData))
+        // Wait for OO to call our callback AND for Supabase upload to complete.
+        // error:0 = success, error:6 = no active session (OO already closed the
+        // doc and sent status-2 callback earlier, so Supabase already has it).
+        console.log('[finalise] Waiting for callback to complete...')
+        await new Promise(r => setTimeout(r, 8000))
       } catch (fsErr) {
         console.warn('[finalise] Force save failed, continuing:', fsErr)
       }

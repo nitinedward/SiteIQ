@@ -85,13 +85,14 @@ export async function POST(
   }
 
   console.log('[callback] POST received, inspectionId:', inspectionId)
-  console.log('[callback] body:', JSON.stringify(body).substring(0, 200))
   console.log('[callback] status:', body.status)
+  console.log('[callback] url:', body.url)
 
-  // Fire-and-forget: start the save but don't await it so the response
-  // goes back to OnlyOffice in milliseconds.
+  // Await the Supabase save before responding so OO knows the file is safe.
+  // OO allows up to ~60 s for the callback response; a Supabase upload
+  // for a typical report takes well under 10 s.
   if ((body.status === 2 || body.status === 6) && body.url) {
-    saveDocumentInBackground(inspectionId, body.url)
+    await saveDocumentInBackground(inspectionId, body.url)
   }
 
   return NextResponse.json({ error: 0 }, { headers: CORS_HEADERS })
