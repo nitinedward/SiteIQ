@@ -345,7 +345,7 @@ export default function RecorderScreen() {
         {/* Status text */}
         <Text style={styles.statusText}>
           {isRecording
-            ? 'Recording - speak clearly...'
+            ? 'Recording — speak clearly...'
             : audioUri
             ? 'Recording complete'
             : 'Tap to start recording'}
@@ -361,6 +361,9 @@ export default function RecorderScreen() {
             onPress={isRecording ? stopRecording : startRecording}
             activeOpacity={0.8}
           >
+            <Text style={styles.recordButtonIcon}>
+              {isRecording ? '⏹' : '⏺'}
+            </Text>
             <Text style={styles.recordButtonText}>
               {isRecording ? 'Stop' : 'Record'}
             </Text>
