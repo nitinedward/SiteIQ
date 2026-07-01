@@ -217,9 +217,8 @@ export default function SessionScreen() {
         return
       }
 
-      const base64Audio = await FileSystem.readAsStringAsync(uri, {
-        encoding: 'base64' as any,
-      })
+      const audioFile = new FileSystem.File(uri)
+      const base64Audio = await audioFile.base64()
 
       console.log('[dictate] Sending to API...')
 

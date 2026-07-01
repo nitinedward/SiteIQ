@@ -247,9 +247,8 @@ export default function ObservationScreen() {
         return
       }
 
-      const base64Audio = await FileSystem.readAsStringAsync(uri, {
-        encoding: 'base64' as any,
-      })
+      const audioFile = new FileSystem.File(uri)
+      const base64Audio = await audioFile.base64()
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
