@@ -242,7 +242,7 @@ export default function RecorderScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backArrow}>←</Text>
+          <Text style={styles.backArrow}>{'<'}</Text>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Voice Notes</Text>
@@ -316,7 +316,7 @@ export default function RecorderScreen() {
 
             {isTranscribing ? (
               <View style={styles.transcribingContainer}>
-                <Text style={styles.transcribingDots}>●●●</Text>
+                <Text style={styles.transcribingDots}>...</Text>
                 <Text style={styles.transcribingText}>
                   Processing audio...
                 </Text>

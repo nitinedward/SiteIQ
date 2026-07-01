@@ -141,7 +141,7 @@ export default function FirmSettingsScreen() {
       await supabase.from('firms').update({ report_template_url: templateUrl }).eq('id', firm.id);
       setFirm(prev => prev ? { ...prev, report_template_url: templateUrl } : prev);
 
-      Alert.alert('✅ Template Uploaded', 'Your report template has been saved. Engineers can now generate AI reports using this template.');
+      Alert.alert('Template Uploaded', 'Your report template has been saved. Engineers can now generate AI reports using this template.');
     } catch (err) {
       Alert.alert('Upload Failed', 'Could not upload template. Make sure it is a .docx file.');
     } finally {
@@ -213,7 +213,7 @@ export default function FirmSettingsScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>←</Text>
+          <Text style={S.backArrow}>{'<'}</Text>
           <Text style={S.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={S.headerTitle}>Firm Settings</Text>
@@ -246,10 +246,10 @@ export default function FirmSettingsScreen() {
           {firm?.report_template_url ? (
             <View style={S.templateCard}>
               <View style={S.templateIconRow}>
-                <Text style={S.templateIcon}>📄</Text>
+                <Text style={S.templateIcon}>Doc</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={S.templateName}>Report Template</Text>
-                  <Text style={S.templateSub}>✅ Template uploaded — AI reports enabled</Text>
+                  <Text style={S.templateSub}>Template uploaded - AI reports enabled</Text>
                 </View>
               </View>
               <View style={S.templateBtns}>
@@ -269,12 +269,12 @@ export default function FirmSettingsScreen() {
                 <ActivityIndicator size="small" color="#2563EB" />
               ) : (
                 <>
-                  <Text style={S.uploadTemplateIcon}>⬆</Text>
+                  <Text style={S.uploadTemplateIcon}>Upload</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={S.uploadTemplateTitle}>Upload Word Template</Text>
                     <Text style={S.uploadTemplateSub}>Upload a .docx file with placeholders</Text>
                   </View>
-                  <Text style={S.uploadTemplateArrow}>›</Text>
+                  <Text style={S.uploadTemplateArrow}>{'>'}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -318,7 +318,7 @@ export default function FirmSettingsScreen() {
                 <Text style={S.projectName}>{project.name}</Text>
                 <Text style={S.projectNumber}>#{project.project_number}</Text>
               </View>
-              <Text style={S.projectArrow}>Assign Engineers ›</Text>
+              <Text style={S.projectArrow}>{'Assign Engineers >'}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -339,7 +339,7 @@ export default function FirmSettingsScreen() {
                 return (
                   <TouchableOpacity key={member.id} style={S.assignRow} onPress={() => handleToggleMember(member)}>
                     <View style={[S.assignCheck, assigned && S.assignCheckOn]}>
-                      {assigned && <Text style={S.assignCheckText}>✓</Text>}
+                      {assigned && <Text style={S.assignCheckText}>v</Text>}
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={S.memberName}>{member.full_name}</Text>

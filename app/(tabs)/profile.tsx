@@ -39,7 +39,7 @@ export default function ProfileScreen() {
           <Text style={S.name}>{profile.name}</Text>
           <Text style={S.email}>{profile.email}</Text>
           <View style={S.rolePill}>
-            <Text style={S.roleText}>{profile.role === 'admin' ? '⭐ Admin' : '👷 Engineer'}</Text>
+            <Text style={S.roleText}>{profile.role === 'admin' ? 'Admin' : 'Engineer'}</Text>
           </View>
         </View>
 
@@ -52,15 +52,15 @@ export default function ProfileScreen() {
 
         <View style={S.card}>
           <TouchableOpacity style={S.menuRow} onPress={() => router.push('/setup-pin')}>
-            <Text style={S.menuIcon}>🔒</Text>
+            <Text style={S.menuIcon}>PIN</Text>
             <Text style={S.menuLabel}>Change PIN</Text>
-            <Text style={S.menuArrow}>›</Text>
+            <Text style={S.menuArrow}>{'>'}</Text>
           </TouchableOpacity>
           <View style={S.divider} />
           <TouchableOpacity style={S.menuRow} onPress={() => router.push('/firm-settings')}>
-            <Text style={S.menuIcon}>🏢</Text>
+            <Text style={S.menuIcon}>Firm</Text>
             <Text style={S.menuLabel}>Firm Settings</Text>
-            <Text style={S.menuArrow}>›</Text>
+            <Text style={S.menuArrow}>{'>'}</Text>
           </TouchableOpacity>
         </View>
 

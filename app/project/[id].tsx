@@ -74,7 +74,7 @@ export default function ProjectDetailScreen() {
       {/* Header */}
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>←</Text>
+          <Text style={S.backArrow}>{'<'}</Text>
         </TouchableOpacity>
         <View style={S.headerMid}>
           <Text style={S.headerTitle} numberOfLines={1}>{project.name}</Text>
@@ -99,7 +99,7 @@ export default function ProjectDetailScreen() {
                   {inspections.length > 0 ? `Last: ${inspections[0].date}` : 'No inspections yet'}
                 </Text>
               </View>
-              <Text style={S.startArrow}>→</Text>
+              <Text style={S.startArrow}>{'>'}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -109,20 +109,20 @@ export default function ProjectDetailScreen() {
           <Text style={S.sectionTitle}>Drawings</Text>
           {drawings.length === 0 ? (
             <View style={S.emptyCard}>
-              <Text style={S.emptyText}>No drawings — admin uploads via web portal</Text>
+              <Text style={S.emptyText}>No drawings - admin uploads via web portal</Text>
             </View>
           ) : drawings.map(d => (
             <TouchableOpacity key={d.id} style={S.row}
               onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, file_url: d.file_url, project_id: project.id, view_only: 'true' } })}
               activeOpacity={0.7}>
               <View style={S.rowBadge}>
-                <Text style={S.rowBadgeText}>{d.number || '—'}</Text>
+                <Text style={S.rowBadgeText}>{d.number || '-'}</Text>
               </View>
               <View style={S.rowInfo}>
                 <Text style={S.rowTitle}>{d.title}</Text>
                 <Text style={S.rowMeta}>Rev {d.revision}</Text>
               </View>
-              <Text style={S.rowArrow}>›</Text>
+              <Text style={S.rowArrow}>{'>'}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -132,7 +132,7 @@ export default function ProjectDetailScreen() {
           <Text style={S.sectionTitle}>Site Reports</Text>
           {inspections.length === 0 ? (
             <View style={S.emptyCard}>
-              <Text style={S.emptyText}>No reports yet — start an inspection above</Text>
+              <Text style={S.emptyText}>No reports yet - start an inspection above</Text>
             </View>
           ) : inspections.map(ins => (
             <TouchableOpacity key={ins.id} style={S.row} activeOpacity={0.7}
@@ -142,9 +142,9 @@ export default function ProjectDetailScreen() {
               </View>
               <View style={S.rowInfo}>
                 <Text style={S.rowTitle}>{ins.date}</Text>
-                <Text style={S.rowMeta}>{ins.site_contact || 'No contact'} · {ins.weather}</Text>
+                <Text style={S.rowMeta}>{ins.site_contact || 'No contact'} - {ins.weather}</Text>
               </View>
-              <Text style={S.rowArrow}>›</Text>
+              <Text style={S.rowArrow}>{'>'}</Text>
             </TouchableOpacity>
           ))}
         </View>

@@ -337,7 +337,7 @@ export default function DrawingViewerScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>←</Text>
+          <Text style={S.backArrow}>{'<'}</Text>
           <Text style={S.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={S.headerTitle} numberOfLines={1}>{title}</Text>
@@ -350,9 +350,9 @@ export default function DrawingViewerScreen() {
         <View style={S.pdfScreen}>
           {!viewOnly && (
             <View style={S.toolbar}>
-              <ToolBtn icon="📍" label="Pin"  active={tool==='pin'}       onPress={() => updateTool('pin')} />
-              <ToolBtn icon="⬜" label="Area" active={tool==='rectangle'} onPress={() => updateTool('rectangle')} />
-              <ToolBtn icon="✏️" label="Draw" active={tool==='freehand'}  onPress={() => updateTool('freehand')} />
+              <ToolBtn icon="Pin"  label="Pin"  active={tool==='pin'}       onPress={() => updateTool('pin')} />
+              <ToolBtn icon="Area" label="Area" active={tool==='rectangle'} onPress={() => updateTool('rectangle')} />
+              <ToolBtn icon="Draw" label="Draw" active={tool==='freehand'}  onPress={() => updateTool('freehand')} />
             </View>
           )}
           <View ref={pdfWrapRef} style={S.pdfWrap} onLayout={() => { measureWrap(); setTimeout(measureWrap, 50); }} {...panResponder.panHandlers}>
@@ -381,7 +381,7 @@ export default function DrawingViewerScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>
               {zones.map(zone => (
                 <TouchableOpacity key={zone.id} style={[S.chip, zone.markup_type === 'freehand' && S.chipFree]} onPress={() => handleTapZone(zone)}>
-                  <Text style={S.chipIcon}>{!zone.markup_type || zone.markup_type === 'pin' ? '📍' : zone.markup_type === 'rectangle' ? '⬜' : '✏️'}</Text>
+                  <Text style={S.chipIcon}>{!zone.markup_type || zone.markup_type === 'pin' ? 'Pin' : zone.markup_type === 'rectangle' ? 'Area' : 'Draw'}</Text>
                   <Text style={S.chipText}>{zone.label}</Text>
                 </TouchableOpacity>
               ))}
@@ -392,32 +392,32 @@ export default function DrawingViewerScreen() {
         <ScrollView style={S.scroll} showsVerticalScrollIndicator={false}>
           <View style={S.section}>
             <TouchableOpacity style={S.openBtn} onPress={() => { setIsLoading(true); setPdfError(''); setShowPdf(true); }}>
-              <Text style={S.openIcon}>📄</Text>
+              <Text style={S.openIcon}>PDF</Text>
               <View style={{ flex: 1 }}>
                 <Text style={S.openTitle}>{viewOnly ? 'View Drawing' : 'Open & Mark Up Drawing'}</Text>
                 <Text style={S.openSub}>{viewOnly ? 'Tap markers to view observations' : 'Pinch to zoom · Pin · Area · Freehand'}</Text>
               </View>
-              <Text style={S.openArrow}>›</Text>
+              <Text style={S.openArrow}>{'>'}</Text>
             </TouchableOpacity>
           </View>
           <View style={S.section}>
             <Text style={S.sectionTitle}>Marked Zones ({zones.length})</Text>
             {zones.length === 0 ? (
               <View style={S.empty}>
-                <Text style={S.emptyIcon}>📍</Text>
+                <Text style={S.emptyIcon}>( )</Text>
                 <Text style={S.emptyTitle}>No zones yet</Text>
                 <Text style={S.emptyBody}>{viewOnly ? 'No markup was added during this inspection' : 'Open the drawing and use the tools to mark zones'}</Text>
               </View>
             ) : zones.map(zone => (
               <TouchableOpacity key={zone.id} style={S.zoneRow} onPress={() => handleTapZone(zone)} activeOpacity={0.7}>
                 <View style={[S.zoneBadge, zone.markup_type === 'freehand' && { backgroundColor: '#FFFBEB' }]}>
-                  <Text style={S.zoneBadgeIcon}>{!zone.markup_type || zone.markup_type === 'pin' ? '📍' : zone.markup_type === 'rectangle' ? '⬜' : '✏️'}</Text>
+                  <Text style={S.zoneBadgeIcon}>{!zone.markup_type || zone.markup_type === 'pin' ? 'Pin' : zone.markup_type === 'rectangle' ? 'Area' : 'Draw'}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={S.zoneLabel}>{zone.label}</Text>
                   <Text style={S.zoneMeta}>{!zone.markup_type || zone.markup_type === 'pin' ? 'Pin marker' : zone.markup_type === 'rectangle' ? 'Area highlight' : 'Freehand drawing'}{' · Tap to inspect'}</Text>
                 </View>
-                <Text style={S.zoneArrow}>›</Text>
+                <Text style={S.zoneArrow}>{'>'}</Text>
               </TouchableOpacity>
             ))}
           </View>

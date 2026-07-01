@@ -30,7 +30,7 @@ export default function CameraScreen() {
   if (!permission.granted) {
     return (
       <View style={styles.permissionContainer}>
-        <Text style={styles.permissionIcon}>📷</Text>
+        <Text style={styles.permissionIcon}>Camera</Text>
         <Text style={styles.permissionTitle}>Camera Access Required</Text>
         <Text style={styles.permissionText}>
           SiteIQ needs camera access to photograph inspection zones.
@@ -80,7 +80,7 @@ export default function CameraScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backArrow}>←</Text>
+          <Text style={styles.backArrow}>{'<'}</Text>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -92,7 +92,7 @@ export default function CameraScreen() {
           style={styles.voiceButton}
           onPress={() => router.push('/recorder')}
         >
-          <Text style={styles.voiceButtonText}>🎤 Voice</Text>
+          <Text style={styles.voiceButtonText}>Voice</Text>
         </TouchableOpacity>
       </View>
 
@@ -111,7 +111,7 @@ export default function CameraScreen() {
           onPress={() => setFlash(f => f === 'off' ? 'on' : 'off')}
         >
           <Text style={styles.controlIcon}>
-            {flash === 'on' ? '⚡' : '🔦'}
+            {flash === 'on' ? 'ON' : 'OFF'}
           </Text>
           <Text style={styles.controlLabel}>
             {flash === 'on' ? 'Flash On' : 'Flash Off'}
@@ -130,7 +130,7 @@ export default function CameraScreen() {
           style={styles.controlButton}
           onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}
         >
-          <Text style={styles.controlIcon}>🔄</Text>
+          <Text style={styles.controlIcon}>Flip</Text>
           <Text style={styles.controlLabel}>Flip</Text>
         </TouchableOpacity>
       </View>
@@ -154,7 +154,7 @@ export default function CameraScreen() {
                 </TouchableOpacity>
               )}
             />
-            <Text style={styles.photoCount}>{photos.length} 📷</Text>
+            <Text style={styles.photoCount}>{photos.length} photos</Text>
           </View>
           <Text style={styles.thumbnailHint}>Long press to delete</Text>
 
@@ -166,7 +166,7 @@ export default function CameraScreen() {
             })}
           >
             <Text style={styles.submitButtonText}>
-              Review & Submit Observation →
+              {'Review & Submit Observation >'}
             </Text>
           </TouchableOpacity>
         </View>

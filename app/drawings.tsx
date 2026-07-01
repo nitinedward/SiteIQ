@@ -54,7 +54,7 @@ export default function DrawingsPickerScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backArrow}>←</Text>
+          <Text style={styles.backArrow}>{'<'}</Text>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Select Drawing</Text>
@@ -90,24 +90,24 @@ export default function DrawingsPickerScreen() {
               activeOpacity={0.7}
             >
               <View style={styles.drawingIconBox}>
-                <Text style={styles.drawingIcon}>📐</Text>
+                <Text style={styles.drawingIcon}>DWG</Text>
               </View>
               <View style={styles.drawingInfo}>
                 <Text style={styles.drawingTitle}>{drawing.title}</Text>
                 <Text style={styles.drawingMeta}>
-                  {drawing.number} · Rev {drawing.revision}
+                  {drawing.number} - Rev {drawing.revision}
                 </Text>
                 <Text style={styles.drawingZones}>
                   {drawing.zones} inspection zones
                 </Text>
               </View>
-              <Text style={styles.drawingArrow}>›</Text>
+              <Text style={styles.drawingArrow}>{'>'}</Text>
             </TouchableOpacity>
           ))}
 
           {drawings.length === 0 && (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyIcon}>📐</Text>
+              <Text style={styles.emptyIcon}>DWG</Text>
               <Text style={styles.emptyTitle}>No drawings uploaded</Text>
               <Text style={styles.emptySub}>
                 Drawings are uploaded via the desktop web app

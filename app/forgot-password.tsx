@@ -29,7 +29,7 @@ export default function ForgotPasswordScreen() {
       <View style={styles.container}>
         <View style={styles.centred}>
           <View style={styles.successIcon}>
-            <Text style={styles.successIconText}>✉</Text>
+            <Text style={styles.successIconText}>Email</Text>
           </View>
           <Text style={styles.successTitle}>Check your inbox</Text>
           <Text style={styles.successBody}>
@@ -49,7 +49,7 @@ export default function ForgotPasswordScreen() {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.inner}>
           <TouchableOpacity style={styles.backArrowBtn} onPress={() => router.back()}>
-            <Text style={styles.backArrow}>←</Text>
+            <Text style={styles.backArrow}>{'<'}</Text>
           </TouchableOpacity>
 
           <View style={styles.logoMark}>

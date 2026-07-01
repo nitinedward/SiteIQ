@@ -61,7 +61,7 @@ export default function LoginScreen() {
               style={S.input}
               value={password}
               onChangeText={setPassword}
-              placeholder="••••••••"
+              placeholder="Password"
               placeholderTextColor={C.textMuted}
               secureTextEntry
             />

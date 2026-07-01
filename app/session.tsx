@@ -233,7 +233,7 @@ export default function SessionScreen() {
       <KeyboardAvoidingView style={S.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={S.header}>
           <TouchableOpacity style={S.backBtn} onPress={handleBack}>
-            <Text style={S.backArrow}>←</Text>
+            <Text style={S.backArrow}>{'<'}</Text>
             <Text style={S.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={S.headerTitle}>New Inspection</Text>
@@ -278,11 +278,11 @@ export default function SessionScreen() {
               return (
                 <TouchableOpacity key={drawing.id} style={[S.checkRow, sel && S.checkRowActive]} onPress={() => toggleDrawing(drawing.id)} activeOpacity={0.7}>
                   <View style={[S.checkbox, sel && S.checkboxActive]}>
-                    {sel && <Text style={S.checkmark}>✓</Text>}
+                    {sel && <Text style={S.checkmark}>{'v'}</Text>}
                   </View>
                   <View style={S.checkInfo}>
                     <Text style={S.checkTitle}>{drawing.title}</Text>
-                    <Text style={S.checkMeta}>{drawing.number ? `${drawing.number} · ` : ''}Rev {drawing.revision}</Text>
+                    <Text style={S.checkMeta}>{drawing.number ? `${drawing.number} - ` : ''}Rev {drawing.revision}</Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -326,7 +326,7 @@ export default function SessionScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => setStep('details')}>
-          <Text style={S.backArrow}>←</Text>
+          <Text style={S.backArrow}>{'<'}</Text>
           <Text style={S.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={S.headerTitle}>Capturing</Text>
@@ -336,10 +336,10 @@ export default function SessionScreen() {
       <ScrollView style={S.scroll} showsVerticalScrollIndicator={false}>
         <View style={S.banner}>
           <Text style={S.bannerProject}>{project_name}</Text>
-          <Text style={S.bannerDate}>{todayShort} · {weather}</Text>
+          <Text style={S.bannerDate}>{todayShort} - {weather}</Text>
           <View style={S.activeBadge}>
             <View style={S.activeDot} />
-            <Text style={S.activeBadgeText}>Active Session · Report #{reportNo}</Text>
+            <Text style={S.activeBadgeText}>Active Session -Report #{reportNo}</Text>
           </View>
         </View>
 
@@ -350,18 +350,18 @@ export default function SessionScreen() {
             <TouchableOpacity key={drawing.id} style={S.drawingRow}
               onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: drawing.id, title: drawing.title, file_url: drawing.file_url, project_id: String(project_id), inspection_id: inspectionId, view_only: 'false' } })}
               activeOpacity={0.7}>
-              <View style={S.drawBadge}><Text style={S.drawBadgeText}>{drawing.number || '—'}</Text></View>
+              <View style={S.drawBadge}><Text style={S.drawBadgeText}>{drawing.number || '-'}</Text></View>
               <View style={{ flex: 1 }}>
                 <Text style={S.drawTitle}>{drawing.title}</Text>
-                <Text style={S.drawMeta}>Rev {drawing.revision} · Tap to inspect</Text>
+                <Text style={S.drawMeta}>Rev {drawing.revision} -Tap to inspect</Text>
               </View>
-              <Text style={S.arrow}>›</Text>
+              <Text style={S.arrow}>{'>'}</Text>
             </TouchableOpacity>
           ))}
           <TouchableOpacity style={S.addDrawBtn} onPress={() => {
             const unsel = allDrawings.filter(d => !selectedDrawings.includes(d.id));
             if (!unsel.length) { Alert.alert('All drawings added', 'All project drawings are already in this inspection.'); return; }
-            Alert.alert('Add Drawing', 'Select an additional drawing:', [...unsel.map(d => ({ text: `${d.number ? d.number + ' · ' : ''}${d.title}`, onPress: () => setSelectedDrawings(curr => [...curr, d.id]) })), { text: 'Cancel', style: 'cancel' as const }]);
+            Alert.alert('Add Drawing', 'Select an additional drawing:', [...unsel.map(d => ({ text: `${d.number ? d.number + ' -' : ''}${d.title}`, onPress: () => setSelectedDrawings(curr => [...curr, d.id]) })), { text: 'Cancel', style: 'cancel' as const }]);
           }}>
             <Text style={S.addDrawText}>+ Add another drawing</Text>
           </TouchableOpacity>
@@ -374,7 +374,7 @@ export default function SessionScreen() {
               <Text style={S.addCardTitle}>General Observation</Text>
               <Text style={S.addCardSub}>Site-wide notes not tied to a specific drawing</Text>
             </View>
-            <Text style={S.arrow}>›</Text>
+            <Text style={S.arrow}>{'>'}</Text>
           </TouchableOpacity>
         </View>
 

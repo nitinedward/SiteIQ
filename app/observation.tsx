@@ -245,7 +245,7 @@ export default function ObservationScreen() {
       : await supabase.from('observations').insert({ ...payload, zone_id: zoneId !== 'general' ? zoneId : null, project_id: projectId, inspection_id: inspectionId || null, zone_label: zoneLabel });
     setIsSubmitting(false);
     if (error) { Alert.alert('Save Failed', error.message); return; }
-    Alert.alert(isEditMode ? '✅ Updated' : '✅ Saved', `Observation for "${zoneLabel}" has been ${isEditMode ? 'updated' : 'recorded'}.`, [{ text: 'OK', onPress: () => router.back() }]);
+    Alert.alert(isEditMode ? 'Updated' : 'Saved', `Observation for "${zoneLabel}" has been ${isEditMode ? 'updated' : 'recorded'}.`, [{ text: 'OK', onPress: () => router.back() }]);
   };
 
   const selSev = SEVERITY_OPTIONS.find(s => s.value === severity)!;
@@ -256,7 +256,7 @@ export default function ObservationScreen() {
     <KeyboardAvoidingView style={S.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>←</Text>
+          <Text style={S.backArrow}>{'<'}</Text>
           <Text style={S.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={S.headerTitle} numberOfLines={1}>{isEditMode ? 'Edit Observation' : 'New Observation'}</Text>
@@ -267,7 +267,7 @@ export default function ObservationScreen() {
 
         {/* Zone banner */}
         <View style={S.zoneBanner}>
-          <Text style={{ fontSize: 24 }}>📍</Text>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#2563EB' }}>Zone:</Text>
           <View style={{ flex: 1 }}>
             <Text style={S.zoneLabel}>{zoneLabel}</Text>
             <Text style={S.zoneSub}>Tap below to capture your observations</Text>
@@ -279,10 +279,9 @@ export default function ObservationScreen() {
           <Text style={S.sectionTitle}>Photos ({photos.length})</Text>
           <View style={S.photoActions}>
             <TouchableOpacity style={S.photoBtn} onPress={handleTakePhoto} disabled={isUploading}>
-              {isUploading ? <ActivityIndicator size="small" color="#FFFFFF" /> : <><Text style={{ fontSize: 18 }}>📷</Text><Text style={S.photoBtnText}>Take Photo</Text></>}
+              {isUploading ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={S.photoBtnText}>Take Photo</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={[S.photoBtn, S.photoBtnSecondary]} onPress={handlePickPhoto} disabled={isUploading}>
-              <Text style={{ fontSize: 18 }}>🖼️</Text>
               <Text style={[S.photoBtnText, { color: '#2563EB' }]}>Library</Text>
             </TouchableOpacity>
           </View>
@@ -302,13 +301,13 @@ export default function ObservationScreen() {
           <View style={S.sectionRow}>
             <Text style={S.sectionTitle}>Voice Notes</Text>
             <TouchableOpacity style={[S.recordBtn, isRecording && S.recordBtnActive, isTranscribing && S.recordBtnTranscribing]} onPress={() => isRecording ? stopRecording() : startRecording()} disabled={isTranscribing}>
-              {isTranscribing ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={S.recordBtnText}>{isRecording ? '⏹ Stop' : '🎙 Record'}</Text>}
+              {isTranscribing ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={S.recordBtnText}>{isRecording ? 'Stop' : 'Record'}</Text>}
             </TouchableOpacity>
           </View>
           {(isRecording || isTranscribing) && (
             <View style={S.waveBox}>
               <WaveformVisualiser isRecording={isRecording} metering={isRecording ? -20 : -60} />
-              <Text style={S.waveHint}>{isRecording ? '🔴 Listening — tap Stop when done' : '⏳ Processing...'}</Text>
+              <Text style={S.waveHint}>{isRecording ? 'Listening...' : 'Processing...'}</Text>
             </View>
           )}
           {transcript ? (
@@ -376,7 +375,7 @@ export default function ObservationScreen() {
               <Text style={S.measType}>{m.type}</Text>
               <Text style={S.measValue}>{m.value} {m.unit}</Text>
               <TouchableOpacity onPress={() => setMeasurements(curr => curr.filter(x => x.id !== m.id))}>
-                <Text style={S.measDelete}>✕</Text>
+                <Text style={S.measDelete}>x</Text>
               </TouchableOpacity>
             </View>
           ))}

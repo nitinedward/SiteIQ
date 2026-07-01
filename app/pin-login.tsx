@@ -6,7 +6,7 @@ import * as SecureStore from 'expo-secure-store'
 import { supabase } from '../lib/supabase'
 import { C, FONT, RADIUS } from '../lib/theme'
 
-const DIGITS = [['1','2','3'],['4','5','6'],['7','8','9'],['','0','⌫']]
+const DIGITS = [['1','2','3'],['4','5','6'],['7','8','9'],['','0','DEL']]
 
 export default function PinLoginScreen() {
   const [pin, setPin]     = useState('')
@@ -35,7 +35,7 @@ export default function PinLoginScreen() {
   }
 
   const handleDigit = (d: string) => {
-    if (d === '⌫') { setPin(p => p.slice(0, -1)); setError(''); return }
+    if (d === 'DEL') { setPin(p => p.slice(0, -1)); setError(''); return }
     if (d === '') return
     const next = pin + d
     setPin(next)
@@ -83,7 +83,7 @@ export default function PinLoginScreen() {
                 disabled={d === ''}
                 activeOpacity={0.7}
               >
-                <Text style={[S.keyText, d === '⌫' && S.keyBackspace]}>{d}</Text>
+                <Text style={[S.keyText, d === 'DEL' && S.keyBackspace]}>{d}</Text>
               </TouchableOpacity>
             ))}
           </View>

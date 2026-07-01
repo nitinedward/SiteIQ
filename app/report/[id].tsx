@@ -110,8 +110,8 @@ function ZonePanel({
         <View style={P.panelHeader}>
           <View style={P.panelIcon}>
             <Text style={P.panelIconText}>
-              {!zone.markup_type || zone.markup_type === 'pin' ? '📍'
-                : zone.markup_type === 'rectangle' ? '⬜' : '✏️'}
+              {!zone.markup_type || zone.markup_type === 'pin' ? 'Pin'
+                : zone.markup_type === 'rectangle' ? 'Area' : 'Draw'}
             </Text>
           </View>
           <View style={{ flex: 1 }}>
@@ -119,11 +119,11 @@ function ZonePanel({
             <Text style={P.panelSub}>
               {!zone.markup_type || zone.markup_type === 'pin' ? 'Pin marker'
                 : zone.markup_type === 'rectangle' ? 'Area highlight' : 'Freehand'}
-              {' · '}{zoneObs.length} observation{zoneObs.length !== 1 ? 's' : ''}
+              {' - '}{zoneObs.length} observation{zoneObs.length !== 1 ? 's' : ''}
             </Text>
           </View>
           <TouchableOpacity style={P.closeBtn} onPress={onClose}>
-            <Text style={P.closeBtnText}>✕</Text>
+            <Text style={P.closeBtnText}>x</Text>
           </TouchableOpacity>
         </View>
 
@@ -177,7 +177,7 @@ function ZonePanel({
                         <TouchableOpacity key={i} onPress={() => setFullscreenPhoto(uri)}>
                           <Image source={{ uri }} style={P.photo} />
                           <View style={P.photoOverlay}>
-                            <Text style={P.photoExpand}>⛶</Text>
+                            <Text style={P.photoExpand}>+</Text>
                           </View>
                         </TouchableOpacity>
                       ))}
@@ -187,7 +187,7 @@ function ZonePanel({
                   {/* Transcript */}
                   {!!obs.transcript && (
                     <View style={P.transcriptBox}>
-                      <Text style={P.transcriptLabel}>🎙 Voice Note</Text>
+                      <Text style={P.transcriptLabel}>Voice Note</Text>
                       <Text style={P.transcriptText}>{obs.transcript}</Text>
                     </View>
                   )}
@@ -195,7 +195,7 @@ function ZonePanel({
                   {/* Notes */}
                   {!!obs.notes && (
                     <View style={P.notesBox}>
-                      <Text style={P.notesLabel}>📝 Notes</Text>
+                      <Text style={P.notesLabel}>Notes</Text>
                       <Text style={P.notesText}>{obs.notes}</Text>
                     </View>
                   )}
@@ -203,7 +203,7 @@ function ZonePanel({
                   {/* Measurements */}
                   {measurements.length > 0 && (
                     <View style={P.measureBox}>
-                      <Text style={P.measureLabel}>📐 Measurements</Text>
+                      <Text style={P.measureLabel}>Measurements</Text>
                       {measurements.map((m: any, i: number) => (
                         <View key={i} style={P.measureRow}>
                           <Text style={P.measureName}>{m.label || m.type}</Text>
@@ -232,7 +232,7 @@ function ZonePanel({
               style={P.fullscreenImg} resizeMode="contain" />
           )}
           <TouchableOpacity style={P.fullscreenClose} onPress={() => setFullscreenPhoto(null)}>
-            <Text style={P.fullscreenCloseText}>✕</Text>
+            <Text style={P.fullscreenCloseText}>x</Text>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -450,7 +450,7 @@ function DrawingTab({
   return (
     <View style={{ flex: 1 }}>
       <View style={D.hintBar}>
-        <Text style={D.hintText}>👁 View only · Tap a marker to see observations · Pinch to zoom</Text>
+        <Text style={D.hintText}>View only - Tap a marker to see observations - Pinch to zoom</Text>
       </View>
 
       <View
@@ -521,12 +521,12 @@ function buildReportHtml(
   const severityColour: Record<string, string> = {
     NONE: '#94A3B8', LOW: '#22C55E', MEDIUM: '#F59E0B', HIGH: '#EF4444', CRITICAL: '#7C3AED',
   };
-  const drawingNames = drawings.map(d => d.number || d.title).join(', ') || '—';
+  const drawingNames = drawings.map(d => d.number || d.title).join(', ') || '-';
 
   const zonesHtml = zones.map(zone => {
     const zoneObs = observations.filter(o => String(o.zone_id) === String(zone.id));
-    const icon = !zone.markup_type || zone.markup_type === 'pin' ? '📍'
-      : zone.markup_type === 'rectangle' ? '⬜' : '✏️';
+    const icon = !zone.markup_type || zone.markup_type === 'pin' ? '[Pin]'
+      : zone.markup_type === 'rectangle' ? '[Area]' : '[Draw]';
 
     const obsHtml = zoneObs.length === 0
       ? '<p style="color:#64748B;font-style:italic">No observations recorded</p>'
@@ -546,19 +546,19 @@ function buildReportHtml(
 
           const transcriptHtml = obs.transcript
             ? `<div style="background:#f0f9ff;border-left:3px solid #2563EB;padding:10px;border-radius:4px;margin:8px 0">
-                <div style="font-size:11px;color:#64748b;margin-bottom:4px">🎙 VOICE NOTE</div>
+                <div style="font-size:11px;color:#64748b;margin-bottom:4px">VOICE NOTE</div>
                 <div style="font-size:13px;color:#1e293b">${obs.transcript}</div>
                </div>` : '';
 
           const notesHtml = obs.notes
             ? `<div style="background:#f0fdf4;border-left:3px solid #16A34A;padding:10px;border-radius:4px;margin:8px 0">
-                <div style="font-size:11px;color:#64748b;margin-bottom:4px">📝 NOTES</div>
+                <div style="font-size:11px;color:#64748b;margin-bottom:4px">NOTES</div>
                 <div style="font-size:13px;color:#1e293b">${obs.notes}</div>
                </div>` : '';
 
           const measureHtml = measurements.length > 0
             ? `<div style="margin:8px 0">
-                <div style="font-size:11px;color:#64748b;margin-bottom:6px">📐 MEASUREMENTS</div>
+                <div style="font-size:11px;color:#64748b;margin-bottom:6px">MEASUREMENTS</div>
                 ${measurements.map((m: any) =>
                   `<div style="display:flex;justify-content:space-between;padding:6px 10px;background:#f8fafc;border-radius:4px;margin:3px 0">
                     <span style="color:#64748b">${m.label || m.type}</span>
@@ -776,7 +776,7 @@ export default function ReportScreen() {
       <View style={S.container}>
         <View style={S.header}>
           <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-            <Text style={S.backArrow}>←</Text>
+            <Text style={S.backArrow}>{'<'}</Text>
             <Text style={S.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={S.headerTitle}>Site Report</Text>
@@ -795,17 +795,17 @@ export default function ReportScreen() {
       {/* Header */}
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>←</Text>
+          <Text style={S.backArrow}>{'<'}</Text>
           <Text style={S.backText}>Back</Text>
         </TouchableOpacity>
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Text style={S.headerTitle} numberOfLines={1}>{projectName}</Text>
-          <Text style={S.headerSub}>Report #{inspection?.report_no} · {inspection?.date}</Text>
+          <Text style={S.headerSub}>Report #{inspection?.report_no} - {inspection?.date}</Text>
         </View>
         <TouchableOpacity style={S.exportBtn} onPress={generateWordReport} disabled={isGenerating || isExporting}>
           {isGenerating
             ? <ActivityIndicator size="small" color="#2563EB" />
-            : <Text style={S.exportBtnText}>✦ AI Report</Text>}
+            : <Text style={S.exportBtnText}>AI Report</Text>}
         </TouchableOpacity>
       </View>
 
@@ -815,13 +815,13 @@ export default function ReportScreen() {
           style={[S.tab, activeTab === 'drawing' && S.tabOn]}
           onPress={() => setActiveTab('drawing')}
         >
-          <Text style={[S.tabText, activeTab === 'drawing' && S.tabTextOn]}>📄 Drawing</Text>
+          <Text style={[S.tabText, activeTab === 'drawing' && S.tabTextOn]}>Drawing</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[S.tab, activeTab === 'report' && S.tabOn]}
           onPress={() => setActiveTab('report')}
         >
-          <Text style={[S.tabText, activeTab === 'report' && S.tabTextOn]}>📋 Report</Text>
+          <Text style={[S.tabText, activeTab === 'report' && S.tabTextOn]}>Report</Text>
         </TouchableOpacity>
       </View>
 
@@ -845,7 +845,7 @@ export default function ReportScreen() {
 
           {drawings.length === 0 ? (
             <View style={S.centred}>
-              <Text style={S.emptyIcon}>📄</Text>
+              <Text style={S.emptyIcon}>PDF</Text>
               <Text style={S.emptyText}>No drawings were marked up in this inspection</Text>
             </View>
           ) : activeDrawing ? (
@@ -896,8 +896,8 @@ export default function ReportScreen() {
                 <View key={zone.id} style={S.zoneCard}>
                   <View style={S.zoneCardHeader}>
                     <Text style={S.zoneCardIcon}>
-                      {!zone.markup_type || zone.markup_type === 'pin' ? '📍'
-                        : zone.markup_type === 'rectangle' ? '⬜' : '✏️'}
+                      {!zone.markup_type || zone.markup_type === 'pin' ? 'Pin'
+                        : zone.markup_type === 'rectangle' ? 'Area' : 'Draw'}
                     </Text>
                     <Text style={S.zoneCardLabel}>{zone.label}</Text>
                     <Text style={S.zoneCardCount}>{zoneObs.length} obs</Text>
@@ -920,17 +920,17 @@ export default function ReportScreen() {
                         </View>
 
                         {getPhotos(obs).length > 0 && (
-                          <Text style={S.obsDetail}>📷 {getPhotos(obs).length} photo{getPhotos(obs).length !== 1 ? 's' : ''}</Text>
+                          <Text style={S.obsDetail}>Photos: {getPhotos(obs).length} photo{getPhotos(obs).length !== 1 ? 's' : ''}</Text>
                         )}
                         {!!obs.transcript && (
-                          <Text style={S.obsDetail} numberOfLines={3}>🎙 {obs.transcript}</Text>
+                          <Text style={S.obsDetail} numberOfLines={3}>Voice: {obs.transcript}</Text>
                         )}
                         {!!obs.notes && (
-                          <Text style={S.obsDetail} numberOfLines={2}>📝 {obs.notes}</Text>
+                          <Text style={S.obsDetail} numberOfLines={2}>Notes: {obs.notes}</Text>
                         )}
                         {measurements.length > 0 && (
                           <Text style={S.obsDetail}>
-                            📐 {measurements.map((m: any) => `${m.label || m.type}: ${m.value}${m.unit}`).join(', ')}
+                            Measurements: {measurements.map((m: any) => `${m.label || m.type}: ${m.value}${m.unit}`).join(', ')}
                           </Text>
                         )}
                       </View>

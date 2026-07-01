@@ -73,7 +73,7 @@ export default function ProjectsScreen() {
     >
       <View style={S.cardLeft}>
         <View style={S.cardIcon}>
-          <Text style={S.cardIconText}>🏗</Text>
+          <Text style={S.cardIconText}>P</Text>
         </View>
         <View style={S.cardInfo}>
           <Text style={S.cardName} numberOfLines={1}>{item.name}</Text>
@@ -81,7 +81,7 @@ export default function ProjectsScreen() {
           {item.address ? <Text style={S.cardAddress} numberOfLines={1}>{item.address}</Text> : null}
         </View>
       </View>
-      <Text style={S.cardArrow}>›</Text>
+      <Text style={S.cardArrow}>{'>'}</Text>
     </TouchableOpacity>
   )
 
@@ -97,7 +97,7 @@ export default function ProjectsScreen() {
 
       {/* Search */}
       <View style={S.searchWrap}>
-        <Text style={S.searchIcon}>🔍</Text>
+        <Text style={S.searchIcon}>Search:</Text>
         <TextInput
           style={S.searchInput}
           value={search}
@@ -111,7 +111,7 @@ export default function ProjectsScreen() {
         <View style={S.centred}><ActivityIndicator color={C.blue} size="large" /></View>
       ) : filtered.length === 0 ? (
         <View style={S.centred}>
-          <Text style={S.emptyIcon}>🏗</Text>
+          <Text style={S.emptyIcon}>--</Text>
           <Text style={S.emptyTitle}>{search ? 'No projects found' : 'No projects assigned'}</Text>
           <Text style={S.emptySub}>{search ? 'Try a different search' : 'Ask your admin to assign you to a project'}</Text>
         </View>

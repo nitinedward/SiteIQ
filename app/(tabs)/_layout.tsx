@@ -27,7 +27,7 @@ export default function TabLayout() {
         options={{
           title: 'Projects',
           tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 20 }}>🏗</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700' }}>Proj</Text>
           ),
         }}
       />
@@ -36,7 +36,7 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 20 }}>👤</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700' }}>Me</Text>
           ),
         }}
       />

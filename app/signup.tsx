@@ -75,7 +75,7 @@ export default function SignupScreen() {
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-              <Text style={styles.backArrow}>←</Text>
+              <Text style={styles.backArrow}>{'<'}</Text>
             </TouchableOpacity>
             <View style={styles.logoMark}>
               <Text style={styles.logoMarkText}>S</Text>

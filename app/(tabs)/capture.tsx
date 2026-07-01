@@ -5,7 +5,7 @@ import { C, FONT, RADIUS } from '../../lib/theme';
 export default function CaptureTab() {
   return (
     <View style={styles.container}>
-      <Text style={styles.icon}>📋</Text>
+      <Text style={styles.title}>Inspection Capture</Text>
       <Text style={styles.title}>Start Inspection</Text>
       <Text style={styles.subtitle}>
         Select a project and inspection zone to begin capturing photos and voice notes.
@@ -14,7 +14,7 @@ export default function CaptureTab() {
         style={styles.button}
         onPress={() => router.push('/(tabs)/projects')}
       >
-        <Text style={styles.buttonText}>Go to Projects →</Text>
+        <Text style={styles.buttonText}>{'Go to Projects >'}</Text>
       </TouchableOpacity>
     </View>
   );
