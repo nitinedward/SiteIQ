@@ -11,7 +11,7 @@ const supabase = createClient(
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZiYWV3dWFscWF4aGJtcWduaGR0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4NzAzNjMsImV4cCI6MjA5MzQ0NjM2M30.8s39SZtGq4r_0NXYhsAU0WdPSGqLfefm2YYK_JXjZbg'
 )
 
-type Project = { id: string; name: string; project_number: string; address: string; client_name: string; status: string; description: string }
+type Project = { id: string; name: string; project_number: string; address: string; client_name: string; status: string }
 type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; created_at: string }
 type Member  = { id: string; user_id: string; full_name: string; email: string; role: string }
 
@@ -132,7 +132,6 @@ export default function AdminPage() {
   const [newNumber, setNewNumber]   = useState('')
   const [newAddress, setNewAddress] = useState('')
   const [newClient, setNewClient]   = useState('')
-  const [newDesc, setNewDesc]       = useState('')
   const [newStatus, setNewStatus]   = useState('ACTIVE')
   const [saving, setSaving]         = useState(false)
 
@@ -223,13 +222,13 @@ export default function AdminPage() {
     setSaving(true)
     const { data: newProj } = await supabase.from('projects').insert({
       name: newName.trim(), project_number: newNumber.trim() || `PRJ-${Date.now().toString().slice(-6)}`,
-      address: newAddress.trim(), client_name: newClient.trim(), description: newDesc.trim(),
+      address: newAddress.trim(), client_name: newClient.trim(),
       firm_id: firmId, status: newStatus,
     }).select().single()
     if (newProj) {
       await supabase.from('project_members').insert({ project_id: newProj.id, user_id: adminUserId, added_by: adminUserId })
     }
-    setNewName(''); setNewNumber(''); setNewAddress(''); setNewClient(''); setNewDesc(''); setNewStatus('ACTIVE')
+    setNewName(''); setNewNumber(''); setNewAddress(''); setNewClient(''); setNewStatus('ACTIVE')
     setShowNewProject(false)
     setSaving(false)
     loadData()
@@ -243,7 +242,7 @@ export default function AdminPage() {
     const { data: updated } = await supabase.from('projects').update({
       name: editForm.name?.trim(), project_number: editForm.project_number?.trim(),
       address: editForm.address?.trim(), client_name: editForm.client_name?.trim(),
-      description: editForm.description?.trim(), status: editForm.status,
+      status: editForm.status,
     }).eq('id', selectedProject.id).select().single()
     if (updated) { setSelectedProject(updated as Project); setProjects(curr => curr.map(p => p.id === updated.id ? updated as Project : p)) }
     setEditingProject(false)
@@ -385,8 +384,8 @@ export default function AdminPage() {
 
   // ── helpers ───────────────────────────────────────────────────────────────
   const projectFormFields = (
-    vals: { name: string; number: string; address: string; client: string; desc: string; status: string },
-    set: { name: (v: string) => void; number: (v: string) => void; address: (v: string) => void; client: (v: string) => void; desc: (v: string) => void; status: (v: string) => void }
+    vals: { name: string; number: string; address: string; client: string; status: string },
+    set: { name: (v: string) => void; number: (v: string) => void; address: (v: string) => void; client: (v: string) => void; status: (v: string) => void }
   ) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div><FieldLabel>Project Name *</FieldLabel><FInp value={vals.name} onChange={set.name} placeholder="e.g. Auckland Mall Carpark" /></div>
@@ -396,7 +395,6 @@ export default function AdminPage() {
       </div>
       <div><FieldLabel>Address</FieldLabel><FInp value={vals.address} onChange={set.address} placeholder="123 Queen St, Auckland" /></div>
       <div><FieldLabel>Client</FieldLabel><FInp value={vals.client} onChange={set.client} placeholder="e.g. Auckland Council" /></div>
-      <div><FieldLabel>Description</FieldLabel><FTA value={vals.desc} onChange={set.desc} placeholder="Project scope…" rows={3} /></div>
     </div>
   )
 
@@ -523,8 +521,8 @@ export default function AdminPage() {
                 <Card style={{ padding: 16 }}>
                   <div style={{ fontFamily: 'var(--f-serif)', fontSize: 18, fontWeight: 600, marginBottom: 14 }}>New Project</div>
                   {projectFormFields(
-                    { name: newName, number: newNumber, address: newAddress, client: newClient, desc: newDesc, status: newStatus },
-                    { name: setNewName, number: setNewNumber, address: setNewAddress, client: setNewClient, desc: setNewDesc, status: setNewStatus }
+                    { name: newName, number: newNumber, address: newAddress, client: newClient, status: newStatus },
+                    { name: setNewName, number: setNewNumber, address: setNewAddress, client: setNewClient, status: setNewStatus }
                   )}
                   <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
                     <Btn variant="outline" onClick={() => setShowNewProject(false)} style={{ flex: 1 }}>Cancel</Btn>
@@ -598,13 +596,12 @@ export default function AdminPage() {
                     <>
                       <div style={{ fontFamily: 'var(--f-serif)', fontSize: 22, fontWeight: 600, color: 'var(--ink)', marginBottom: 18 }}>Edit Project</div>
                       {projectFormFields(
-                        { name: editForm.name ?? '', number: editForm.project_number ?? '', address: editForm.address ?? '', client: editForm.client_name ?? '', desc: editForm.description ?? '', status: editForm.status ?? 'ACTIVE' },
+                        { name: editForm.name ?? '', number: editForm.project_number ?? '', address: editForm.address ?? '', client: editForm.client_name ?? '', status: editForm.status ?? 'ACTIVE' },
                         {
                           name:    v => setEditForm(p => ({ ...p, name: v })),
                           number:  v => setEditForm(p => ({ ...p, project_number: v })),
                           address: v => setEditForm(p => ({ ...p, address: v })),
                           client:  v => setEditForm(p => ({ ...p, client_name: v })),
-                          desc:    v => setEditForm(p => ({ ...p, description: v })),
                           status:  v => setEditForm(p => ({ ...p, status: v })),
                         }
                       )}
