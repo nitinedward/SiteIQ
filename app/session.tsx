@@ -124,55 +124,68 @@ export default function SessionScreen() {
 
   const startRecording = async () => {
     try {
-      if (!speechModuleRef.current) {
-        const mod = await import('expo-speech-recognition');
-        speechModuleRef.current = mod.ExpoSpeechRecognitionModule;
+      console.log('[dictate] Starting...')
+      try {
+        if (!speechModuleRef.current) {
+          const mod = await import('expo-speech-recognition');
+          speechModuleRef.current = mod.ExpoSpeechRecognitionModule;
+        }
+        const ESR = speechModuleRef.current;
+
+        const { granted } = await ESR.requestPermissionsAsync();
+        if (!granted) { Alert.alert('Permission Required', 'Please allow microphone and speech recognition access.'); return; }
+
+        subscriptionsRef.current.forEach(s => s?.remove?.());
+        subscriptionsRef.current = [];
+
+        const s1 = ESR.addListener('result', (event: any) => {
+          if (!isRecordingRef.current) return;
+          const text = event.results[0]?.transcript ?? '';
+          if (event.isFinal) {
+            baseTextRef.current = (baseTextRef.current + ' ' + text).trim();
+            setPurpose(baseTextRef.current);
+          } else {
+            setPurpose((baseTextRef.current + ' ' + text).trim());
+          }
+        });
+
+        const s2 = ESR.addListener('end', () => {
+          isRecordingRef.current = false;
+          setIsRecording(false);
+          setIsTranscribing(false);
+        });
+
+        const s3 = ESR.addListener('error', (event: any) => {
+          if (!isRecordingRef.current) return;
+          console.error('[speech] Session error:', event.error);
+          isRecordingRef.current = false;
+          setIsRecording(false);
+          setIsTranscribing(false);
+          if (event.error !== 'aborted') {
+            Alert.alert('Transcription Failed', 'Could not recognise speech. Please try again.');
+          }
+        });
+
+        subscriptionsRef.current = [s1, s2, s3];
+        baseTextRef.current = purpose.trim();
+        isRecordingRef.current = true;
+        setIsRecording(true);
+        ESR.start({ lang: 'en-US', interimResults: true, continuous: true });
+      } catch (err: any) {
+        console.error('[speech] startRecording error:', err);
+        setIsRecording(false);
+        Alert.alert('Error', err.message || 'Could not start speech recognition.');
       }
-      const ESR = speechModuleRef.current;
-
-      const { granted } = await ESR.requestPermissionsAsync();
-      if (!granted) { Alert.alert('Permission Required', 'Please allow microphone and speech recognition access.'); return; }
-
-      subscriptionsRef.current.forEach(s => s?.remove?.());
-      subscriptionsRef.current = [];
-
-      const s1 = ESR.addListener('result', (event: any) => {
-        if (!isRecordingRef.current) return;
-        const text = event.results[0]?.transcript ?? '';
-        if (event.isFinal) {
-          baseTextRef.current = (baseTextRef.current + ' ' + text).trim();
-          setPurpose(baseTextRef.current);
-        } else {
-          setPurpose((baseTextRef.current + ' ' + text).trim());
-        }
-      });
-
-      const s2 = ESR.addListener('end', () => {
-        isRecordingRef.current = false;
-        setIsRecording(false);
-        setIsTranscribing(false);
-      });
-
-      const s3 = ESR.addListener('error', (event: any) => {
-        if (!isRecordingRef.current) return;
-        console.error('[speech] Session error:', event.error);
-        isRecordingRef.current = false;
-        setIsRecording(false);
-        setIsTranscribing(false);
-        if (event.error !== 'aborted') {
-          Alert.alert('Transcription Failed', 'Could not recognise speech. Please try again.');
-        }
-      });
-
-      subscriptionsRef.current = [s1, s2, s3];
-      baseTextRef.current = purpose.trim();
-      isRecordingRef.current = true;
-      setIsRecording(true);
-      ESR.start({ lang: 'en-US', interimResults: true, continuous: true });
     } catch (err: any) {
-      console.error('[speech] startRecording error:', err);
-      setIsRecording(false);
-      Alert.alert('Error', err.message || 'Could not start speech recognition.');
+      console.error('[dictate] CRASH:', err)
+      Alert.alert(
+        'Dictate Error',
+        'Error: ' + (err?.message ||
+          JSON.stringify(err) ||
+          'Unknown error') +
+        '\n\nStack: ' +
+          (err?.stack?.substring(0, 200) || 'none')
+      )
     }
   };
 
