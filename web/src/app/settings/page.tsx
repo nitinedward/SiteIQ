@@ -43,7 +43,7 @@ export default function SettingsPage() {
   const drawingInputRef  = useRef<HTMLInputElement>(null)
 
   const SUPABASE_URL      = 'https://vbaewualqaxhbmqgnhdt.supabase.co'
-  const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+  const SUPABASE_ANON_KEY = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '').replace(/^﻿/, '').trim()
 
   // ── load MS token (called on mount + after connect/disconnect) ──
   const loadMsToken = async () => {

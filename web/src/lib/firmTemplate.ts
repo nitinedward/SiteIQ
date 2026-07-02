@@ -6,7 +6,7 @@ const PizZip = require('pizzip')
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()
   if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY not set')
   return createClient(url, key)
 }
@@ -26,7 +26,7 @@ export async function fetchFirmTemplate(firmId: string): Promise<Buffer | null> 
     console.log('Fetching firm template:', firmData.report_template_url)
     const res = await fetch(firmData.report_template_url, {
       headers: {
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''}`,
+        Authorization: `Bearer ${(process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()}`,
       },
     })
     if (!res.ok) {

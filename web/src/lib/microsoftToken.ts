@@ -3,8 +3,9 @@ import { createClient } from '@supabase/supabase-js'
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL
     ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-    ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  (process.env.SUPABASE_SERVICE_ROLE_KEY
+    ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    ?? '').replace(/^﻿/, '').trim()
 )
 
 export type MicrosoftTokenRow = {

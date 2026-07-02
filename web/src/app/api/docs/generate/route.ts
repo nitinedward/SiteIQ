@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()
   if (!supabaseKey) {
     console.error('SUPABASE_SERVICE_ROLE_KEY not set')
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })

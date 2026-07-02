@@ -5,7 +5,7 @@ import AdmZip from 'adm-zip'
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()
   if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY not set')
   return createClient(url, key)
 }
@@ -161,7 +161,7 @@ async function fetchTemplateBuffer(firmId: string): Promise<Buffer> {
   console.log('[template] Fetching from URL:', firmData.report_template_url)
   const res = await fetch(firmData.report_template_url, {
     headers: {
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''}`,
+      Authorization: `Bearer ${(process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()}`,
     },
   })
   console.log('[template] Fetch status:', res.status, res.statusText)
