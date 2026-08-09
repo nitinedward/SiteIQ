@@ -24,7 +24,7 @@ const WEATHER_OPTIONS = [
 ];
 
 type Step = 'details' | 'capture';
-type Drawing = { id: string; title: string; number: string; revision: string; file_url: string };
+type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; preview_url: string | null };
 
 function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; metering: number }) {
   const barAnims = useRef(Array.from({ length: BAR_COUNT }, () => new Animated.Value(0.05))).current;
@@ -115,7 +115,7 @@ export default function SessionScreen() {
   };
 
   const fetchDrawings = async () => {
-    const { data } = await supabase.from('drawings').select('id,title,number,revision,file_url').eq('project_id', String(project_id)).order('number', { ascending: true });
+    const { data } = await supabase.from('drawings').select('id,title,number,revision,file_url,preview_url').eq('project_id', String(project_id)).order('number', { ascending: true });
     setAllDrawings(data as Drawing[] ?? []);
   };
 
@@ -430,7 +430,7 @@ export default function SessionScreen() {
           <Text style={S.hint}>Tap a drawing to open the PDF and mark inspection zones</Text>
           {inspDrawings.map(drawing => (
             <TouchableOpacity key={drawing.id} style={S.drawingRow}
-              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: drawing.id, title: drawing.title, file_url: drawing.file_url, project_id: String(project_id), inspection_id: inspectionId, view_only: 'false' } })}
+              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: drawing.id, title: drawing.title, file_url: drawing.file_url, preview_url: drawing.preview_url ?? '', project_id: String(project_id), inspection_id: inspectionId, view_only: 'false' } })}
               activeOpacity={0.7}>
               <View style={S.drawBadge}><Text style={S.drawBadgeText}>{drawing.number || '-'}</Text></View>
               <View style={{ flex: 1 }}>

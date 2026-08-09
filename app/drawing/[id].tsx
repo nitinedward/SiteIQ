@@ -2,12 +2,11 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
   ActivityIndicator, Modal, TextInput, ScrollView,
   Dimensions, KeyboardAvoidingView, Platform,
-  PanResponder, Animated,
+  PanResponder, Animated, Image,
 } from 'react-native';
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '../../lib/supabase';
-import Pdf from 'react-native-pdf';
 import Svg, { Circle, Rect, Path, G } from 'react-native-svg';
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -32,6 +31,7 @@ export default function DrawingViewerScreen() {
   const drawingId    = params.id as string;
   const title        = params.title as string;
   const fileUrl      = params.file_url as string;
+  const previewUrl   = params.preview_url as string | undefined;
   const projectId    = params.project_id as string;
   const inspectionId = params.inspection_id as string;
   const viewOnly     = params.view_only === 'true';
@@ -41,7 +41,6 @@ export default function DrawingViewerScreen() {
   const setZonesAndRef = (z: Zone[]) => { zonesRef.current = z; setZones(z); };
   const [showPdf, setShowPdf]     = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [pdfReady, setPdfReady]   = useState(false);
   const [pdfError, setPdfError]   = useState('');
   const [tool, setTool]           = useState<Tool>('pin');
   const toolRef                   = useRef<Tool>('pin');
@@ -97,7 +96,28 @@ export default function DrawingViewerScreen() {
   const tapStart   = useRef<{ x: number; y: number; t: number } | null>(null);
   const hasMoved   = useRef(false);
 
-  const encodedUrl = encodeURI(decodeURIComponent(fileUrl));
+  // Load the pre-rendered preview image's real dimensions so the container
+  // gets the correct aspect ratio. Using a plain <Image> instead of the
+  // native PDF viewer avoids react-native-pdf's unreliable internal scaling,
+  // which was clipping large landscape sheets (A3/A1).
+  const loadPreviewDimensions = useCallback(() => {
+    if (!previewUrl) { setIsLoading(false); setPdfError('No preview available for this drawing. Please re-upload it from the web app.'); return; }
+    setIsLoading(true); setPdfError('');
+    Image.getSize(
+      previewUrl,
+      (w, h) => {
+        const computedH = SW * (h / w);
+        naturalH.current = computedH;
+        pdfDims.current  = { pdfWidth: w, pdfHeight: h };
+        setPdfH(computedH);
+        applyTransform(0, 0, 1);
+        setIsLoading(false);
+      },
+      () => { setIsLoading(false); setPdfError('Could not load drawing.'); }
+    );
+  }, [previewUrl]);
+
+  useEffect(() => { if (showPdf) loadPreviewDimensions(); }, [showPdf, loadPreviewDimensions]);
 
   const updateTool = (t: Tool) => {
     toolRef.current = t; setTool(t);
@@ -358,40 +378,18 @@ export default function DrawingViewerScreen() {
           )}
           <View ref={pdfWrapRef} style={S.pdfWrap} onLayout={() => { measureWrap(); setTimeout(measureWrap, 50); }} {...panResponder.panHandlers}>
             <Animated.View style={{ position: 'absolute', top: 0, left: 0, width: SW, height: pdfH, transform: [{ translateX: animTx }, { translateY: animTy }, { scale: animScale }] }}>
-              <Pdf
-                // react-native-pdf doesn't re-layout its native view when style
-                // height/width change after the first render — it bakes in
-                // whatever size it was mounted with. We mount it once with a
-                // throwaway size just to read the real page dimensions, then
-                // force a full remount (via key) with the correct size baked
-                // in from creation. Without this, wide/landscape sheets (A3/A1)
-                // render at the wrong aspect ratio and get clipped.
-                key={pdfReady ? 'pdf-ready' : 'pdf-loading'}
-                source={{ uri: encodedUrl, cache: true }}
-                style={{ width: SW, height: pdfH, backgroundColor: '#F1F5F9' }}
-                onLoadComplete={(_p, _pa, size) => {
-                  if (size) {
-                    const h = SW * (size.height / size.width);
-                    naturalH.current = h; pdfDims.current = { pdfWidth: size.width, pdfHeight: size.height };
-                    setPdfH(h); applyTransform(0, 0, 1);
-                  }
-                  if (!pdfReady) {
-                    // first load: now that we know the real size, force the remount
-                    setPdfReady(true);
-                  } else {
-                    // second load: this instance was created with the correct
-                    // size from the start — safe to reveal it now
-                    setIsLoading(false);
-                  }
-                }}
-                onError={() => { setIsLoading(false); setPdfError('Could not load drawing.'); }}
-                enablePaging={false} horizontal={false} fitPolicy={2} trustAllCerts={false} scrollEnabled={false}
-              />
+              {!isLoading && !pdfError && previewUrl && (
+                <Image
+                  source={{ uri: previewUrl }}
+                  style={{ width: SW, height: pdfH, backgroundColor: '#F1F5F9' }}
+                  resizeMode="contain"
+                />
+              )}
               {!isLoading && renderSvg(pdfH)}
               {!isLoading && renderLabels()}
             </Animated.View>
             {isLoading && <View style={S.overlay}><ActivityIndicator size="large" color="#2563EB" /><Text style={S.loadingTxt}>Loading drawing...</Text></View>}
-            {!!pdfError && <View style={S.overlay}><Text style={S.errTxt}>{pdfError}</Text><TouchableOpacity onPress={() => { setPdfError(''); setIsLoading(true); }}><Text style={S.retryTxt}>Tap to retry</Text></TouchableOpacity></View>}
+            {!!pdfError && <View style={S.overlay}><Text style={S.errTxt}>{pdfError}</Text><TouchableOpacity onPress={loadPreviewDimensions}><Text style={S.retryTxt}>Tap to retry</Text></TouchableOpacity></View>}
           </View>
           {zones.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>

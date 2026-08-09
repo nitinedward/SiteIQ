@@ -12,10 +12,9 @@ import {
   FlatList,
   Alert,
 } from 'react-native';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '../../lib/supabase';
-import Pdf from 'react-native-pdf';
 import Svg, { Circle, Rect, Path, G } from 'react-native-svg';
 import {
   PanResponder,
@@ -61,6 +60,7 @@ type Drawing = {
   title: string;
   number: string;
   file_url: string;
+  preview_url: string | null;
 };
 
 type Inspection = {
@@ -278,7 +278,29 @@ function DrawingTab({
   const lastTouch  = useRef<Pt>({ x: 0, y: 0 });
 
   const drawingZones = zones.filter(z => z.drawing_id === drawing.id);
-  const encodedUrl   = encodeURI(decodeURIComponent(drawing.file_url));
+
+  // Load the pre-rendered preview image's real dimensions so the container
+  // gets the correct aspect ratio. Using a plain <Image> instead of the
+  // native PDF viewer avoids react-native-pdf's unreliable internal scaling,
+  // which was clipping large landscape sheets (A3/A1).
+  const loadPreviewDimensions = useCallback(() => {
+    if (!drawing.preview_url) { setIsLoading(false); setPdfError('No preview available for this drawing. Please re-upload it from the web app.'); return; }
+    setIsLoading(true); setPdfError('');
+    Image.getSize(
+      drawing.preview_url,
+      (w, h) => {
+        const computedH = SW * (h / w);
+        naturalH.current = computedH;
+        pdfDims.current  = { pdfWidth: w, pdfHeight: h };
+        setPdfH(computedH);
+        applyTransform(0, 0, 1);
+        setIsLoading(false);
+      },
+      () => { setIsLoading(false); setPdfError('Could not load drawing.'); }
+    );
+  }, [drawing.preview_url]);
+
+  useEffect(() => { loadPreviewDimensions(); }, [loadPreviewDimensions]);
 
   const measureWrap = () => {
     pdfWrapRef.current?.measure((_x, _y, _w, _h, px, py) => {
@@ -464,23 +486,13 @@ function DrawingTab({
           width: SW, height: pdfH,
           transform: [{ translateX: animTx }, { translateY: animTy }, { scale: animScale }],
         }}>
-          <Pdf
-            source={{ uri: encodedUrl, cache: true }}
-            style={{ width: SW, height: pdfH, backgroundColor: C.bgMuted }}
-            onLoadComplete={(_p, _pa, size) => {
-              setIsLoading(false);
-              if (size) {
-                const h = SW * (size.height / size.width);
-                naturalH.current = h;
-                pdfDims.current  = { pdfWidth: size.width, pdfHeight: size.height };
-                setPdfH(h);
-                applyTransform(0, 0, 1);
-              }
-            }}
-            onError={() => { setIsLoading(false); setPdfError('Could not load drawing.'); }}
-            enablePaging={false} horizontal={false} fitPolicy={0}
-            trustAllCerts={false} scrollEnabled={false}
-          />
+          {!isLoading && !pdfError && drawing.preview_url && (
+            <Image
+              source={{ uri: drawing.preview_url }}
+              style={{ width: SW, height: pdfH, backgroundColor: C.bgMuted }}
+              resizeMode="contain"
+            />
+          )}
           {!isLoading && renderSvg()}
           {!isLoading && renderLabels()}
         </Animated.View>

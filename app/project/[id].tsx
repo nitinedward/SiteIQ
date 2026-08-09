@@ -14,7 +14,7 @@ type Project = {
 };
 type Drawing = {
   id: string; title: string; number: string; revision: string;
-  file_url: string; created_at: string;
+  file_url: string; preview_url: string | null; created_at: string;
 };
 type Inspection = {
   id: string; date: string; report_no: string; weather: string;
@@ -113,7 +113,7 @@ export default function ProjectDetailScreen() {
             </View>
           ) : drawings.map(d => (
             <TouchableOpacity key={d.id} style={S.row}
-              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, file_url: d.file_url, project_id: project.id, view_only: 'true' } })}
+              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, file_url: d.file_url, preview_url: d.preview_url ?? '', project_id: project.id, view_only: 'true' } })}
               activeOpacity={0.7}>
               <View style={S.rowBadge}>
                 <Text style={S.rowBadgeText}>{d.number || '-'}</Text>

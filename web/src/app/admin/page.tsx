@@ -389,6 +389,32 @@ export default function AdminPage() {
     setDeletingReportId(null)
   }
 
+  // Renders page 1 of a single-page PDF to a PNG blob. Used to generate a
+  // preview image per drawing — the mobile app displays this image instead
+  // of rendering the raw PDF natively, since large/landscape (A3/A1) sheets
+  // were getting clipped by the native PDF viewer's internal scaling.
+  const renderPdfPageToPng = async (pdfBytes: Uint8Array): Promise<Blob> => {
+    const pdfjsLib = await import('pdfjs-dist')
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`
+    const pdf  = await pdfjsLib.getDocument({ data: pdfBytes }).promise
+    const page = await pdf.getPage(1)
+
+    const raw = page.getViewport({ scale: 1 })
+    const MAX_DIM = 2200
+    const scale = Math.min(3, MAX_DIM / Math.max(raw.width, raw.height))
+    const viewport = page.getViewport({ scale })
+
+    const canvas  = document.createElement('canvas')
+    canvas.width  = viewport.width
+    canvas.height = viewport.height
+    const ctx = canvas.getContext('2d')!
+    await page.render({ canvasContext: ctx as unknown as CanvasRenderingContext2D, viewport }).promise
+
+    return new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('PNG export failed')), 'image/png', 0.92)
+    })
+  }
+
   const handlePdfUpload = async (file: File) => {
     if (!selectedProject) return
 
@@ -441,6 +467,24 @@ export default function AdminPage() {
 
         const { data: { publicUrl } } = supabase.storage.from('drawings').getPublicUrl(fileName)
 
+        // Generate + upload a preview PNG. Non-fatal if it fails — the
+        // drawing still saves, mobile just falls back to "no preview".
+        let previewUrl: string | null = null
+        try {
+          const previewBlob = await renderPdfPageToPng(pdfBytes)
+          const previewFileName = `drawing-${batchId}-p${i + 1}-preview.png`
+          const { error: pvErr } = await supabase.storage
+            .from('drawings')
+            .upload(previewFileName, previewBlob, { contentType: 'image/png', upsert: true })
+          if (pvErr) {
+            console.error('[split] Preview upload failed on page', i + 1, pvErr)
+          } else {
+            previewUrl = supabase.storage.from('drawings').getPublicUrl(previewFileName).data.publicUrl
+          }
+        } catch (pvErr) {
+          console.error('[split] Preview render failed on page', i + 1, pvErr)
+        }
+
         const { error: insErr } = await supabase.from('drawings').insert({
           project_id: selectedProject.id,
           title: pageCount > 1 ? `${baseName} — Page ${i + 1} of ${pageCount}` : baseName,
@@ -448,6 +492,7 @@ export default function AdminPage() {
           revision: 'A',
           file_url: publicUrl,
           file_name: fileName,
+          preview_url: previewUrl,
         })
         if (insErr) {
           console.error('[split] Insert failed on page', i + 1, insErr)
