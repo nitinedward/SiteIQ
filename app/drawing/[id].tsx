@@ -369,7 +369,10 @@ export default function DrawingViewerScreen() {
                   }
                 }}
                 onError={() => { setIsLoading(false); setPdfError('Could not load drawing.'); }}
-                enablePaging={false} horizontal={false} fitPolicy={0} trustAllCerts={false} scrollEnabled={false}
+                // fitPolicy=2 (contain) instead of 0 (fit-width) — fitPolicy=0 was
+                // clipping large landscape sheets (A3/A1) on some devices instead of
+                // scaling them down to fit the computed container.
+                enablePaging={false} horizontal={false} fitPolicy={2} trustAllCerts={false} scrollEnabled={false}
               />
               {!isLoading && renderSvg(pdfH)}
               {!isLoading && renderLabels()}
