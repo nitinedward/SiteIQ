@@ -41,6 +41,7 @@ export default function DrawingViewerScreen() {
   const setZonesAndRef = (z: Zone[]) => { zonesRef.current = z; setZones(z); };
   const [showPdf, setShowPdf]     = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [pdfReady, setPdfReady]   = useState(false);
   const [pdfError, setPdfError]   = useState('');
   const [tool, setTool]           = useState<Tool>('pin');
   const toolRef                   = useRef<Tool>('pin');
@@ -358,20 +359,32 @@ export default function DrawingViewerScreen() {
           <View ref={pdfWrapRef} style={S.pdfWrap} onLayout={() => { measureWrap(); setTimeout(measureWrap, 50); }} {...panResponder.panHandlers}>
             <Animated.View style={{ position: 'absolute', top: 0, left: 0, width: SW, height: pdfH, transform: [{ translateX: animTx }, { translateY: animTy }, { scale: animScale }] }}>
               <Pdf
+                // react-native-pdf doesn't re-layout its native view when style
+                // height/width change after the first render — it bakes in
+                // whatever size it was mounted with. We mount it once with a
+                // throwaway size just to read the real page dimensions, then
+                // force a full remount (via key) with the correct size baked
+                // in from creation. Without this, wide/landscape sheets (A3/A1)
+                // render at the wrong aspect ratio and get clipped.
+                key={pdfReady ? 'pdf-ready' : 'pdf-loading'}
                 source={{ uri: encodedUrl, cache: true }}
                 style={{ width: SW, height: pdfH, backgroundColor: '#F1F5F9' }}
                 onLoadComplete={(_p, _pa, size) => {
-                  setIsLoading(false);
                   if (size) {
                     const h = SW * (size.height / size.width);
                     naturalH.current = h; pdfDims.current = { pdfWidth: size.width, pdfHeight: size.height };
                     setPdfH(h); applyTransform(0, 0, 1);
                   }
+                  if (!pdfReady) {
+                    // first load: now that we know the real size, force the remount
+                    setPdfReady(true);
+                  } else {
+                    // second load: this instance was created with the correct
+                    // size from the start — safe to reveal it now
+                    setIsLoading(false);
+                  }
                 }}
                 onError={() => { setIsLoading(false); setPdfError('Could not load drawing.'); }}
-                // fitPolicy=2 (contain) instead of 0 (fit-width) — fitPolicy=0 was
-                // clipping large landscape sheets (A3/A1) on some devices instead of
-                // scaling them down to fit the computed container.
                 enablePaging={false} horizontal={false} fitPolicy={2} trustAllCerts={false} scrollEnabled={false}
               />
               {!isLoading && renderSvg(pdfH)}
