@@ -123,7 +123,6 @@ export default function AdminPage() {
   const [drawings, setDrawings]               = useState<Drawing[]>([])
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([])
   const [showNewProject, setShowNewProject]   = useState(false)
-  const [uploading, setUploading]             = useState(false)
   const [savingAssignment, setSavingAssignment] = useState(false)
 
   const [editingProject, setEditingProject] = useState(false)
@@ -250,27 +249,23 @@ export default function AdminPage() {
     setSaving(false)
   }
 
-  const uploadDrawing = async (projectId: string) => {
-    const input = document.createElement('input')
-    input.type = 'file'; input.accept = 'application/pdf'
-    input.onchange = async (e: any) => {
-      const file = e.target.files[0]; if (!file) return
-      setUploading(true)
-      const fileName = `drawing-${Date.now()}.pdf`
-      const { error } = await supabase.storage.from('drawings').upload(fileName, file)
-      if (error) { alert('Upload failed: ' + error.message); setUploading(false); return }
-      const { data: { publicUrl } } = supabase.storage.from('drawings').getPublicUrl(fileName)
-      await supabase.from('drawings').insert({ project_id: projectId, title: file.name.replace('.pdf', ''), number: '', revision: 'A', file_url: publicUrl, file_name: fileName })
-      setUploading(false)
-      if (selectedProject) selectProject(selectedProject)
-    }
-    input.click()
+  // Refresh only the drawings list — WITHOUT resetting projTab (stays on Drawings tab)
+  const reloadDrawings = async () => {
+    if (!selectedProject) return
+    const { data } = await supabase
+      .from('drawings')
+      .select('*')
+      .eq('project_id', selectedProject.id)
+      .order('created_at', { ascending: false })
+    setDrawings(data ?? [])
   }
 
   const deleteDrawing = async (id: string) => {
     if (!confirm('Delete this drawing?')) return
-    await supabase.from('drawings').delete().eq('id', id)
-    if (selectedProject) selectProject(selectedProject)
+    const { error } = await supabase.from('drawings').delete().eq('id', id)
+    if (error) { alert('Delete failed: ' + error.message); return }
+    // Stay on the Drawings tab — just refresh the list
+    await reloadDrawings()
   }
 
   const deleteProject = async (id: string) => {
@@ -346,39 +341,79 @@ export default function AdminPage() {
 
   const handlePdfUpload = async (file: File) => {
     if (!selectedProject) return
-    setUploadProgress('Processing PDF… Splitting into individual pages')
+
+    console.log('[drawing] File size:', file.size, 'bytes  type:', file.type)
+
+    // Generous size guard — A3 drawings are large. Splitting below keeps each
+    // uploaded object small, but reject anything absurd up front.
+    const MAX_SIZE = 100 * 1024 * 1024 // 100MB
+    if (file.size > MAX_SIZE) {
+      alert(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 100 MB.`)
+      return
+    }
+
+    setUploadProgress('Reading PDF…')
     try {
       const arrayBuffer = await file.arrayBuffer()
-      const pdfjsLib = await import('pdfjs-dist')
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`
-      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
-      const pdf = await loadingTask.promise
-      const pageCount = pdf.numPages
 
-      // Upload the PDF to storage
-      const fileName = `drawing-${Date.now()}-${file.name.replace(/\s/g, '-')}`
-      const { error } = await supabase.storage.from('drawings').upload(fileName, file)
-      if (error) { alert('Upload failed: ' + error.message); setUploadProgress(null); return }
-      const { data: { publicUrl } } = supabase.storage.from('drawings').getPublicUrl(fileName)
+      // Use pdf-lib to actually SPLIT the PDF into one file per page.
+      // Runs entirely client-side (no serverless timeout), page size (A3/A1) irrelevant.
+      const { PDFDocument } = await import('pdf-lib')
+      const sourcePdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true })
+      const pageCount = sourcePdf.getPageCount()
+      console.log('[split] Total pages:', pageCount)
 
-      // Insert one drawing record per page
-      for (let n = 1; n <= pageCount; n++) {
-        await supabase.from('drawings').insert({
+      const baseName = file.name.replace(/\.pdf$/i, '')
+      const batchId  = Date.now()
+
+      for (let i = 0; i < pageCount; i++) {
+        setUploadProgress(`Splitting & uploading page ${i + 1} of ${pageCount}…`)
+
+        // Build a standalone single-page PDF for page i
+        const newPdf = await PDFDocument.create()
+        const [copiedPage] = await newPdf.copyPages(sourcePdf, [i])
+        newPdf.addPage(copiedPage)
+        const pdfBytes = await newPdf.save()
+        const pageBlob = new Blob([pdfBytes as unknown as BlobPart], { type: 'application/pdf' })
+        console.log('[split] Page', i + 1, 'size:', pageBlob.size, 'bytes')
+
+        // Each page gets its OWN storage object → its own file_url (fixes bug 4)
+        const fileName = `drawing-${batchId}-p${i + 1}.pdf`
+        const { error: upErr } = await supabase.storage
+          .from('drawings')
+          .upload(fileName, pageBlob, { contentType: 'application/pdf', upsert: true })
+        if (upErr) {
+          console.error('[split] Upload failed on page', i + 1, upErr)
+          alert(`Upload failed on page ${i + 1}: ${upErr.message}`)
+          setUploadProgress(null)
+          return
+        }
+
+        const { data: { publicUrl } } = supabase.storage.from('drawings').getPublicUrl(fileName)
+
+        const { error: insErr } = await supabase.from('drawings').insert({
           project_id: selectedProject.id,
-          title: `${file.name.replace('.pdf', '')} — Page ${n} of ${pageCount}`,
-          number: `DWG-${String(n).padStart(3, '0')}`,
+          title: pageCount > 1 ? `${baseName} — Page ${i + 1} of ${pageCount}` : baseName,
+          number: `DWG-${String(i + 1).padStart(3, '0')}`,
           revision: 'A',
           file_url: publicUrl,
           file_name: fileName,
         })
+        if (insErr) {
+          console.error('[split] Insert failed on page', i + 1, insErr)
+          alert(`Saving page ${i + 1} failed: ${insErr.message}`)
+          setUploadProgress(null)
+          return
+        }
       }
 
       setUploadProgress(null)
       alert(`Drawing uploaded and split into ${pageCount} page${pageCount > 1 ? 's' : ''}`)
-      selectProject(selectedProject)
-    } catch (err) {
-      console.error(err)
-      alert('Upload failed. Please try again.')
+      // Stay on the Drawings tab — just refresh the list
+      await reloadDrawings()
+    } catch (err: any) {
+      console.error('[drawing] Upload error:', err)
+      alert('Upload failed: ' + (err?.message ?? 'Please try again.'))
       setUploadProgress(null)
     }
   }
