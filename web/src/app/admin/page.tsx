@@ -13,7 +13,7 @@ const supabase = createClient(
 )
 
 type Project = { id: string; name: string; project_number: string; address: string; client_name: string; status: string }
-type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; created_at: string }
+type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; file_name: string; created_at: string }
 type Member  = { id: string; user_id: string; full_name: string; email: string; role: string }
 
 const STATUS_OPTIONS = ['ACTIVE', 'ON_HOLD', 'COMPLETED'] as const
@@ -265,9 +265,22 @@ export default function AdminPage() {
 
   const deleteDrawing = async (id: string) => {
     if (!confirm('Delete this drawing?')) return
+    const target = drawings.find(d => d.id === id)
     const { error } = await supabase.from('drawings').delete().eq('id', id)
     if (error) { alert('Delete failed: ' + error.message); return }
     setSelectedDrawingIds(curr => curr.filter(i => i !== id))
+
+    // Clean up the storage object too — but only if no other remaining
+    // drawing row still points at the same file (legacy pre-split rows
+    // could share a file_name).
+    if (target?.file_name) {
+      const stillReferenced = drawings.some(d => d.id !== id && d.file_name === target.file_name)
+      if (!stillReferenced) {
+        const { error: sErr } = await supabase.storage.from('drawings').remove([target.file_name])
+        if (sErr) console.error('[delete] storage cleanup failed:', sErr)
+      }
+    }
+
     // Stay on the Drawings tab — just refresh the list
     await reloadDrawings()
   }
@@ -284,9 +297,22 @@ export default function AdminPage() {
     if (selectedDrawingIds.length === 0) return
     if (!confirm(`Delete ${selectedDrawingIds.length} selected drawing${selectedDrawingIds.length > 1 ? 's' : ''}?`)) return
     setDeletingSelected(true)
+    const targets = drawings.filter(d => selectedDrawingIds.includes(d.id))
     const { error } = await supabase.from('drawings').delete().in('id', selectedDrawingIds)
+    if (error) { setDeletingSelected(false); alert('Delete failed: ' + error.message); return }
+
+    // Clean up storage objects — skip any file_name still referenced by a
+    // drawing row that wasn't part of this deletion.
+    const remaining = drawings.filter(d => !selectedDrawingIds.includes(d.id))
+    const stillReferenced = new Set(remaining.map(d => d.file_name).filter(Boolean))
+    const orphanedFiles = [...new Set(targets.map(d => d.file_name).filter(Boolean))]
+      .filter(fn => !stillReferenced.has(fn))
+    if (orphanedFiles.length > 0) {
+      const { error: sErr } = await supabase.storage.from('drawings').remove(orphanedFiles)
+      if (sErr) console.error('[bulk-delete] storage cleanup failed:', sErr)
+    }
+
     setDeletingSelected(false)
-    if (error) { alert('Delete failed: ' + error.message); return }
     setSelectedDrawingIds([])
     // Stay on the Drawings tab — just refresh the list
     await reloadDrawings()
