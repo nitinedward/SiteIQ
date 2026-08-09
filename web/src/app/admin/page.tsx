@@ -121,6 +121,8 @@ export default function AdminPage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [projTab, setProjTab]                 = useState<'reports' | 'drawings' | 'engineers'>('reports')
   const [drawings, setDrawings]               = useState<Drawing[]>([])
+  const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([])
+  const [deletingSelected, setDeletingSelected]     = useState(false)
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([])
   const [showNewProject, setShowNewProject]   = useState(false)
   const [savingAssignment, setSavingAssignment] = useState(false)
@@ -194,6 +196,7 @@ export default function AdminPage() {
     setSelectedProject(project)
     setEditingProject(false)
     setProjTab('reports')
+    setSelectedDrawingIds([])
     const [{ data: d }, { data: pm }] = await Promise.all([
       supabase.from('drawings').select('*').eq('project_id', project.id).order('created_at', { ascending: false }),
       supabase.from('project_members').select('user_id').eq('project_id', project.id),
@@ -264,6 +267,27 @@ export default function AdminPage() {
     if (!confirm('Delete this drawing?')) return
     const { error } = await supabase.from('drawings').delete().eq('id', id)
     if (error) { alert('Delete failed: ' + error.message); return }
+    setSelectedDrawingIds(curr => curr.filter(i => i !== id))
+    // Stay on the Drawings tab — just refresh the list
+    await reloadDrawings()
+  }
+
+  const toggleDrawingSelected = (id: string) => {
+    setSelectedDrawingIds(curr => curr.includes(id) ? curr.filter(i => i !== id) : [...curr, id])
+  }
+
+  const toggleSelectAllDrawings = () => {
+    setSelectedDrawingIds(curr => curr.length === drawings.length ? [] : drawings.map(d => d.id))
+  }
+
+  const deleteSelectedDrawings = async () => {
+    if (selectedDrawingIds.length === 0) return
+    if (!confirm(`Delete ${selectedDrawingIds.length} selected drawing${selectedDrawingIds.length > 1 ? 's' : ''}?`)) return
+    setDeletingSelected(true)
+    const { error } = await supabase.from('drawings').delete().in('id', selectedDrawingIds)
+    setDeletingSelected(false)
+    if (error) { alert('Delete failed: ' + error.message); return }
+    setSelectedDrawingIds([])
     // Stay on the Drawings tab — just refresh the list
     await reloadDrawings()
   }
@@ -860,21 +884,58 @@ export default function AdminPage() {
                         No drawings yet — upload a PDF above
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {drawings.map(d => (
-                          <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 14, background: 'var(--stone)', border: '1px solid var(--line)', borderRadius: 8, padding: '14px 20px' }}>
-                            <div style={{ background: 'var(--accent2)', color: 'var(--accent)', fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 5, fontFamily: 'var(--f-mono)', flexShrink: 0 }}>
-                              {d.number || '—'}
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
-                              <div style={{ fontSize: 12, color: 'var(--mid)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>Rev {d.revision}</div>
-                            </div>
-                            <a href={d.file_url} target="_blank" rel="noreferrer" style={{ fontSize: 14, color: 'var(--accent)', textDecoration: 'none', fontWeight: 500, flexShrink: 0 }}>View</a>
-                            <button onClick={() => deleteDrawing(d.id)} style={{ background: 'var(--red2)', color: 'var(--red)', border: '1px solid #f5c6c0', borderRadius: 6, padding: '5px 12px', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>Delete</button>
-                          </div>
-                        ))}
-                      </div>
+                      <>
+                        {/* Select-all / bulk-delete toolbar */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '4px 4px 12px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--dark)', cursor: 'pointer', userSelect: 'none' }}>
+                            <input
+                              type="checkbox"
+                              checked={drawings.length > 0 && selectedDrawingIds.length === drawings.length}
+                              ref={el => { if (el) el.indeterminate = selectedDrawingIds.length > 0 && selectedDrawingIds.length < drawings.length }}
+                              onChange={toggleSelectAllDrawings}
+                              style={{ width: 16, height: 16, cursor: 'pointer' }}
+                            />
+                            Select all
+                          </label>
+                          {selectedDrawingIds.length > 0 && (
+                            <>
+                              <span style={{ fontSize: 13, color: 'var(--mid)' }}>{selectedDrawingIds.length} selected</span>
+                              <button
+                                onClick={deleteSelectedDrawings}
+                                disabled={deletingSelected}
+                                style={{ background: 'var(--red2)', color: 'var(--red)', border: '1px solid #f5c6c0', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: deletingSelected ? 'not-allowed' : 'pointer', opacity: deletingSelected ? 0.6 : 1 }}
+                              >
+                                {deletingSelected ? 'Deleting…' : `Delete Selected (${selectedDrawingIds.length})`}
+                              </button>
+                            </>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {drawings.map(d => {
+                            const checked = selectedDrawingIds.includes(d.id)
+                            return (
+                              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 14, background: checked ? 'var(--accent2)' : 'var(--stone)', border: `1px solid ${checked ? 'var(--accent)' : 'var(--line)'}`, borderRadius: 8, padding: '14px 20px' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleDrawingSelected(d.id)}
+                                  style={{ width: 16, height: 16, cursor: 'pointer', flexShrink: 0 }}
+                                />
+                                <div style={{ background: 'var(--accent2)', color: 'var(--accent)', fontSize: 11, fontWeight: 600, padding: '5px 12px', borderRadius: 5, fontFamily: 'var(--f-mono)', flexShrink: 0 }}>
+                                  {d.number || '—'}
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
+                                  <div style={{ fontSize: 12, color: 'var(--mid)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>Rev {d.revision}</div>
+                                </div>
+                                <a href={d.file_url} target="_blank" rel="noreferrer" style={{ fontSize: 14, color: 'var(--accent)', textDecoration: 'none', fontWeight: 500, flexShrink: 0 }}>View</a>
+                                <button onClick={() => deleteDrawing(d.id)} style={{ background: 'var(--red2)', color: 'var(--red)', border: '1px solid #f5c6c0', borderRadius: 6, padding: '5px 12px', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>Delete</button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </>
                     )}
                   </div>
                 )}
