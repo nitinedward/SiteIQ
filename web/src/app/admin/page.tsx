@@ -13,7 +13,7 @@ const supabase = createClient(
 )
 
 type Project = { id: string; name: string; project_number: string; address: string; client_name: string; status: string }
-type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; file_name: string; created_at: string }
+type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; file_name: string; preview_url?: string | null; created_at: string }
 type Member  = { id: string; user_id: string; full_name: string; email: string; role: string }
 
 const STATUS_OPTIONS = ['ACTIVE', 'ON_HOLD', 'COMPLETED'] as const
@@ -150,6 +150,7 @@ export default function AdminPage() {
   const [currentUserId, setCurrentUserId]         = useState('')
   const [copiedCode, setCopiedCode]               = useState(false)
   const [uploadProgress, setUploadProgress]       = useState<string | null>(null)
+  const [uploadMsg, setUploadMsg]                 = useState<{ ok: boolean; text: string } | null>(null)
 
   const drawingInputRef = useRef<HTMLInputElement>(null)
 
@@ -267,7 +268,7 @@ export default function AdminPage() {
     if (!confirm('Delete this drawing?')) return
     const target = drawings.find(d => d.id === id)
     const { error } = await supabase.from('drawings').delete().eq('id', id)
-    if (error) { alert('Delete failed: ' + error.message); return }
+    if (error) { setUploadMsg({ ok: false, text: 'Delete failed: ' + error.message }); return }
     setSelectedDrawingIds(curr => curr.filter(i => i !== id))
 
     // Clean up the storage object too — but only if no other remaining
@@ -299,7 +300,7 @@ export default function AdminPage() {
     setDeletingSelected(true)
     const targets = drawings.filter(d => selectedDrawingIds.includes(d.id))
     const { error } = await supabase.from('drawings').delete().in('id', selectedDrawingIds)
-    if (error) { setDeletingSelected(false); alert('Delete failed: ' + error.message); return }
+    if (error) { setDeletingSelected(false); setUploadMsg({ ok: false, text: 'Delete failed: ' + error.message }); return }
 
     // Clean up storage objects — skip any file_name still referenced by a
     // drawing row that wasn't part of this deletion.
@@ -395,7 +396,7 @@ export default function AdminPage() {
   // were getting clipped by the native PDF viewer's internal scaling.
   const renderPdfPageToPng = async (pdfBytes: Uint8Array): Promise<Blob> => {
     const pdfjsLib = await import('pdfjs-dist')
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
     const pdf  = await pdfjsLib.getDocument({ data: pdfBytes }).promise
     const page = await pdf.getPage(1)
 
@@ -467,11 +468,16 @@ export default function AdminPage() {
 
         const { data: { publicUrl } } = supabase.storage.from('drawings').getPublicUrl(fileName)
 
-        // Generate + upload a preview PNG. Non-fatal if it fails — the
-        // drawing still saves, mobile just falls back to "no preview".
+        // Generate + upload a preview PNG. Strictly non-fatal — we use a
+        // 20-second timeout so a hung worker never stalls the whole upload.
         let previewUrl: string | null = null
         try {
-          const previewBlob = await renderPdfPageToPng(pdfBytes)
+          const previewBlob = await Promise.race<Blob>([
+            renderPdfPageToPng(pdfBytes),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Preview render timed out')), 20000)
+            ),
+          ])
           const previewFileName = `drawing-${batchId}-p${i + 1}-preview.png`
           const { error: pvErr } = await supabase.storage
             .from('drawings')
@@ -482,33 +488,49 @@ export default function AdminPage() {
             previewUrl = supabase.storage.from('drawings').getPublicUrl(previewFileName).data.publicUrl
           }
         } catch (pvErr) {
-          console.error('[split] Preview render failed on page', i + 1, pvErr)
+          console.error('[split] Preview render/timeout on page', i + 1, pvErr)
         }
 
-        const { error: insErr } = await supabase.from('drawings').insert({
-          project_id: selectedProject.id,
-          title: pageCount > 1 ? `${baseName} — Page ${i + 1} of ${pageCount}` : baseName,
-          number: `DWG-${String(i + 1).padStart(3, '0')}`,
-          revision: 'A',
-          file_url: publicUrl,
-          file_name: fileName,
-          preview_url: previewUrl,
-        })
+        // Step 1 — insert core drawing record (no preview_url so a missing
+        // column can't abort the upload).
+        const { data: newRow, error: insErr } = await supabase
+          .from('drawings')
+          .insert({
+            project_id: selectedProject.id,
+            title: pageCount > 1 ? `${baseName} — Page ${i + 1} of ${pageCount}` : baseName,
+            number: `DWG-${String(i + 1).padStart(3, '0')}`,
+            revision: 'A',
+            file_url: publicUrl,
+            file_name: fileName,
+          })
+          .select('id')
+          .single()
         if (insErr) {
           console.error('[split] Insert failed on page', i + 1, insErr)
-          alert(`Saving page ${i + 1} failed: ${insErr.message}`)
+          setUploadMsg({ ok: false, text: `Saving page ${i + 1} failed: ${insErr.message}` })
           setUploadProgress(null)
           return
+        }
+
+        // Step 2 — attach preview URL if we got one (non-fatal; column may
+        // not exist yet in older schemas).
+        if (previewUrl && newRow) {
+          await supabase
+            .from('drawings')
+            .update({ preview_url: previewUrl })
+            .eq('id', newRow.id)
+          // error intentionally ignored — preview_url is optional
         }
       }
 
       setUploadProgress(null)
-      alert(`Drawing uploaded and split into ${pageCount} page${pageCount > 1 ? 's' : ''}`)
+      setUploadMsg({ ok: true, text: `Drawing uploaded and split into ${pageCount} page${pageCount > 1 ? 's' : ''}` })
+      setTimeout(() => setUploadMsg(null), 5000)
       // Stay on the Drawings tab — just refresh the list
       await reloadDrawings()
     } catch (err: any) {
       console.error('[drawing] Upload error:', err)
-      alert('Upload failed: ' + (err?.message ?? 'Please try again.'))
+      setUploadMsg({ ok: false, text: 'Upload failed: ' + (err?.message ?? 'Please try again.') })
       setUploadProgress(null)
     }
   }
@@ -906,6 +928,25 @@ export default function AdminPage() {
                 {/* ── DRAWINGS TAB ── */}
                 {!editingProject && projTab === 'drawings' && (
                   <div style={{ padding: '24px 28px' }}>
+                    {/* Inline message toast (replaces alert() to prevent nav quirks) */}
+                    {uploadMsg && (
+                      <div style={{
+                        marginBottom: 16, padding: '12px 18px',
+                        borderRadius: 8, fontSize: 14, fontWeight: 500,
+                        background: uploadMsg.ok ? 'var(--green2)' : 'var(--red2)',
+                        color: uploadMsg.ok ? 'var(--green)' : 'var(--red)',
+                        border: `1px solid ${uploadMsg.ok ? '#b3ddd1' : '#f5c6c0'}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      }}>
+                        <span>{uploadMsg.text}</span>
+                        <button
+                          type="button"
+                          onClick={() => setUploadMsg(null)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'inherit', lineHeight: 1, padding: '0 4px' }}
+                        >×</button>
+                      </div>
+                    )}
+
                     {/* Upload overlay */}
                     {uploadProgress && (
                       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
@@ -972,6 +1013,7 @@ export default function AdminPage() {
                             <>
                               <span style={{ fontSize: 13, color: 'var(--mid)' }}>{selectedDrawingIds.length} selected</span>
                               <button
+                                type="button"
                                 onClick={deleteSelectedDrawings}
                                 disabled={deletingSelected}
                                 style={{ background: 'var(--red2)', color: 'var(--red)', border: '1px solid #f5c6c0', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: deletingSelected ? 'not-allowed' : 'pointer', opacity: deletingSelected ? 0.6 : 1 }}
@@ -1001,7 +1043,7 @@ export default function AdminPage() {
                                   <div style={{ fontSize: 12, color: 'var(--mid)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>Rev {d.revision}</div>
                                 </div>
                                 <a href={d.file_url} target="_blank" rel="noreferrer" style={{ fontSize: 14, color: 'var(--accent)', textDecoration: 'none', fontWeight: 500, flexShrink: 0 }}>View</a>
-                                <button onClick={() => deleteDrawing(d.id)} style={{ background: 'var(--red2)', color: 'var(--red)', border: '1px solid #f5c6c0', borderRadius: 6, padding: '5px 12px', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>Delete</button>
+                                <button type="button" onClick={() => deleteDrawing(d.id)} style={{ background: 'var(--red2)', color: 'var(--red)', border: '1px solid #f5c6c0', borderRadius: 6, padding: '5px 12px', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>Delete</button>
                               </div>
                             )
                           })}
