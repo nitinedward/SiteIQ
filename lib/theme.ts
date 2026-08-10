@@ -79,3 +79,41 @@ export const SHADOW = {
     elevation: 3,
   },
 }
+
+// ── New soft/friendly design system (v2) ─────────────────────────────────
+// Used by redesigned screens. Existing screens keep the C/FONT/RADIUS/SHADOW
+// exports above untouched.
+export const theme = {
+  colors: {
+    indigo:      '#3A4A63',
+    indigoDeep:  '#2C3950',
+    indigoSoft:  '#EEF1F6',
+    marigold:    '#F5A524',
+    marigoldDeep:'#E08D0B',
+    sage:        '#5B9279',
+    sageSoft:    '#E7F0EB',
+    paper:       '#FAF8F4',
+    surface:     '#FFFFFF',
+    ink:         '#2A2E37',
+    mid:         '#7A8290',
+    line:        '#ECE8E1',
+    clay:        '#E5735B',
+  },
+  radius: { sm: 12, md: 18, lg: 26, pill: 999 },
+  shadow: {
+    card: {
+      shadowColor: '#2C3950',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.08,
+      shadowRadius: 24,
+      elevation: 3,
+    },
+    fab: {
+      shadowColor: '#E08D0B',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.42,
+      shadowRadius: 26,
+      elevation: 8,
+    },
+  },
+}
