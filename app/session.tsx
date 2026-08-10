@@ -8,6 +8,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as SecureStore from 'expo-secure-store';
 import { Audio } from 'expo-av';
+import { theme } from '../lib/theme';
+
+const T = theme.colors;
+const R = theme.radius;
 
 const SITE_CONTACT_KEY  = 'last_site_contact';
 const CONTACT_PHONE_KEY = 'last_contact_phone';
@@ -58,8 +62,8 @@ function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; m
         <Animated.View key={index} style={[waveStyles.bar, {
           height: anim.interpolate({ inputRange: [0, 1], outputRange: [3, 48] }),
           backgroundColor: isRecording
-            ? anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['#BFDBFE', '#2563EB', '#2563EB'] })
-            : '#BFDBFE',
+            ? anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['#FCE8C2', '#F5A524', '#F5A524'] })
+            : T.line,
           opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }),
         }]} />
       ))}
@@ -304,7 +308,7 @@ export default function SessionScreen() {
       { text: 'Keep Capturing', style: 'cancel' },
       { text: 'Complete', onPress: async () => {
         if (inspectionId) await supabase.from('inspections').update({ status: 'COMPLETED' }).eq('id', inspectionId);
-        Alert.alert('✅ Session Complete', 'Your inspection has been saved.', [{ text: 'OK', onPress: () => router.replace('/(tabs)/projects') }]);
+        Alert.alert('Session Complete', 'Your inspection has been saved.', [{ text: 'OK', onPress: () => router.replace('/(tabs)/projects') }]);
       }},
     ]);
   };
@@ -346,7 +350,7 @@ export default function SessionScreen() {
             <Text style={S.sectionTitle}>Site Details</Text>
             <Text style={S.label}>Site Contact Name</Text>
             <Text style={S.hint}>Auto-filled from your last inspection</Text>
-            <TextInput style={S.input} placeholder="e.g. John Smith" placeholderTextColor="#94A3B8" value={siteContact} onChangeText={setSiteContact} autoCapitalize="words" />
+            <TextInput style={S.input} placeholder="e.g. John Smith" placeholderTextColor={T.mid} value={siteContact} onChangeText={setSiteContact} autoCapitalize="words" />
           </View>
 
           {/* Drawings */}
@@ -385,7 +389,7 @@ export default function SessionScreen() {
                 <Text style={S.recordHint}>{isRecording ? '🔴 Listening — tap Stop when finished' : '⏳ Processing...'}</Text>
               </View>
             )}
-            <TextInput style={S.textArea} placeholder="Describe the purpose of this inspection..." placeholderTextColor="#94A3B8" value={purpose} onChangeText={setPurpose} multiline numberOfLines={4} textAlignVertical="top" />
+            <TextInput style={S.textArea} placeholder="Describe the purpose of this inspection..." placeholderTextColor={T.mid} value={purpose} onChangeText={setPurpose} multiline numberOfLines={4} textAlignVertical="top" />
           </View>
 
           {/* Start */}
@@ -396,7 +400,7 @@ export default function SessionScreen() {
             <Text style={S.startHint}>Site contact details saved automatically for next time</Text>
           </View>
 
-          <View style={{ height: 40 }} />
+          <View style={{ height: 48 }} />
         </ScrollView>
       </KeyboardAvoidingView>
     );
@@ -421,7 +425,7 @@ export default function SessionScreen() {
           <Text style={S.bannerDate}>{todayShort} - {weather}</Text>
           <View style={S.activeBadge}>
             <View style={S.activeDot} />
-            <Text style={S.activeBadgeText}>Active Session -Report #{reportNo}</Text>
+            <Text style={S.activeBadgeText}>Active Session - Report #{reportNo}</Text>
           </View>
         </View>
 
@@ -435,7 +439,7 @@ export default function SessionScreen() {
               <View style={S.drawBadge}><Text style={S.drawBadgeText}>{drawing.number || '-'}</Text></View>
               <View style={{ flex: 1 }}>
                 <Text style={S.drawTitle}>{drawing.title}</Text>
-                <Text style={S.drawMeta}>Rev {drawing.revision} -Tap to inspect</Text>
+                <Text style={S.drawMeta}>Rev {drawing.revision} - Tap to inspect</Text>
               </View>
               <Text style={S.arrow}>{'→'}</Text>
             </TouchableOpacity>
@@ -467,99 +471,120 @@ export default function SessionScreen() {
           <Text style={S.completeHint}>Compiles all observations into a draft report</Text>
         </View>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 96 }} />
       </ScrollView>
     </View>
   );
 }
 
 const S = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: '#F8FAFC' },
+  container:    { flex: 1, backgroundColor: T.paper },
   scroll:       { flex: 1 },
 
   // Header
-  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line },
   backBtn:      { flexDirection: 'row', alignItems: 'center', gap: 6, width: 60 },
-  backArrow:    { fontSize: 20, color: '#2563EB' },
-  backText:     { fontSize: 16, color: '#2563EB' },
-  headerTitle:  { fontSize: 18, fontWeight: '600', color: '#0F172A' },
+  backArrow:    { fontSize: 20, color: T.indigo },
+  backText:     { fontSize: 16, color: T.indigo },
+  headerTitle:  { fontSize: 18, fontWeight: '700', color: T.ink },
 
   // Banner
-  banner:       { backgroundColor: '#FFFFFF', margin: 16, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#E2E8F0', borderLeftWidth: 4, borderLeftColor: '#2563EB', gap: 4 },
-  bannerProject:{ fontSize: 16, fontWeight: '700', color: '#0F172A' },
-  bannerDate:   { fontSize: 13, color: '#64748B' },
+  banner:       {
+    backgroundColor: T.surface,
+    margin: 16,
+    borderRadius: R.md,
+    padding: 16,
+    gap: 4,
+    borderLeftWidth: 4,
+    borderLeftColor: T.marigold,
+    shadowColor: '#2C3950',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  bannerProject:{ fontSize: 16, fontWeight: '700', color: T.ink },
+  bannerDate:   { fontSize: 13, color: T.mid },
   activeBadge:  { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  activeDot:    { width: 8, height: 8, borderRadius: 4, backgroundColor: '#16A34A' },
-  activeBadgeText:{ fontSize: 12, color: '#16A34A', fontWeight: '500' },
+  activeDot:    { width: 8, height: 8, borderRadius: 4, backgroundColor: T.sage },
+  activeBadgeText:{ fontSize: 12, color: T.sage, fontWeight: '600' },
 
   // Section
   section:      { paddingHorizontal: 16, paddingBottom: 16 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+  sectionTitle: { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
   sectionRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  label:        { fontSize: 13, color: '#0F172A', fontWeight: '600', marginBottom: 4, marginTop: 12 },
-  hint:         { fontSize: 11, color: '#94A3B8', marginBottom: 8, fontStyle: 'italic' },
+  label:        { fontSize: 13, color: T.ink, fontWeight: '600', marginBottom: 4, marginTop: 12 },
+  hint:         { fontSize: 11, color: T.mid, marginBottom: 8, fontStyle: 'italic' },
 
-  // Weather
+  // Weather chips
   weatherGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip:         { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1.5, borderColor: '#E2E8F0' },
-  chipActive:   { borderColor: '#2563EB', backgroundColor: '#EFF6FF' },
+  chip:         { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: T.surface, borderRadius: R.pill, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1.5, borderColor: T.line },
+  chipActive:   { borderColor: T.indigo, backgroundColor: T.indigoSoft },
   chipIcon:     { fontSize: 16 },
-  chipLabel:    { fontSize: 13, color: '#64748B', fontWeight: '500' },
-  chipLabelActive:{ color: '#2563EB' },
+  chipLabel:    { fontSize: 13, color: T.mid, fontWeight: '500' },
+  chipLabelActive:{ color: T.indigo },
 
   // Inputs
-  input:        { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, padding: 13, fontSize: 14, color: '#0F172A', marginBottom: 4 },
-  textArea:     { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, padding: 13, fontSize: 14, color: '#0F172A', height: 120 },
+  input:        { backgroundColor: T.surface, borderWidth: 1, borderColor: T.line, borderRadius: 14, height: 52, paddingHorizontal: 16, fontSize: 15, color: T.ink },
+  textArea:     { backgroundColor: T.surface, borderWidth: 1, borderColor: T.line, borderRadius: 14, padding: 14, fontSize: 15, color: T.ink, height: 120 },
 
   // Drawing checkboxes
-  checkRow:     { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1.5, borderColor: '#E2E8F0', gap: 12 },
-  checkRowActive:{ borderColor: '#2563EB', backgroundColor: '#EFF6FF' },
-  checkbox:     { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: '#CBD5E1', alignItems: 'center', justifyContent: 'center' },
-  checkboxActive:{ backgroundColor: '#2563EB', borderColor: '#2563EB' },
+  checkRow:     { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1.5, borderColor: T.line, gap: 12 },
+  checkRowActive:{ borderColor: T.indigo, backgroundColor: T.indigoSoft },
+  checkbox:     { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: T.line, alignItems: 'center', justifyContent: 'center' },
+  checkboxActive:{ backgroundColor: T.indigo, borderColor: T.indigo },
   checkmark:    { fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
   checkInfo:    { flex: 1 },
-  checkTitle:   { fontSize: 14, color: '#0F172A', fontWeight: '500', marginBottom: 2 },
-  checkMeta:    { fontSize: 12, color: '#64748B' },
-  emptyBox:     { backgroundColor: '#FFFFFF', borderRadius: 10, padding: 16, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center' },
-  emptyText:    { fontSize: 13, color: '#64748B', textAlign: 'center' },
+  checkTitle:   { fontSize: 14, color: T.ink, fontWeight: '500', marginBottom: 2 },
+  checkMeta:    { fontSize: 12, color: T.mid },
+  emptyBox:     { backgroundColor: T.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: T.line, alignItems: 'center' },
+  emptyText:    { fontSize: 13, color: T.mid, textAlign: 'center' },
 
   // Voice
-  recordBtn:    { backgroundColor: '#F1F5F9', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: '#E2E8F0', minWidth: 90, alignItems: 'center' },
-  recordBtnActive:{ backgroundColor: '#EF4444', borderColor: '#EF4444' },
-  recordBtnTranscribing:{ backgroundColor: '#EFF6FF', borderColor: '#2563EB' },
-  recordBtnText:{ fontSize: 13, color: '#0F172A', fontWeight: '500' },
-  waveBox:      { backgroundColor: '#EFF6FF', borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#BFDBFE', marginBottom: 8, gap: 6 },
-  recordHint:   { fontSize: 12, color: '#2563EB' },
+  recordBtn:    { backgroundColor: T.indigoSoft, paddingHorizontal: 14, paddingVertical: 7, borderRadius: R.pill, borderWidth: 1, borderColor: T.line, minWidth: 90, alignItems: 'center' },
+  recordBtnActive:{ backgroundColor: T.clay, borderColor: T.clay },
+  recordBtnTranscribing:{ backgroundColor: T.indigo, borderColor: T.indigo },
+  recordBtnText:{ fontSize: 13, color: T.ink, fontWeight: '500' },
+  waveBox:      { backgroundColor: T.sageSoft, borderRadius: 14, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: T.line, marginBottom: 8, gap: 6 },
+  recordHint:   { fontSize: 12, color: T.sage },
 
-  // Preview
-  previewCard:  { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E2E8F0', gap: 8 },
+  // Preview (kept for compatibility)
+  previewCard:  { backgroundColor: T.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: T.line, gap: 8 },
   previewRow:   { flexDirection: 'row', gap: 8 },
-  previewLabel: { fontSize: 12, color: '#94A3B8', width: 100, flexShrink: 0 },
-  previewValue: { fontSize: 12, color: '#0F172A', flex: 1 },
+  previewLabel: { fontSize: 12, color: T.mid, width: 100, flexShrink: 0 },
+  previewValue: { fontSize: 12, color: T.ink, flex: 1 },
 
   // Start button
-  startBtn:     { backgroundColor: '#2563EB', borderRadius: 12, padding: 16, alignItems: 'center' },
+  startBtn:     { backgroundColor: T.indigo, borderRadius: R.pill, height: 54, alignItems: 'center', justifyContent: 'center' },
   startBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  startHint:    { fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 8 },
+  startHint:    { fontSize: 12, color: T.mid, textAlign: 'center', marginTop: 8 },
 
   // Drawing rows in capture
-  drawingRow:   { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#E2E8F0', gap: 12 },
-  drawBadge:    { backgroundColor: '#EFF6FF', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, minWidth: 52, alignItems: 'center' },
-  drawBadgeText:{ fontSize: 11, color: '#2563EB', fontWeight: '700' },
-  drawTitle:    { fontSize: 14, color: '#0F172A', fontWeight: '500', marginBottom: 2 },
-  drawMeta:     { fontSize: 12, color: '#64748B' },
-  arrow:        { fontSize: 20, color: '#94A3B8' },
-  addDrawBtn:   { backgroundColor: '#FFFFFF', borderRadius: 10, padding: 14, borderWidth: 1.5, borderColor: '#2563EB', borderStyle: 'dashed', alignItems: 'center', marginTop: 4 },
-  addDrawText:  { fontSize: 13, color: '#2563EB', fontWeight: '500' },
+  drawingRow:   {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface,
+    borderRadius: R.md, padding: 14, marginBottom: 8, gap: 12,
+    shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
+  },
+  drawBadge:    { backgroundColor: T.indigoSoft, borderRadius: R.sm, paddingHorizontal: 10, paddingVertical: 6, minWidth: 52, alignItems: 'center' },
+  drawBadgeText:{ fontSize: 11, color: T.indigo, fontWeight: '700' },
+  drawTitle:    { fontSize: 14, color: T.ink, fontWeight: '500', marginBottom: 2 },
+  drawMeta:     { fontSize: 12, color: T.mid },
+  arrow:        { fontSize: 20, color: T.mid },
+  addDrawBtn:   { backgroundColor: T.surface, borderRadius: R.md, padding: 14, borderWidth: 1.5, borderColor: T.indigo, borderStyle: 'dashed', alignItems: 'center', marginTop: 4 },
+  addDrawText:  { fontSize: 13, color: T.indigo, fontWeight: '500' },
 
-  // Add card
-  addCard:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', gap: 14 },
+  // General observation card
+  addCard:      {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface,
+    borderRadius: R.md, padding: 16, marginBottom: 10, gap: 14,
+    shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
+  },
   addCardIcon:  { fontSize: 24 },
-  addCardTitle: { fontSize: 15, fontWeight: '600', color: '#0F172A', marginBottom: 3 },
-  addCardSub:   { fontSize: 12, color: '#64748B', lineHeight: 18 },
+  addCardTitle: { fontSize: 15, fontWeight: '600', color: T.ink, marginBottom: 3 },
+  addCardSub:   { fontSize: 12, color: T.mid, lineHeight: 18 },
 
   // Complete
-  completeBtn:  { backgroundColor: '#16A34A', borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 8 },
+  completeBtn:  { backgroundColor: T.sage, borderRadius: R.pill, height: 54, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   completeBtnText:{ color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  completeHint: { fontSize: 12, color: '#94A3B8', textAlign: 'center' },
+  completeHint: { fontSize: 12, color: T.mid, textAlign: 'center' },
 });

@@ -40,10 +40,13 @@ export default function ProjectsScreen() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.replace('/'); return }
 
-    // Derive first name from already-fetched auth object — no new network call
-    const meta = (user.user_metadata ?? {}) as Record<string, string>
-    const fullName = meta.full_name ?? meta.name ?? ''
-    setUserName(fullName.split(' ')[0] || user.email?.split('@')[0] || '')
+    // Pull name from firm_members.full_name — the authoritative source used by all other screens
+    const { data: memberName } = await supabase
+      .from('firm_members')
+      .select('full_name')
+      .eq('user_id', user.id)
+      .single()
+    setUserName(memberName?.full_name?.split(' ')[0] || user.email?.split('@')[0] || '')
 
     const { firm, role } = await getUserFirm()
     setFirmName(firm?.name ?? '')

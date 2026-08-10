@@ -6,7 +6,10 @@ import {
 import { useState } from 'react'
 import { router } from 'expo-router'
 import { supabase } from '../lib/supabase'
-import { C, FONT, RADIUS } from '../lib/theme'
+import { theme } from '../lib/theme'
+
+const T = theme.colors
+const R = theme.radius
 
 export default function LoginScreen() {
   const [email, setEmail]       = useState('')
@@ -24,22 +27,20 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={S.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView style={S.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={S.scroll} keyboardShouldPersistTaps="handled">
 
         {/* Logo */}
-        <View style={S.logoWrap}>
-          <View style={S.logoIcon}>
-            <Text style={S.logoIconText}>S</Text>
+        <View style={S.logoBlock}>
+          <View style={S.logoMark}>
+            <Text style={S.logoLetter}>S</Text>
           </View>
-          <Text style={S.logoText}>SiteIQ</Text>
-          <Text style={S.logoSub}>Structural Engineering Inspection</Text>
+          <Text style={S.wordmark}>SiteIQ</Text>
+          <Text style={S.tagline}>Structural inspection, simplified</Text>
         </View>
 
-        {/* Card */}
-        <View style={S.card}>
-          <Text style={S.title}>Welcome back</Text>
-          <Text style={S.subtitle}>Sign in to your account</Text>
+        {/* Form */}
+        <View style={S.form}>
 
           <View style={S.field}>
             <Text style={S.label}>Email</Text>
@@ -48,7 +49,7 @@ export default function LoginScreen() {
               value={email}
               onChangeText={setEmail}
               placeholder="you@firm.com"
-              placeholderTextColor={C.textMuted}
+              placeholderTextColor={T.mid}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -62,7 +63,7 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               placeholder="Password"
-              placeholderTextColor={C.textMuted}
+              placeholderTextColor={T.mid}
               secureTextEntry
             />
           </View>
@@ -71,20 +72,25 @@ export default function LoginScreen() {
             <Text style={S.forgot}>Forgot password?</Text>
           </TouchableOpacity>
 
-          {error ? <View style={S.errorBox}><Text style={S.errorText}>{error}</Text></View> : null}
+          {error ? (
+            <View style={S.errorBox}>
+              <Text style={S.errorText}>{error}</Text>
+            </View>
+          ) : null}
 
-          <TouchableOpacity style={S.btn} onPress={handleLogin} disabled={loading} activeOpacity={0.85}>
+          <TouchableOpacity style={S.signInBtn} onPress={handleLogin} disabled={loading} activeOpacity={0.85}>
             {loading
               ? <ActivityIndicator color="#fff" />
-              : <Text style={S.btnText}>Sign In</Text>}
+              : <Text style={S.signInText}>Sign in</Text>}
           </TouchableOpacity>
 
           <View style={S.signupRow}>
-            <Text style={S.signupText}>Don't have an account? </Text>
+            <Text style={S.signupText}>New to SiteIQ? </Text>
             <TouchableOpacity onPress={() => router.push('/signup')}>
-              <Text style={S.signupLink}>Sign up</Text>
+              <Text style={S.signupLink}>Create an account</Text>
             </TouchableOpacity>
           </View>
+
         </View>
 
       </ScrollView>
@@ -93,26 +99,62 @@ export default function LoginScreen() {
 }
 
 const S = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: C.blue },
-  scroll:      { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  logoWrap:    { alignItems: 'center', marginBottom: 32 },
-  logoIcon:    { width: 64, height: 64, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  logoIconText:{ fontSize: 32, fontWeight: '800', color: '#fff' },
-  logoText:    { fontSize: 32, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
-  logoSub:     { fontSize: FONT.sm, color: 'rgba(255,255,255,0.7)', marginTop: 4 },
-  card:        { backgroundColor: C.bgCard, borderRadius: RADIUS.xl, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 24, elevation: 8 },
-  title:       { fontSize: FONT.xl, fontWeight: '700', color: C.textPrimary, marginBottom: 4 },
-  subtitle:    { fontSize: FONT.sm, color: C.textSecondary, marginBottom: 24 },
-  field:       { marginBottom: 16 },
-  label:       { fontSize: FONT.sm, fontWeight: '600', color: C.textPrimary, marginBottom: 6 },
-  input:       { backgroundColor: C.bgMuted, borderRadius: RADIUS.md, padding: 14, fontSize: FONT.md, color: C.textPrimary, borderWidth: 1, borderColor: C.border },
-  forgotWrap:  { alignItems: 'flex-end', marginBottom: 8, marginTop: -8 },
-  forgot:      { fontSize: FONT.sm, color: C.blue, fontWeight: '500' },
-  errorBox:    { backgroundColor: C.dangerBg, borderRadius: RADIUS.md, padding: 12, marginBottom: 12 },
-  errorText:   { fontSize: FONT.sm, color: C.danger },
-  btn:         { backgroundColor: C.blue, borderRadius: RADIUS.md, padding: 16, alignItems: 'center', marginTop: 8 },
-  btnText:     { fontSize: FONT.md, fontWeight: '700', color: '#fff' },
-  signupRow:   { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
-  signupText:  { fontSize: FONT.sm, color: C.textSecondary },
-  signupLink:  { fontSize: FONT.sm, color: C.blue, fontWeight: '600' },
+  root:       { flex: 1, backgroundColor: T.paper },
+  scroll:     { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 48 },
+
+  // Logo block
+  logoBlock:  { alignItems: 'center', marginBottom: 44 },
+  logoMark:   {
+    width: 72, height: 72, borderRadius: 20,
+    backgroundColor: T.marigold,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 18,
+    shadowColor: T.marigoldDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.32,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  logoLetter: { fontSize: 36, fontWeight: '800', color: '#FFFFFF' },
+  wordmark:   { fontSize: 32, fontWeight: '800', color: T.indigo, letterSpacing: -0.5 },
+  tagline:    { fontSize: 14, color: T.mid, marginTop: 6 },
+
+  // Form fields
+  form:       { gap: 0 },
+  field:      { marginBottom: 16 },
+  label:      { fontSize: 13, fontWeight: '700', color: T.mid, marginBottom: 6 },
+  input:      {
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.line,
+    borderRadius: 14,
+    height: 52,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    color: T.ink,
+  },
+
+  forgotWrap: { alignItems: 'flex-end', marginBottom: 8, marginTop: -4 },
+  forgot:     { fontSize: 13, color: T.indigo, fontWeight: '500' },
+
+  errorBox:   { backgroundColor: '#FFF1F2', borderRadius: 12, padding: 12, marginBottom: 12 },
+  errorText:  { fontSize: 13, color: '#C0392B' },
+
+  signInBtn:  {
+    backgroundColor: T.indigo,
+    borderRadius: R.pill,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    shadowColor: T.indigoDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    elevation: 4,
+  },
+  signInText: { fontSize: 16, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.2 },
+
+  signupRow:  { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
+  signupText: { fontSize: 14, color: T.mid },
+  signupLink: { fontSize: 14, color: T.indigo, fontWeight: '600' },
 })
