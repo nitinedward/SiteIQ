@@ -71,6 +71,7 @@ export default function DrawingViewerScreen() {
   const pdfWrapRef = useRef<View>(null);
   const wrapTop    = useRef(0);
   const wrapLeft   = useRef(0);
+  const pdfWrapH   = useRef(SH - 220); // available height for the drawing (updated by onLayout)
   const measureWrap = () => { pdfWrapRef.current?.measure((_x, _y, _w, _h, px, py) => { wrapLeft.current = px; wrapTop.current = py; }); };
 
   const touchToPage = (absX: number, absY: number): Pt => ({
@@ -105,12 +106,28 @@ export default function DrawingViewerScreen() {
     setIsLoading(true); setPdfError('');
     Image.getSize(
       previewUrl,
-      (w, h) => {
-        const computedH = SW * (h / w);
-        naturalH.current = computedH;
-        pdfDims.current  = { pdfWidth: w, pdfHeight: h };
-        setPdfH(computedH);
-        applyTransform(0, 0, 1);
+      (imgW, imgH) => {
+        // Full-width display height (maintains aspect ratio)
+        const fullH = SW * (imgH / imgW);
+        naturalH.current = fullH;
+        pdfDims.current  = { pdfWidth: imgW, pdfHeight: imgH };
+        setPdfH(fullH);
+
+        // If the drawing is taller than the available container, scale it
+        // down so the entire drawing is visible without clipping. Landscape
+        // A3/A1 drawings on tall phones will scale to 1 (no change); portrait
+        // A3 on small phones will scale down to fit.
+        const containerH = pdfWrapH.current > 50 ? pdfWrapH.current : SH - 220;
+        if (fullH > containerH) {
+          const s = containerH / fullH;
+          // Centre horizontally so empty space splits evenly on both sides.
+          // applyTransform(left, top, s) places the top-left of the drawing
+          // at (left, top) in the container, so offsetX = SW*(1-s)/2 centres it.
+          const offsetX = (SW * (1 - s)) / 2;
+          applyTransform(offsetX, 0, s);
+        } else {
+          applyTransform(0, 0, 1);
+        }
         setIsLoading(false);
       },
       () => { setIsLoading(false); setPdfError('Could not load drawing.'); }
@@ -376,7 +393,7 @@ export default function DrawingViewerScreen() {
               <ToolBtn icon="Draw" label="Draw" active={tool==='freehand'}  onPress={() => updateTool('freehand')} />
             </View>
           )}
-          <View ref={pdfWrapRef} style={S.pdfWrap} onLayout={() => { measureWrap(); setTimeout(measureWrap, 50); }} {...panResponder.panHandlers}>
+          <View ref={pdfWrapRef} style={S.pdfWrap} onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h > 0) pdfWrapH.current = h; measureWrap(); setTimeout(measureWrap, 50); }} {...panResponder.panHandlers}>
             <Animated.View style={{ position: 'absolute', top: 0, left: 0, width: SW, height: pdfH, transform: [{ translateX: animTx }, { translateY: animTy }, { scale: animScale }] }}>
               {!isLoading && !pdfError && previewUrl && (
                 <Image
