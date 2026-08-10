@@ -113,20 +113,20 @@ export default function DrawingViewerScreen() {
         pdfDims.current  = { pdfWidth: imgW, pdfHeight: imgH };
         setPdfH(fullH);
 
-        // If the drawing is taller than the available container, scale it
-        // down so the entire drawing is visible without clipping. Landscape
-        // A3/A1 drawings on tall phones will scale to 1 (no change); portrait
-        // A3 on small phones will scale down to fit.
         const containerH = pdfWrapH.current > 50 ? pdfWrapH.current : SH - 220;
         if (fullH > containerH) {
+          // Portrait drawing taller than container (e.g. A3 portrait on a small
+          // phone): scale down uniformly and centre horizontally.
           const s = containerH / fullH;
-          // Centre horizontally so empty space splits evenly on both sides.
-          // applyTransform(left, top, s) places the top-left of the drawing
-          // at (left, top) in the container, so offsetX = SW*(1-s)/2 centres it.
           const offsetX = (SW * (1 - s)) / 2;
           applyTransform(offsetX, 0, s);
         } else {
-          applyTransform(0, 0, 1);
+          // Drawing fits (landscape or short portrait). Centre it vertically so
+          // grey space is split equally above and below — A1 landscape drawings
+          // previously appeared as a top strip with a large grey gap below,
+          // making the bottom look cut off.
+          const offsetY = (containerH - fullH) / 2;
+          applyTransform(0, offsetY, 1);
         }
         setIsLoading(false);
       },

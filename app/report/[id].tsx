@@ -271,6 +271,7 @@ function DrawingTab({
   const pdfWrapRef  = useRef<View>(null);
   const wrapTop     = useRef(0);
   const wrapLeft    = useRef(0);
+  const pdfWrapH    = useRef(SH - 220);
 
   const lastDist   = useRef(0);
   const lastMid    = useRef<Pt>({ x: 0, y: 0 });
@@ -293,7 +294,13 @@ function DrawingTab({
         naturalH.current = computedH;
         pdfDims.current  = { pdfWidth: w, pdfHeight: h };
         setPdfH(computedH);
-        applyTransform(0, 0, 1);
+        const containerH = pdfWrapH.current > 50 ? pdfWrapH.current : SH - 220;
+        if (computedH > containerH) {
+          const s = containerH / computedH;
+          applyTransform((SW * (1 - s)) / 2, 0, s);
+        } else {
+          applyTransform(0, (containerH - computedH) / 2, 1);
+        }
         setIsLoading(false);
       },
       () => { setIsLoading(false); setPdfError('Could not load drawing.'); }
@@ -478,7 +485,7 @@ function DrawingTab({
       <View
         ref={pdfWrapRef}
         style={D.pdfWrap}
-        onLayout={() => { measureWrap(); setTimeout(measureWrap, 50); }}
+        onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h > 0) pdfWrapH.current = h; measureWrap(); setTimeout(measureWrap, 50); }}
         {...panResponder.panHandlers}
       >
         <Animated.View style={{
