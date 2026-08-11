@@ -2,6 +2,10 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'rea
 import { useState, useCallback } from 'react'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { theme } from '../../lib/theme'
+
+const T = theme.colors
+const R = theme.radius
 
 type Profile = { name: string; email: string; role: string; firmName: string }
 
@@ -25,6 +29,8 @@ export default function ProfileScreen() {
 
   if (!profile) return <View style={S.container} />
 
+  const isAdmin = profile.role === 'admin'
+
   return (
     <View style={S.container}>
       <View style={S.header}>
@@ -32,17 +38,22 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={S.scroll}>
-        <View style={S.avatarSection}>
+
+        {/* Avatar + identity */}
+        <View style={S.heroCard}>
           <View style={S.avatar}>
             <Text style={S.avatarText}>{profile.name?.[0]?.toUpperCase() ?? '?'}</Text>
           </View>
           <Text style={S.name}>{profile.name}</Text>
           <Text style={S.email}>{profile.email}</Text>
-          <View style={S.rolePill}>
-            <Text style={S.roleText}>{profile.role === 'admin' ? 'Admin' : 'Engineer'}</Text>
+          <View style={[S.rolePill, { backgroundColor: isAdmin ? T.indigoSoft : T.sageSoft }]}>
+            <Text style={[S.roleText, { color: isAdmin ? T.indigo : T.sage }]}>
+              {isAdmin ? 'Admin' : 'Engineer'}
+            </Text>
           </View>
         </View>
 
+        {/* Firm */}
         <View style={S.card}>
           <View style={S.cardRow}>
             <Text style={S.cardLabel}>Firm</Text>
@@ -50,51 +61,94 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Menu */}
         <View style={S.card}>
-          <TouchableOpacity style={S.menuRow} onPress={() => router.push('/setup-pin')}>
-            <Text style={S.menuIcon}>PIN</Text>
+          <TouchableOpacity style={S.menuRow} onPress={() => router.push('/setup-pin')} activeOpacity={0.7}>
+            <View style={[S.menuBadge, { backgroundColor: T.indigoSoft }]}>
+              <Text style={[S.menuBadgeText, { color: T.indigo }]}>PIN</Text>
+            </View>
             <Text style={S.menuLabel}>Change PIN</Text>
-            <Text style={S.menuArrow}>{'>'}</Text>
+            <Text style={S.menuChevron}>›</Text>
           </TouchableOpacity>
           <View style={S.divider} />
-          <TouchableOpacity style={S.menuRow} onPress={() => router.push('/firm-settings')}>
-            <Text style={S.menuIcon}>Firm</Text>
+          <TouchableOpacity style={S.menuRow} onPress={() => router.push('/firm-settings')} activeOpacity={0.7}>
+            <View style={[S.menuBadge, { backgroundColor: T.sageSoft }]}>
+              <Text style={[S.menuBadgeText, { color: T.sage }]}>Firm</Text>
+            </View>
             <Text style={S.menuLabel}>Firm Settings</Text>
-            <Text style={S.menuArrow}>{'>'}</Text>
+            <Text style={S.menuChevron}>›</Text>
           </TouchableOpacity>
         </View>
 
+        {/* Sign Out */}
         <TouchableOpacity style={S.signOutBtn} onPress={handleSignOut} activeOpacity={0.8}>
           <Text style={S.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 48 }} />
       </ScrollView>
     </View>
   )
 }
 
 const S = StyleSheet.create({
-  container:     { flex: 1, backgroundColor: '#F8FAFC' },
-  header:        { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
-  headerTitle:   { fontSize: 20, fontWeight: '700', color: '#0F172A' },
-  scroll:        { padding: 16, gap: 12 },
-  avatarSection: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 24, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#E2E8F0' },
-  avatar:        { width: 72, height: 72, borderRadius: 36, backgroundColor: '#2563EB', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  avatarText:    { fontSize: 30, fontWeight: '700', color: '#FFFFFF' },
-  name:          { fontSize: 18, fontWeight: '700', color: '#0F172A' },
-  email:         { fontSize: 14, color: '#64748B' },
-  rolePill:      { backgroundColor: '#EFF6FF', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, marginTop: 4 },
-  roleText:      { fontSize: 13, color: '#2563EB', fontWeight: '600' },
-  card:          { backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden' },
-  cardRow:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
-  cardLabel:     { fontSize: 14, color: '#64748B' },
-  cardValue:     { fontSize: 14, fontWeight: '600', color: '#0F172A' },
-  menuRow:       { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
-  menuIcon:      { fontSize: 18, width: 24 },
-  menuLabel:     { flex: 1, fontSize: 15, color: '#0F172A' },
-  menuArrow:     { fontSize: 20, color: '#94A3B8' },
-  divider:       { height: 1, backgroundColor: '#E2E8F0', marginHorizontal: 16 },
-  signOutBtn:    { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#FEE2E2' },
-  signOutText:   { fontSize: 15, fontWeight: '600', color: '#EF4444' },
+  container:    { flex: 1, backgroundColor: T.paper },
+  header:       { paddingHorizontal: 24, paddingTop: 64, paddingBottom: 20 },
+  headerTitle:  { fontSize: 30, fontWeight: '800', color: T.indigo, letterSpacing: -0.4 },
+  scroll:       { padding: 20, gap: 14 },
+
+  heroCard: {
+    backgroundColor: T.surface,
+    borderRadius: R.md,
+    padding: 28,
+    alignItems: 'center',
+    gap: 6,
+    shadowColor: '#2C3950',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 3,
+  },
+  avatar:     { width: 80, height: 80, borderRadius: 40, backgroundColor: T.indigo, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  avatarText: { fontSize: 34, fontWeight: '800', color: '#FFFFFF' },
+  name:       { fontSize: 20, fontWeight: '800', color: T.ink },
+  email:      { fontSize: 14, color: T.mid },
+  rolePill:   { borderRadius: R.pill, paddingHorizontal: 14, paddingVertical: 5, marginTop: 4 },
+  roleText:   { fontSize: 13, fontWeight: '600' },
+
+  card: {
+    backgroundColor: T.surface,
+    borderRadius: R.md,
+    overflow: 'hidden',
+    shadowColor: '#2C3950',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 3,
+  },
+  cardRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18 },
+  cardLabel:  { fontSize: 14, color: T.mid },
+  cardValue:  { fontSize: 14, fontWeight: '600', color: T.ink },
+
+  menuRow:      { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
+  menuBadge:    { borderRadius: R.sm, paddingHorizontal: 8, paddingVertical: 4 },
+  menuBadgeText:{ fontSize: 11, fontWeight: '700' },
+  menuLabel:    { flex: 1, fontSize: 15, color: T.ink, fontWeight: '500' },
+  menuChevron:  { fontSize: 22, color: T.mid },
+  divider:      { height: 1, backgroundColor: T.line, marginHorizontal: 16 },
+
+  signOutBtn: {
+    backgroundColor: T.surface,
+    borderRadius: R.md,
+    padding: 18,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    shadowColor: '#2C3950',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 1,
+  },
+  signOutText: { fontSize: 15, fontWeight: '600', color: T.clay },
 })

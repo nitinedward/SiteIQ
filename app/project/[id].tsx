@@ -6,6 +6,10 @@ import {
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
+import { theme } from '../../lib/theme';
+
+const T = theme.colors;
+const R = theme.radius;
 
 type Project = {
   id: string; name: string; address: string; client_name: string;
@@ -22,9 +26,9 @@ type Inspection = {
 };
 
 const statusConfig = {
-  ACTIVE:    { colour: '#16A34A', bg: '#F0FDF4', label: 'Active' },
-  ON_HOLD:   { colour: '#F59E0B', bg: '#FFFBEB', label: 'On Hold' },
-  COMPLETED: { colour: '#2563EB', bg: '#EFF6FF', label: 'Completed' },
+  ACTIVE:    { colour: '#5B9279', bg: '#E7F0EB', label: 'Active' },
+  ON_HOLD:   { colour: '#92400E', bg: '#FEF3C7', label: 'On Hold' },
+  COMPLETED: { colour: '#3A4A63', bg: '#EEF1F6', label: 'Completed' },
 };
 
 const fmt = (d: string) => new Date(d).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -64,8 +68,19 @@ export default function ProjectDetailScreen() {
 
   useFocusEffect(useCallback(() => { fetchData(); }, [id]));
 
-  if (loading) return <View style={S.centred}><ActivityIndicator size="large" color="#2563EB" /></View>;
-  if (error || !project) return <View style={S.centred}><Text style={S.errText}>Project not found</Text><TouchableOpacity onPress={() => router.back()}><Text style={S.link}>Go back</Text></TouchableOpacity></View>;
+  if (loading) return (
+    <View style={S.centred}>
+      <ActivityIndicator size="large" color={T.indigo} />
+    </View>
+  );
+  if (error || !project) return (
+    <View style={S.centred}>
+      <Text style={S.errText}>Project not found</Text>
+      <TouchableOpacity onPress={() => router.back()}>
+        <Text style={S.link}>Go back</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   const status = statusConfig[project.status];
 
@@ -74,7 +89,7 @@ export default function ProjectDetailScreen() {
       {/* Header */}
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>{'<'}</Text>
+          <Text style={S.backArrow}>{'‹'}</Text>
         </TouchableOpacity>
         <View style={S.headerMid}>
           <Text style={S.headerTitle} numberOfLines={1}>{project.name}</Text>
@@ -99,7 +114,7 @@ export default function ProjectDetailScreen() {
                   {inspections.length > 0 ? `Last: ${inspections[0].date}` : 'No inspections yet'}
                 </Text>
               </View>
-              <Text style={S.startArrow}>{'>'}</Text>
+              <Text style={S.startArrow}>{'›'}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -109,7 +124,7 @@ export default function ProjectDetailScreen() {
           <Text style={S.sectionTitle}>Drawings</Text>
           {drawings.length === 0 ? (
             <View style={S.emptyCard}>
-              <Text style={S.emptyText}>No drawings - admin uploads via web portal</Text>
+              <Text style={S.emptyText}>No drawings — admin uploads via web portal</Text>
             </View>
           ) : drawings.map(d => (
             <TouchableOpacity key={d.id} style={S.row}
@@ -122,7 +137,7 @@ export default function ProjectDetailScreen() {
                 <Text style={S.rowTitle}>{d.title}</Text>
                 <Text style={S.rowMeta}>Rev {d.revision}</Text>
               </View>
-              <Text style={S.rowArrow}>{'>'}</Text>
+              <Text style={S.rowArrow}>›</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -132,7 +147,7 @@ export default function ProjectDetailScreen() {
           <Text style={S.sectionTitle}>Site Reports</Text>
           {inspections.length === 0 ? (
             <View style={S.emptyCard}>
-              <Text style={S.emptyText}>No reports yet - start an inspection above</Text>
+              <Text style={S.emptyText}>No reports yet — start an inspection above</Text>
             </View>
           ) : inspections.map(ins => (
             <TouchableOpacity key={ins.id} style={S.row} activeOpacity={0.7}
@@ -142,58 +157,93 @@ export default function ProjectDetailScreen() {
               </View>
               <View style={S.rowInfo}>
                 <Text style={S.rowTitle}>{ins.date}</Text>
-                <Text style={S.rowMeta}>{ins.site_contact || 'No contact'} - {ins.weather}</Text>
+                <Text style={S.rowMeta}>{ins.site_contact || 'No contact'} · {ins.weather}</Text>
               </View>
-              <Text style={S.rowArrow}>{'>'}</Text>
+              <Text style={S.rowArrow}>›</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 48 }} />
       </ScrollView>
     </View>
   );
 }
 
 const S = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: '#F8FAFC' },
-  centred:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: '#F8FAFC' },
-  errText:     { fontSize: 16, color: '#0F172A' },
-  link:        { fontSize: 15, color: '#2563EB', marginTop: 8 },
+  container:   { flex: 1, backgroundColor: T.paper },
+  centred:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: T.paper },
+  errText:     { fontSize: 16, color: T.ink },
+  link:        { fontSize: 15, color: T.indigo, marginTop: 8 },
   scroll:      { flex: 1 },
 
   // Header
-  header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0', gap: 12 },
+  header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 14, backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line, gap: 12 },
   backBtn:     { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  backArrow:   { fontSize: 24, color: '#2563EB' },
+  backArrow:   { fontSize: 28, color: T.indigo, lineHeight: 32 },
   headerMid:   { flex: 1 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
-  headerSub:   { fontSize: 12, color: '#94A3B8', marginTop: 1 },
-  statusPill:  { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: T.ink },
+  headerSub:   { fontSize: 12, color: T.mid, marginTop: 1 },
+  statusPill:  { paddingHorizontal: 10, paddingVertical: 4, borderRadius: R.pill },
   statusText:  { fontSize: 12, fontWeight: '600' },
 
   // Hero start button
   heroSection: { padding: 16 },
-  startBtn:    { backgroundColor: '#2563EB', borderRadius: 16, padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  startBtn:    {
+    backgroundColor: T.marigold,
+    borderRadius: R.md,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: T.marigoldDeep,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.32,
+    shadowRadius: 20,
+    elevation: 6,
+  },
   startLeft:   { gap: 4 },
-  startTitle:  { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
-  startSub:    { fontSize: 13, color: 'rgba(255,255,255,0.7)' },
-  startArrow:  { fontSize: 28, color: '#FFFFFF' },
+  startTitle:  { fontSize: 20, fontWeight: '800', color: '#FFFFFF' },
+  startSub:    { fontSize: 13, color: 'rgba(255,255,255,0.8)' },
+  startArrow:  { fontSize: 32, color: '#FFFFFF', lineHeight: 36 },
 
   // Sections
-  section:     { paddingHorizontal: 16, paddingBottom: 8 },
-  sectionTitle:{ fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginTop: 8 },
+  section:      { paddingHorizontal: 16, paddingBottom: 8 },
+  sectionTitle: { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginTop: 8 },
 
   // Rows
-  row:         { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#E2E8F0', gap: 12 },
-  rowBadge:    { backgroundColor: '#EFF6FF', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, minWidth: 48, alignItems: 'center' },
-  rowBadgeText:{ fontSize: 11, color: '#2563EB', fontWeight: '700' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: T.surface,
+    borderRadius: R.md,
+    padding: 14,
+    marginBottom: 8,
+    gap: 12,
+    shadowColor: '#2C3950',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  rowBadge:    { backgroundColor: T.indigoSoft, borderRadius: R.sm, paddingHorizontal: 10, paddingVertical: 6, minWidth: 48, alignItems: 'center' },
+  rowBadgeText:{ fontSize: 11, color: T.indigo, fontWeight: '700' },
   rowInfo:     { flex: 1 },
-  rowTitle:    { fontSize: 14, fontWeight: '600', color: '#0F172A', marginBottom: 2 },
-  rowMeta:     { fontSize: 12, color: '#64748B' },
-  rowArrow:    { fontSize: 20, color: '#94A3B8' },
+  rowTitle:    { fontSize: 14, fontWeight: '600', color: T.ink, marginBottom: 2 },
+  rowMeta:     { fontSize: 12, color: T.mid },
+  rowArrow:    { fontSize: 22, color: T.mid },
 
   // Empty
-  emptyCard:   { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center' },
-  emptyText:   { fontSize: 13, color: '#94A3B8', textAlign: 'center' },
+  emptyCard: {
+    backgroundColor: T.surface,
+    borderRadius: R.md,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#2C3950',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 1,
+  },
+  emptyText: { fontSize: 13, color: T.mid, textAlign: 'center' },
 });
