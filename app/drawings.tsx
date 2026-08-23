@@ -6,10 +6,12 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { C, FONT, RADIUS } from '../lib/theme';
+import { theme } from '../lib/theme';
 
-// Mock drawings per project
-// Later: GET /api/projects/:id/drawings
+const T = theme.colors;
+const R = theme.radius;
+
+// Mock drawings per project — legacy placeholder, not connected to real data
 const projectDrawingsMap: Record<string, {
   id: string;
   title: string;
@@ -54,7 +56,7 @@ export default function DrawingsPickerScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backArrow}>{'<'}</Text>
+          <Text style={styles.backArrow}>{'‹'}</Text>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Select Drawing</Text>
@@ -101,7 +103,7 @@ export default function DrawingsPickerScreen() {
                   {drawing.zones} inspection zones
                 </Text>
               </View>
-              <Text style={styles.drawingArrow}>{'>'}</Text>
+              <Text style={styles.drawingArrow}>{'›'}</Text>
             </TouchableOpacity>
           ))}
 
@@ -123,28 +125,28 @@ export default function DrawingsPickerScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:         { flex: 1, backgroundColor: C.bgPage },
-  header:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.bgCard },
-  backButton:        { flexDirection: 'row', alignItems: 'center', gap: 6, width: 60 },
-  backArrow:         { fontSize: 20, color: C.blue },
-  backText:          { fontSize: 16, color: C.blue },
-  headerTitle:       { fontSize: 18, fontWeight: '600', color: C.textPrimary },
+  container:         { flex: 1, backgroundColor: T.paper },
+  header:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: T.surface },
+  backButton:        { flexDirection: 'row', alignItems: 'center', gap: 4, width: 60 },
+  backArrow:         { fontSize: 28, color: T.indigo, lineHeight: 32 },
+  backText:          { fontSize: 16, color: T.indigo },
+  headerTitle:       { fontSize: 18, fontWeight: '600', color: T.ink },
   scroll:            { flex: 1 },
-  projectBanner:     { backgroundColor: C.blueLight, margin: 20, borderRadius: RADIUS.md, padding: 16, borderWidth: 1, borderColor: C.blueMid, borderLeftWidth: 4, borderLeftColor: C.blue },
-  projectBannerName: { fontSize: FONT.md, fontWeight: '700', color: C.textPrimary, marginBottom: 4 },
-  projectBannerSub:  { fontSize: FONT.sm, color: C.textSecondary },
+  projectBanner:     { backgroundColor: T.indigoSoft, margin: 20, borderRadius: R.md, padding: 16, borderWidth: 1, borderColor: T.line, borderLeftWidth: 4, borderLeftColor: T.marigold },
+  projectBannerName: { fontSize: 16, fontWeight: '700', color: T.ink, marginBottom: 4 },
+  projectBannerSub:  { fontSize: 13, color: T.mid },
   section:           { paddingHorizontal: 20, paddingBottom: 16 },
-  sectionTitle:      { fontSize: FONT.xs, fontWeight: '600', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
-  drawingCard:       { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgCard, borderRadius: RADIUS.md, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: C.border, gap: 12 },
-  drawingIconBox:    { width: 44, height: 44, borderRadius: RADIUS.sm, backgroundColor: C.blueLight, alignItems: 'center', justifyContent: 'center' },
-  drawingIcon:       { fontSize: 22 },
+  sectionTitle:      { fontSize: 11, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
+  drawingCard:       { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.md, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: T.line, gap: 12, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
+  drawingIconBox:    { width: 44, height: 44, borderRadius: R.sm, backgroundColor: T.indigoSoft, alignItems: 'center', justifyContent: 'center' },
+  drawingIcon:       { fontSize: 11, fontWeight: '800', color: T.indigo },
   drawingInfo:       { flex: 1, gap: 2 },
-  drawingTitle:      { fontSize: FONT.sm, fontWeight: '600', color: C.textPrimary },
-  drawingMeta:       { fontSize: FONT.xs, color: C.textSecondary },
-  drawingZones:      { fontSize: FONT.xs, color: C.blue, marginTop: 2 },
-  drawingArrow:      { fontSize: 20, color: C.textMuted },
-  emptyCard:         { backgroundColor: C.bgCard, borderRadius: RADIUS.md, padding: 32, alignItems: 'center', borderWidth: 1, borderColor: C.border, borderStyle: 'dashed', gap: 8 },
-  emptyIcon:         { fontSize: 40 },
-  emptyTitle:        { fontSize: FONT.md, fontWeight: '600', color: C.textPrimary },
-  emptySub:          { fontSize: FONT.sm, color: C.textSecondary, textAlign: 'center', lineHeight: 18 },
+  drawingTitle:      { fontSize: 14, fontWeight: '600', color: T.ink },
+  drawingMeta:       { fontSize: 12, color: T.mid },
+  drawingZones:      { fontSize: 12, color: T.indigo, marginTop: 2, fontWeight: '500' },
+  drawingArrow:      { fontSize: 22, color: T.mid },
+  emptyCard:         { backgroundColor: T.surface, borderRadius: R.md, padding: 32, alignItems: 'center', borderWidth: 1, borderColor: T.line, borderStyle: 'dashed', gap: 8, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 1 },
+  emptyIcon:         { fontSize: 11, fontWeight: '800', color: T.mid },
+  emptyTitle:        { fontSize: 16, fontWeight: '600', color: T.ink },
+  emptySub:          { fontSize: 13, color: T.mid, textAlign: 'center', lineHeight: 18 },
 });
