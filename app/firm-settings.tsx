@@ -1,4 +1,4 @@
-import { C } from '../lib/theme'
+import { theme } from '../lib/theme'
 import {
   View,
   Text,
@@ -16,6 +16,9 @@ import { supabase } from '../lib/supabase';
 import { getUserFirm } from '../lib/firm';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+
+const T = theme.colors;
+const R = theme.radius;
 
 const SUPABASE_URL = 'https://vbaewualqaxhbmqgnhdt.supabase.co';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -50,7 +53,6 @@ export default function FirmSettingsScreen() {
   const [currentUserId, setCurrentUserId] = useState('');
   const [isUploadingTemplate, setIsUploadingTemplate] = useState(false);
 
-  // Assign engineer modal
   const [showAssign, setShowAssign]           = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projectMembers, setProjectMembers]   = useState<string[]>([]);
@@ -63,7 +65,6 @@ export default function FirmSettingsScreen() {
     const { firm: userFirm } = await getUserFirm();
     if (!userFirm) { setIsLoading(false); return; }
 
-    // Fetch full firm record including report_template_url
     const { data: fullFirm } = await supabase
       .from('firms')
       .select('id, name, join_code, report_template_url')
@@ -89,7 +90,6 @@ export default function FirmSettingsScreen() {
 
   useFocusEffect(useCallback(() => { fetchData(); }, []));
 
-  // ── SHARE JOIN CODE ────────────────────────────────────
   const handleShareCode = async () => {
     if (!firm) return;
     await Share.share({
@@ -98,7 +98,6 @@ export default function FirmSettingsScreen() {
     });
   };
 
-  // ── UPLOAD REPORT TEMPLATE ────────────────────────────
   const handleUploadTemplate = async () => {
     if (!firm) return;
     try {
@@ -111,14 +110,12 @@ export default function FirmSettingsScreen() {
       const file = result.assets[0];
       setIsUploadingTemplate(true);
 
-      // Read file as base64
       const base64 = await FileSystem.readAsStringAsync(file.uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
       const fileName = `template-${firm.id}.docx`;
 
-      // Upload to Supabase Storage
       const response = await fetch(
         `${SUPABASE_URL}/storage/v1/object/report-templates/${fileName}`,
         {
@@ -136,7 +133,6 @@ export default function FirmSettingsScreen() {
         throw new Error('Upload failed');
       }
 
-      // Save URL to firms table
       const templateUrl = `${SUPABASE_URL}/storage/v1/object/report-templates/${fileName}`;
       await supabase.from('firms').update({ report_template_url: templateUrl }).eq('id', firm.id);
       setFirm(prev => prev ? { ...prev, report_template_url: templateUrl } : prev);
@@ -149,7 +145,6 @@ export default function FirmSettingsScreen() {
     }
   };
 
-  // ── REMOVE TEMPLATE ────────────────────────────────────
   const handleRemoveTemplate = () => {
     Alert.alert('Remove Template', 'Are you sure? Engineers will not be able to generate AI reports until a new template is uploaded.', [
       { text: 'Cancel', style: 'cancel' },
@@ -163,7 +158,6 @@ export default function FirmSettingsScreen() {
     ]);
   };
 
-  // ── REMOVE MEMBER ──────────────────────────────────────
   const handleRemoveMember = (member: Member) => {
     if (member.role === 'admin') {
       Alert.alert('Cannot Remove', 'You cannot remove the admin from the firm.');
@@ -181,7 +175,6 @@ export default function FirmSettingsScreen() {
     ]);
   };
 
-  // ── ASSIGN PROJECT ─────────────────────────────────────
   const handleAssignProject = async (project: Project) => {
     setSelectedProject(project);
     const { data } = await supabase.from('project_members').select('user_id').eq('project_id', project.id);
@@ -204,7 +197,7 @@ export default function FirmSettingsScreen() {
   if (isLoading) {
     return (
       <View style={[S.container, S.centred]}>
-        <ActivityIndicator size="large" color="#2563EB" />
+        <ActivityIndicator size="large" color={T.indigo} />
       </View>
     );
   }
@@ -213,7 +206,7 @@ export default function FirmSettingsScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>{'<'}</Text>
+          <Text style={S.backArrow}>{'‹'}</Text>
           <Text style={S.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={S.headerTitle}>Firm Settings</Text>
@@ -249,13 +242,13 @@ export default function FirmSettingsScreen() {
                 <Text style={S.templateIcon}>Doc</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={S.templateName}>Report Template</Text>
-                  <Text style={S.templateSub}>Template uploaded - AI reports enabled</Text>
+                  <Text style={S.templateSub}>Template uploaded — AI reports enabled</Text>
                 </View>
               </View>
               <View style={S.templateBtns}>
                 <TouchableOpacity style={S.replaceBtn} onPress={handleUploadTemplate} disabled={isUploadingTemplate}>
                   {isUploadingTemplate
-                    ? <ActivityIndicator size="small" color="#2563EB" />
+                    ? <ActivityIndicator size="small" color={T.indigo} />
                     : <Text style={S.replaceBtnText}>Replace</Text>}
                 </TouchableOpacity>
                 <TouchableOpacity style={S.removeBtn} onPress={handleRemoveTemplate}>
@@ -266,7 +259,7 @@ export default function FirmSettingsScreen() {
           ) : (
             <TouchableOpacity style={S.uploadTemplateBtn} onPress={handleUploadTemplate} disabled={isUploadingTemplate} activeOpacity={0.8}>
               {isUploadingTemplate ? (
-                <ActivityIndicator size="small" color="#2563EB" />
+                <ActivityIndicator size="small" color={T.indigo} />
               ) : (
                 <>
                   <Text style={S.uploadTemplateIcon}>Upload</Text>
@@ -274,7 +267,7 @@ export default function FirmSettingsScreen() {
                     <Text style={S.uploadTemplateTitle}>Upload Word Template</Text>
                     <Text style={S.uploadTemplateSub}>Upload a .docx file with placeholders</Text>
                   </View>
-                  <Text style={S.uploadTemplateArrow}>{'>'}</Text>
+                  <Text style={S.uploadTemplateArrow}>{'›'}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -318,7 +311,7 @@ export default function FirmSettingsScreen() {
                 <Text style={S.projectName}>{project.name}</Text>
                 <Text style={S.projectNumber}>#{project.project_number}</Text>
               </View>
-              <Text style={S.projectArrow}>{'Assign Engineers >'}</Text>
+              <Text style={S.projectArrow}>{'Assign Engineers ›'}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -365,59 +358,59 @@ export default function FirmSettingsScreen() {
 }
 
 const S = StyleSheet.create({
-  container:           { flex: 1, backgroundColor: C.bgPage },
+  container:           { flex: 1, backgroundColor: T.paper },
   centred:             { alignItems: 'center', justifyContent: 'center' },
-  header:              { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.bgCard },
+  header:              { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: T.surface },
   backBtn:             { flexDirection: 'row', alignItems: 'center', gap: 4, width: 60 },
-  backArrow:           { fontSize: 20, color: C.blue },
-  backText:            { fontSize: 14, color: C.blue },
-  headerTitle:         { fontSize: 17, fontWeight: '700', color: C.textPrimary },
+  backArrow:           { fontSize: 28, color: T.indigo, lineHeight: 32 },
+  backText:            { fontSize: 14, color: T.indigo },
+  headerTitle:         { fontSize: 17, fontWeight: '700', color: T.ink },
   scroll:              { flex: 1 },
   section:             { padding: 20, paddingBottom: 8 },
-  sectionTitle:        { fontSize: 13, fontWeight: '700', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
-  sectionDesc:         { fontSize: 12, color: C.textSecondary, lineHeight: 20, marginBottom: 14, backgroundColor: C.bgMuted, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: C.border, fontFamily: 'monospace' },
-  card:                { backgroundColor: C.bgCard, borderRadius: 14, padding: 18, borderWidth: 1, borderColor: C.border, gap: 8 },
-  firmName:            { fontSize: 20, fontWeight: '700', color: C.textPrimary },
-  label:               { fontSize: 12, color: C.textSecondary, marginTop: 4 },
-  joinCode:            { fontSize: 28, fontWeight: '800', color: C.blue, letterSpacing: 4 },
-  shareBtn:            { backgroundColor: C.blueLight, borderRadius: 10, padding: 12, alignItems: 'center', marginTop: 4, borderWidth: 1, borderColor: C.blue },
-  shareBtnText:        { color: C.blue, fontSize: 14, fontWeight: '600' },
-  templateCard:        { backgroundColor: C.successBg, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.success, gap: 12 },
+  sectionTitle:        { fontSize: 11, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+  sectionDesc:         { fontSize: 12, color: T.mid, lineHeight: 20, marginBottom: 14, backgroundColor: T.indigoSoft, padding: 14, borderRadius: R.sm, borderWidth: 1, borderColor: T.line, fontFamily: 'monospace' },
+  card:                { backgroundColor: T.surface, borderRadius: R.md, padding: 18, borderWidth: 1, borderColor: T.line, gap: 8, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 24, elevation: 3 },
+  firmName:            { fontSize: 20, fontWeight: '700', color: T.ink },
+  label:               { fontSize: 12, color: T.mid, marginTop: 4 },
+  joinCode:            { fontSize: 28, fontWeight: '800', color: T.indigo, letterSpacing: 4 },
+  shareBtn:            { backgroundColor: T.indigoSoft, borderRadius: R.sm, padding: 12, alignItems: 'center', marginTop: 4, borderWidth: 1, borderColor: T.indigo },
+  shareBtnText:        { color: T.indigo, fontSize: 14, fontWeight: '600' },
+  templateCard:        { backgroundColor: T.sageSoft, borderRadius: R.md, padding: 16, borderWidth: 1, borderColor: T.sage, gap: 12 },
   templateIconRow:     { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  templateIcon:        { fontSize: 32 },
-  templateName:        { fontSize: 15, fontWeight: '700', color: C.textPrimary },
-  templateSub:         { fontSize: 12, color: C.success, marginTop: 2 },
+  templateIcon:        { fontSize: 11, fontWeight: '800', color: T.sage },
+  templateName:        { fontSize: 15, fontWeight: '700', color: T.ink },
+  templateSub:         { fontSize: 12, color: T.sage, marginTop: 2 },
   templateBtns:        { flexDirection: 'row', gap: 10 },
-  replaceBtn:          { flex: 1, backgroundColor: C.blueLight, borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: C.blue },
-  replaceBtnText:      { color: C.blue, fontSize: 13, fontWeight: '600' },
-  uploadTemplateBtn:   { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgCard, borderRadius: 14, padding: 18, borderWidth: 1.5, borderColor: C.blue, borderStyle: 'dashed', gap: 14 },
-  uploadTemplateIcon:  { fontSize: 24, color: C.blue },
-  uploadTemplateTitle: { fontSize: 15, fontWeight: '700', color: C.textPrimary },
-  uploadTemplateSub:   { fontSize: 12, color: C.textSecondary, marginTop: 2 },
-  uploadTemplateArrow: { fontSize: 22, color: C.blue },
-  memberRow:           { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgCard, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border, gap: 12 },
-  avatar:              { width: 40, height: 40, borderRadius: 20, backgroundColor: C.blueLight, alignItems: 'center', justifyContent: 'center' },
-  avatarText:          { fontSize: 16, fontWeight: '700', color: C.blue },
+  replaceBtn:          { flex: 1, backgroundColor: T.indigoSoft, borderRadius: R.sm, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: T.indigo },
+  replaceBtnText:      { color: T.indigo, fontSize: 13, fontWeight: '600' },
+  uploadTemplateBtn:   { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.md, padding: 18, borderWidth: 1.5, borderColor: T.indigo, borderStyle: 'dashed', gap: 14 },
+  uploadTemplateIcon:  { fontSize: 11, fontWeight: '800', color: T.indigo },
+  uploadTemplateTitle: { fontSize: 15, fontWeight: '700', color: T.ink },
+  uploadTemplateSub:   { fontSize: 12, color: T.mid, marginTop: 2 },
+  uploadTemplateArrow: { fontSize: 22, color: T.indigo },
+  memberRow:           { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.md, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: T.line, gap: 12, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
+  avatar:              { width: 40, height: 40, borderRadius: 20, backgroundColor: T.indigoSoft, alignItems: 'center', justifyContent: 'center' },
+  avatarText:          { fontSize: 16, fontWeight: '700', color: T.indigo },
   memberInfo:          { flex: 1 },
   memberNameRow:       { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  memberName:          { fontSize: 15, fontWeight: '600', color: C.textPrimary },
-  memberEmail:         { fontSize: 12, color: C.textSecondary, marginTop: 2 },
-  adminBadge:          { backgroundColor: C.blueLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1, borderColor: C.blue },
-  adminBadgeText:      { fontSize: 10, color: C.blue, fontWeight: '700' },
-  removeBtn:           { backgroundColor: C.dangerBg, borderRadius: 8, padding: 8 },
-  removeBtnText:       { color: C.danger, fontSize: 12, fontWeight: '600' },
-  projectRow:          { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgCard, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: C.border },
-  projectName:         { fontSize: 14, fontWeight: '600', color: C.textPrimary },
-  projectNumber:       { fontSize: 12, color: C.textSecondary, marginTop: 2 },
-  projectArrow:        { fontSize: 12, color: C.blue, fontWeight: '500' },
+  memberName:          { fontSize: 15, fontWeight: '600', color: T.ink },
+  memberEmail:         { fontSize: 12, color: T.mid, marginTop: 2 },
+  adminBadge:          { backgroundColor: T.indigoSoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: R.pill, borderWidth: 1, borderColor: T.indigo },
+  adminBadgeText:      { fontSize: 10, color: T.indigo, fontWeight: '700' },
+  removeBtn:           { backgroundColor: '#FEF2F0', borderRadius: R.sm, padding: 8 },
+  removeBtnText:       { color: T.clay, fontSize: 12, fontWeight: '600' },
+  projectRow:          { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.md, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: T.line, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
+  projectName:         { fontSize: 14, fontWeight: '600', color: T.ink },
+  projectNumber:       { fontSize: 12, color: T.mid, marginTop: 2 },
+  projectArrow:        { fontSize: 12, color: T.indigo, fontWeight: '500' },
   modalOverlay:        { flex: 1, justifyContent: 'flex-end' },
-  modalCard:           { backgroundColor: C.bgCard, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, borderTopWidth: 1, borderColor: C.border, gap: 12 },
-  modalTitle:          { fontSize: 18, fontWeight: '700', color: C.textPrimary },
-  modalSub:            { fontSize: 13, color: C.textSecondary },
-  assignRow:           { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border, gap: 12 },
-  assignCheck:         { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
-  assignCheckOn:       { backgroundColor: C.blue, borderColor: C.blue },
-  assignCheckText:     { color: C.textInverse, fontSize: 14, fontWeight: '700' },
-  doneBtn:             { backgroundColor: C.blue, borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 8 },
-  doneBtnText:         { color: C.textInverse, fontSize: 15, fontWeight: '700' },
+  modalCard:           { backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, borderTopWidth: 1, borderColor: T.line, gap: 12 },
+  modalTitle:          { fontSize: 18, fontWeight: '700', color: T.ink },
+  modalSub:            { fontSize: 13, color: T.mid },
+  assignRow:           { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: T.line, gap: 12 },
+  assignCheck:         { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: T.line, alignItems: 'center', justifyContent: 'center' },
+  assignCheckOn:       { backgroundColor: T.indigo, borderColor: T.indigo },
+  assignCheckText:     { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  doneBtn:             { backgroundColor: T.indigo, borderRadius: R.pill, height: 54, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  doneBtnText:         { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
 });
