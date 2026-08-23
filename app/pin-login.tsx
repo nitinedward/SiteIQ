@@ -4,7 +4,10 @@ import { router } from 'expo-router'
 import * as LocalAuthentication from 'expo-local-authentication'
 import * as SecureStore from 'expo-secure-store'
 import { supabase } from '../lib/supabase'
-import { C, FONT, RADIUS } from '../lib/theme'
+import { theme } from '../lib/theme'
+
+const T = theme.colors
+const R = theme.radius
 
 const DIGITS = [['1','2','3'],['4','5','6'],['7','8','9'],['','0','DEL']]
 
@@ -102,23 +105,23 @@ export default function PinLoginScreen() {
 }
 
 const S = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: C.bgPage, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
-  top:          { alignItems: 'center', marginBottom: 40 },
-  avatar:       { width: 72, height: 72, borderRadius: 36, backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  avatarText:   { fontSize: 32, fontWeight: '700', color: '#fff' },
-  greeting:     { fontSize: FONT.xl, fontWeight: '700', color: C.textPrimary },
-  sub:          { fontSize: FONT.sm, color: C.textSecondary, marginTop: 4 },
-  dots:         { flexDirection: 'row', gap: 16, marginBottom: 16 },
-  dot:          { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: C.blue, backgroundColor: 'transparent' },
-  dotFilled:    { backgroundColor: C.blue },
-  error:        { fontSize: FONT.sm, color: C.danger, marginBottom: 16 },
-  keypad:       { gap: 12, marginBottom: 32 },
-  row:          { flexDirection: 'row', gap: 12 },
-  key:          { width: 80, height: 80, borderRadius: 40, backgroundColor: C.bgCard, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.border },
-  keyEmpty:     { backgroundColor: 'transparent', borderColor: 'transparent' },
-  keyText:      { fontSize: FONT.xxl, fontWeight: '500', color: C.textPrimary },
-  keyBackspace: { fontSize: FONT.xl },
-  bioBtn:       { backgroundColor: C.blueLight, borderRadius: RADIUS.md, paddingHorizontal: 20, paddingVertical: 10, marginBottom: 20 },
-  bioBtnText:   { fontSize: FONT.sm, color: C.blue, fontWeight: '600' },
-  signOut:      { fontSize: FONT.sm, color: C.textSecondary },
+  container:   { flex: 1, backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
+  top:         { alignItems: 'center', marginBottom: 40 },
+  avatar:      { width: 72, height: 72, borderRadius: 36, backgroundColor: T.indigo, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  avatarText:  { fontSize: 32, fontWeight: '700', color: '#FFFFFF' },
+  greeting:    { fontSize: 22, fontWeight: '700', color: T.ink },
+  sub:         { fontSize: 14, color: T.mid, marginTop: 4 },
+  dots:        { flexDirection: 'row', gap: 16, marginBottom: 16 },
+  dot:         { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: T.indigo, backgroundColor: 'transparent' },
+  dotFilled:   { backgroundColor: T.indigo },
+  error:       { fontSize: 14, color: T.clay, marginBottom: 16 },
+  keypad:      { gap: 12, marginBottom: 32 },
+  row:         { flexDirection: 'row', gap: 12 },
+  key:         { width: 80, height: 80, borderRadius: 40, backgroundColor: T.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: T.line, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  keyEmpty:    { backgroundColor: 'transparent', borderColor: 'transparent', shadowOpacity: 0, elevation: 0 },
+  keyText:     { fontSize: 28, fontWeight: '400', color: T.ink },
+  keyBackspace:{ fontSize: 22, color: T.mid },
+  bioBtn:      { backgroundColor: T.indigoSoft, borderRadius: R.pill, paddingHorizontal: 20, paddingVertical: 10, marginBottom: 20 },
+  bioBtnText:  { fontSize: 14, color: T.indigo, fontWeight: '600' },
+  signOut:     { fontSize: 14, color: T.mid },
 })
