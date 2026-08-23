@@ -1,4 +1,4 @@
-import { C } from '../lib/theme'
+import { theme } from '../lib/theme'
 import {
   View,
   Text,
@@ -10,19 +10,18 @@ import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { enableBiometric, enablePin, isBiometricAvailable } from '../lib/auth';
 
-// This screen is shown after first login to let the engineer
-// set up Face ID and a backup PIN
+const T = theme.colors;
+const R = theme.radius;
 
 export default function SetupPinScreen() {
   const params   = useLocalSearchParams();
   const email    = params.email as string;
   const password = params.password as string;
 
-  // step 1 = create PIN, step 2 = confirm PIN
-  const [step, setStep]           = useState<1 | 2>(1);
-  const [pin, setPin]             = useState('');
+  const [step, setStep]             = useState<1 | 2>(1);
+  const [pin, setPin]               = useState('');
   const [confirmPin, setConfirmPin] = useState('');
-  const [error, setError]         = useState('');
+  const [error, setError]           = useState('');
 
   const currentPin = step === 1 ? pin : confirmPin;
   const setCurrentPin = step === 1 ? setPin : setConfirmPin;
@@ -35,10 +34,8 @@ export default function SetupPinScreen() {
 
     if (newPin.length === 4) {
       if (step === 1) {
-        // Move to confirmation step
         setTimeout(() => setStep(2), 200);
       } else {
-        // Confirm PIN matches
         await handleConfirm(newPin);
       }
     }
@@ -58,10 +55,8 @@ export default function SetupPinScreen() {
       return;
     }
 
-    // Save PIN securely
     await enablePin(email, password, pin);
 
-    // Also enable Face ID if available
     const biometricAvailable = await isBiometricAvailable();
     if (biometricAvailable) {
       await enableBiometric(email, password);
@@ -108,7 +103,7 @@ export default function SetupPinScreen() {
             style={[
               styles.dot,
               currentPin.length > i && styles.dotFilled,
-              error && styles.dotError,
+              error ? styles.dotError : null,
             ]}
           />
         ))}
@@ -153,20 +148,20 @@ export default function SetupPinScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: C.bgPage, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  title:      { fontSize: 26, fontWeight: '700', color: C.textPrimary, marginBottom: 8, textAlign: 'center' },
-  subtitle:   { fontSize: 14, color: C.textSecondary, marginBottom: 40, textAlign: 'center', lineHeight: 20 },
+  container:  { flex: 1, backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  title:      { fontSize: 26, fontWeight: '700', color: T.ink, marginBottom: 8, textAlign: 'center' },
+  subtitle:   { fontSize: 14, color: T.mid, marginBottom: 40, textAlign: 'center', lineHeight: 20 },
   dotsRow:    { flexDirection: 'row', gap: 20, marginBottom: 12 },
-  dot:        { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: C.blue, backgroundColor: 'transparent' },
-  dotFilled:  { backgroundColor: C.blue, borderColor: C.blue },
-  dotError:   { borderColor: C.danger },
-  errorText:  { fontSize: 13, color: C.danger, marginBottom: 32, height: 18 },
+  dot:        { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: T.indigo, backgroundColor: 'transparent' },
+  dotFilled:  { backgroundColor: T.indigo, borderColor: T.indigo },
+  dotError:   { borderColor: T.clay },
+  errorText:  { fontSize: 13, color: T.clay, marginBottom: 32, height: 18 },
   keypad:     { width: '80%', gap: 12 },
   keyRow:     { flexDirection: 'row', justifyContent: 'space-between' },
-  key:        { width: 72, height: 72, borderRadius: 36, backgroundColor: C.bgCard, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.border },
-  keyEmpty:   { backgroundColor: 'transparent', borderColor: 'transparent' },
-  keyText:    { fontSize: 24, fontWeight: '300', color: C.textPrimary },
-  keyDelete:  { fontSize: 20 },
+  key:        { width: 72, height: 72, borderRadius: 36, backgroundColor: T.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: T.line, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  keyEmpty:   { backgroundColor: 'transparent', borderColor: 'transparent', shadowOpacity: 0, elevation: 0 },
+  keyText:    { fontSize: 24, fontWeight: '300', color: T.ink },
+  keyDelete:  { fontSize: 20, color: T.mid },
   skipButton: { marginTop: 40 },
-  skipText:   { fontSize: 14, color: C.textSecondary },
+  skipText:   { fontSize: 14, color: T.mid },
 });
