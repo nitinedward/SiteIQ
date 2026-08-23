@@ -11,8 +11,10 @@ import {
 import { useState, useRef } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
-import { C, FONT, RADIUS } from '../lib/theme';
+import { theme } from '../lib/theme';
 
+const T = theme.colors;
+const R = theme.radius;
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function CameraScreen() {
@@ -74,13 +76,13 @@ export default function CameraScreen() {
   return (
     <View style={styles.container}>
 
-      {/* Header with back button */}
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backArrow}>{'<'}</Text>
+          <Text style={styles.backArrow}>{'‹'}</Text>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -135,7 +137,7 @@ export default function CameraScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Photo strip — does NOT cover capture button */}
+      {/* Photo strip */}
       {photos.length > 0 && (
         <View style={styles.thumbnailContainer}>
           <View style={styles.thumbnailRow}>
@@ -166,7 +168,7 @@ export default function CameraScreen() {
             })}
           >
             <Text style={styles.submitButtonText}>
-              {'Review & Submit Observation >'}
+              {'Review & Submit Observation'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -176,35 +178,34 @@ export default function CameraScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:           { flex: 1, backgroundColor: C.bgPage },
-  header:              { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, backgroundColor: C.bgCard, borderBottomWidth: 1, borderBottomColor: C.border },
-  backButton:          { flexDirection: 'row', alignItems: 'center', gap: 6, width: 70 },
-  backArrow:           { fontSize: 20, color: C.blue },
-  backText:            { fontSize: 16, color: C.blue, fontWeight: '500' },
+  container:           { flex: 1, backgroundColor: '#000000' },
+  header:              { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line },
+  backButton:          { flexDirection: 'row', alignItems: 'center', gap: 4, width: 70 },
+  backArrow:           { fontSize: 28, color: T.indigo, lineHeight: 32 },
+  backText:            { fontSize: 16, color: T.indigo, fontWeight: '500' },
   headerCenter:        { flex: 1, alignItems: 'center' },
-  headerTitle:         { fontSize: 14, fontWeight: '500', color: C.textPrimary, textAlign: 'center' },
-  voiceButton:         { backgroundColor: C.blueLight, borderRadius: RADIUS.sm, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: C.blue, width: 70, alignItems: 'center' },
-  voiceButtonText:     { fontSize: 12, color: C.blue, fontWeight: '500' },
+  headerTitle:         { fontSize: 14, fontWeight: '600', color: T.ink, textAlign: 'center' },
+  voiceButton:         { backgroundColor: T.indigoSoft, borderRadius: R.pill, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: T.indigo, width: 70, alignItems: 'center' },
+  voiceButtonText:     { fontSize: 12, color: T.indigo, fontWeight: '600' },
   camera:              { width: SCREEN_WIDTH, flex: 1 },
-  controls:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 40, paddingVertical: 20, backgroundColor: C.bgCard, borderTopWidth: 1, borderTopColor: C.border },
+  controls:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 40, paddingVertical: 20, backgroundColor: T.surface, borderTopWidth: 1, borderTopColor: T.line },
   controlButton:       { alignItems: 'center', gap: 4, width: 70 },
-  controlIcon:         { fontSize: 24 },
-  controlLabel:        { fontSize: 11, color: C.textSecondary },
-  captureButton:       { width: 72, height: 72, borderRadius: 36, backgroundColor: 'transparent', borderWidth: 3, borderColor: C.blue, alignItems: 'center', justifyContent: 'center' },
-  captureButtonInner:  { width: 58, height: 58, borderRadius: 29, backgroundColor: C.blue },
-  thumbnailContainer:  { backgroundColor: C.bgCard, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 16, borderTopWidth: 1, borderTopColor: C.border },
+  controlIcon:         { fontSize: 18, color: T.ink, fontWeight: '600' },
+  controlLabel:        { fontSize: 11, color: T.mid },
+  captureButton:       { width: 72, height: 72, borderRadius: 36, backgroundColor: 'transparent', borderWidth: 3, borderColor: T.marigold, alignItems: 'center', justifyContent: 'center' },
+  captureButtonInner:  { width: 58, height: 58, borderRadius: 29, backgroundColor: T.marigold },
+  thumbnailContainer:  { backgroundColor: T.surface, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 16, borderTopWidth: 1, borderTopColor: T.line },
   thumbnailRow:        { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   thumbnailList:       { gap: 8, flex: 1 },
-  thumbnail:           { width: 56, height: 56, borderRadius: 6, marginRight: 6 },
-  photoCount:          { fontSize: 13, color: C.textSecondary, marginLeft: 8 },
-  thumbnailHint:       { fontSize: 11, color: C.textMuted, marginBottom: 8 },
-  submitButton:        { backgroundColor: C.success, borderRadius: RADIUS.sm, padding: 13, alignItems: 'center' },
-  submitButtonText:    { color: C.textInverse, fontSize: 14, fontWeight: '600' },
-  permissionContainer: { flex: 1, backgroundColor: C.bgPage, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  thumbnail:           { width: 56, height: 56, borderRadius: 8, marginRight: 6 },
+  photoCount:          { fontSize: 13, color: T.mid, marginLeft: 8 },
+  thumbnailHint:       { fontSize: 11, color: T.mid, marginBottom: 8 },
+  submitButton:        { backgroundColor: T.sage, borderRadius: R.pill, height: 48, alignItems: 'center', justifyContent: 'center', shadowColor: '#3A6B59', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 4 },
+  submitButtonText:    { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  permissionContainer: { flex: 1, backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center', padding: 32 },
   permissionIcon:      { fontSize: 56, marginBottom: 20 },
-  permissionTitle:     { fontSize: 22, fontWeight: '700', color: C.textPrimary, marginBottom: 12, textAlign: 'center' },
-  permissionText:      { fontSize: 15, color: C.textSecondary, textAlign: 'center', lineHeight: 24, marginBottom: 32 },
-  permissionButton:    { backgroundColor: C.blue, borderRadius: RADIUS.md, paddingVertical: 14, paddingHorizontal: 32 },
-  permissionButtonText:{ color: C.textInverse, fontSize: 16, fontWeight: '600',
-  },
+  permissionTitle:     { fontSize: 22, fontWeight: '700', color: T.ink, marginBottom: 12, textAlign: 'center' },
+  permissionText:      { fontSize: 15, color: T.mid, textAlign: 'center', lineHeight: 24, marginBottom: 32 },
+  permissionButton:    { backgroundColor: T.indigo, borderRadius: R.pill, height: 54, paddingHorizontal: 32, alignItems: 'center', justifyContent: 'center' },
+  permissionButtonText:{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });
