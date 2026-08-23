@@ -8,6 +8,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
+import { theme } from '../lib/theme';
+
+const T = theme.colors;
+const R = theme.radius;
 
 const BAR_COUNT = 24;
 const SUPABASE_URL = 'https://vbaewualqaxhbmqgnhdt.supabase.co';
@@ -64,8 +68,8 @@ function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; m
         <Animated.View key={i} style={[wave.bar, {
           height: anim.interpolate({ inputRange: [0, 1], outputRange: [3, 48] }),
           backgroundColor: isRecording
-            ? anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['#BFDBFE', '#2563EB', '#2563EB'] })
-            : '#BFDBFE',
+            ? anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['#FCE8C2', '#F5A524', '#F5A524'] })
+            : T.line,
           opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }),
         }]} />
       ))}
@@ -337,13 +341,18 @@ export default function ObservationScreen() {
 
   const selSev = SEVERITY_OPTIONS.find(s => s.value === severity)!;
 
-  if (isLoadingObs) return <View style={[S.container, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator size="large" color="#2563EB" /><Text style={{ color: '#64748B', marginTop: 12 }}>Loading...</Text></View>;
+  if (isLoadingObs) return (
+    <View style={[S.container, { alignItems: 'center', justifyContent: 'center' }]}>
+      <ActivityIndicator size="large" color={T.indigo} />
+      <Text style={{ color: T.mid, marginTop: 12 }}>Loading...</Text>
+    </View>
+  );
 
   return (
     <KeyboardAvoidingView style={S.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>{'<'}</Text>
+          <Text style={S.backArrow}>{'‹'}</Text>
           <Text style={S.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={S.headerTitle} numberOfLines={1}>{isEditMode ? 'Edit Observation' : 'New Observation'}</Text>
@@ -354,7 +363,7 @@ export default function ObservationScreen() {
 
         {/* Zone banner */}
         <View style={S.zoneBanner}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: '#2563EB' }}>Zone:</Text>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: T.indigo }}>Zone:</Text>
           <View style={{ flex: 1 }}>
             <Text style={S.zoneLabel}>{zoneLabel}</Text>
             <Text style={S.zoneSub}>Tap below to capture your observations</Text>
@@ -369,7 +378,7 @@ export default function ObservationScreen() {
               {isUploading ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={S.photoBtnText}>Take Photo</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={[S.photoBtn, S.photoBtnSecondary]} onPress={handlePickPhoto} disabled={isUploading}>
-              <Text style={[S.photoBtnText, { color: '#2563EB' }]}>Library</Text>
+              <Text style={[S.photoBtnText, { color: T.indigo }]}>Library</Text>
             </TouchableOpacity>
           </View>
           {photos.length > 0 && (
@@ -440,16 +449,16 @@ export default function ObservationScreen() {
                 ))}
               </ScrollView>
               {newMeasType === 'Custom' && (
-                <><Text style={S.measLabel}>Label</Text><TextInput style={S.measInput} placeholder="e.g. Beam depth" placeholderTextColor="#94A3B8" value={customLabel} onChangeText={setCustomLabel} /></>
+                <><Text style={S.measLabel}>Label</Text><TextInput style={S.measInput} placeholder="e.g. Beam depth" placeholderTextColor={T.mid} value={customLabel} onChangeText={setCustomLabel} /></>
               )}
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={S.measLabel}>Value</Text>
-                  <TextInput style={S.measInput} placeholder="0" placeholderTextColor="#94A3B8" value={newMeasValue} onChangeText={setNewMeasValue} keyboardType="decimal-pad" />
+                  <TextInput style={S.measInput} placeholder="0" placeholderTextColor={T.mid} value={newMeasValue} onChangeText={setNewMeasValue} keyboardType="decimal-pad" />
                 </View>
                 <View style={{ width: 80 }}>
                   <Text style={S.measLabel}>Unit</Text>
-                  <TextInput style={S.measInput} value={newMeasType === 'Custom' ? customUnit : newMeasUnit} onChangeText={newMeasType === 'Custom' ? setCustomUnit : undefined} editable={newMeasType === 'Custom'} placeholderTextColor="#94A3B8" />
+                  <TextInput style={S.measInput} value={newMeasType === 'Custom' ? customUnit : newMeasUnit} onChangeText={newMeasType === 'Custom' ? setCustomUnit : undefined} editable={newMeasType === 'Custom'} placeholderTextColor={T.mid} />
                 </View>
               </View>
               <TouchableOpacity style={S.measSaveBtn} onPress={addMeasurement}>
@@ -482,55 +491,55 @@ export default function ObservationScreen() {
 }
 
 const S = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: '#F8FAFC' },
+  container:    { flex: 1, backgroundColor: T.paper },
   scroll:       { flex: 1 },
-  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 12, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
-  backBtn:      { flexDirection: 'row', alignItems: 'center', gap: 6, width: 60 },
-  backArrow:    { fontSize: 20, color: '#2563EB' },
-  backText:     { fontSize: 16, color: '#2563EB' },
-  headerTitle:  { fontSize: 16, fontWeight: '600', color: '#0F172A', flex: 1, textAlign: 'center' },
-  zoneBanner:   { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF', margin: 16, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#E2E8F0', borderLeftWidth: 4, borderLeftColor: '#2563EB' },
-  zoneLabel:    { fontSize: 16, fontWeight: '700', color: '#0F172A', marginBottom: 2 },
-  zoneSub:      { fontSize: 12, color: '#64748B' },
+  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 12, backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line },
+  backBtn:      { flexDirection: 'row', alignItems: 'center', gap: 4, width: 60 },
+  backArrow:    { fontSize: 28, color: T.indigo, lineHeight: 32 },
+  backText:     { fontSize: 16, color: T.indigo },
+  headerTitle:  { fontSize: 16, fontWeight: '600', color: T.ink, flex: 1, textAlign: 'center' },
+  zoneBanner:   { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: T.surface, margin: 16, borderRadius: R.md, padding: 16, borderWidth: 1, borderColor: T.line, borderLeftWidth: 4, borderLeftColor: T.marigold, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
+  zoneLabel:    { fontSize: 16, fontWeight: '700', color: T.ink, marginBottom: 2 },
+  zoneSub:      { fontSize: 12, color: T.mid },
   section:      { paddingHorizontal: 16, paddingBottom: 16 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
+  sectionTitle: { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
   sectionRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   photoActions: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  photoBtn:     { flex: 1, backgroundColor: '#2563EB', borderRadius: 10, padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
-  photoBtnSecondary: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#2563EB' },
+  photoBtn:     { flex: 1, backgroundColor: T.indigo, borderRadius: R.sm, height: 48, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  photoBtnSecondary: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.indigo },
   photoBtnText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
   photoThumb:   { width: 80, height: 80, borderRadius: 8, marginRight: 8, marginBottom: 8 },
-  recordBtn:    { backgroundColor: '#F1F5F9', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: '#E2E8F0', minWidth: 90, alignItems: 'center' },
-  recordBtnActive: { backgroundColor: '#EF4444', borderColor: '#EF4444' },
-  recordBtnTranscribing: { backgroundColor: '#EFF6FF', borderColor: '#2563EB' },
-  recordBtnText: { fontSize: 13, color: '#0F172A', fontWeight: '500' },
-  waveBox:      { backgroundColor: '#EFF6FF', borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#BFDBFE', marginBottom: 10, gap: 6 },
-  waveHint:     { fontSize: 12, color: '#2563EB' },
-  transcriptBox:{ backgroundColor: '#FFFFFF', borderRadius: 10, padding: 14, borderWidth: 1, borderColor: '#E2E8F0' },
-  transcriptLabel:{ fontSize: 11, color: '#94A3B8', marginBottom: 6 },
-  transcriptInput:{ fontSize: 14, color: '#0F172A', minHeight: 80 },
-  emptyVoice:   { backgroundColor: '#FFFFFF', borderRadius: 10, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed' },
-  emptyVoiceText:{ fontSize: 13, color: '#94A3B8' },
+  recordBtn:    { backgroundColor: T.indigoSoft, paddingHorizontal: 14, paddingVertical: 7, borderRadius: R.pill, borderWidth: 1, borderColor: T.line, minWidth: 90, alignItems: 'center' },
+  recordBtnActive: { backgroundColor: T.clay, borderColor: T.clay },
+  recordBtnTranscribing: { backgroundColor: T.indigoSoft, borderColor: T.indigo },
+  recordBtnText: { fontSize: 13, color: T.ink, fontWeight: '500' },
+  waveBox:      { backgroundColor: T.sageSoft, borderRadius: R.md, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: T.sage, marginBottom: 10, gap: 6 },
+  waveHint:     { fontSize: 12, color: T.sage },
+  transcriptBox:{ backgroundColor: T.surface, borderRadius: R.sm, padding: 14, borderWidth: 1, borderColor: T.line },
+  transcriptLabel:{ fontSize: 11, color: T.mid, marginBottom: 6 },
+  transcriptInput:{ fontSize: 14, color: T.ink, minHeight: 80 },
+  emptyVoice:   { backgroundColor: T.surface, borderRadius: R.sm, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: T.line, borderStyle: 'dashed' },
+  emptyVoiceText:{ fontSize: 13, color: T.mid },
   severityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  sevChip:      { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1.5, borderColor: '#E2E8F0' },
+  sevChip:      { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: T.surface, borderRadius: R.pill, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1.5, borderColor: T.line },
   sevDot:       { width: 8, height: 8, borderRadius: 4 },
-  sevLabel:     { fontSize: 13, color: '#64748B', fontWeight: '500' },
+  sevLabel:     { fontSize: 13, color: T.mid, fontWeight: '500' },
   sevDesc:      { fontSize: 12, fontStyle: 'italic', marginTop: 4 },
-  addMeasBtn:   { backgroundColor: '#EFF6FF', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
-  addMeasBtnText:{ fontSize: 13, color: '#2563EB', fontWeight: '600' },
-  measForm:     { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 10, gap: 8 },
-  measLabel:    { fontSize: 12, color: '#64748B', marginBottom: 4 },
-  measTypeChip: { backgroundColor: '#F1F5F9', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, marginRight: 6 },
-  measTypeChipActive:{ backgroundColor: '#2563EB' },
-  measTypeText: { fontSize: 12, color: '#64748B' },
-  measInput:    { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, padding: 10, fontSize: 14, color: '#0F172A' },
-  measSaveBtn:  { backgroundColor: '#2563EB', borderRadius: 8, padding: 12, alignItems: 'center' },
+  addMeasBtn:   { backgroundColor: T.indigoSoft, paddingHorizontal: 14, paddingVertical: 7, borderRadius: R.sm },
+  addMeasBtnText:{ fontSize: 13, color: T.indigo, fontWeight: '600' },
+  measForm:     { backgroundColor: T.surface, borderRadius: R.md, padding: 14, borderWidth: 1, borderColor: T.line, marginBottom: 10, gap: 8, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
+  measLabel:    { fontSize: 12, color: T.mid, marginBottom: 4 },
+  measTypeChip: { backgroundColor: T.indigoSoft, borderRadius: R.pill, paddingHorizontal: 12, paddingVertical: 6, marginRight: 6 },
+  measTypeChipActive:{ backgroundColor: T.indigo },
+  measTypeText: { fontSize: 12, color: T.mid },
+  measInput:    { backgroundColor: T.paper, borderWidth: 1, borderColor: T.line, borderRadius: 8, padding: 10, fontSize: 14, color: T.ink },
+  measSaveBtn:  { backgroundColor: T.indigo, borderRadius: R.sm, height: 44, alignItems: 'center', justifyContent: 'center' },
   measSaveBtnText:{ color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  measRow:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 8, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#E2E8F0' },
-  measType:     { flex: 1, fontSize: 13, color: '#64748B' },
-  measValue:    { fontSize: 14, color: '#0F172A', fontWeight: '600', marginRight: 12 },
-  measDelete:   { fontSize: 16, color: '#EF4444' },
-  notesInput:   { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, padding: 14, fontSize: 14, color: '#0F172A', minHeight: 100 },
-  submitBtn:    { backgroundColor: '#16A34A', borderRadius: 12, padding: 16, alignItems: 'center' },
+  measRow:      { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.sm, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: T.line },
+  measType:     { flex: 1, fontSize: 13, color: T.mid },
+  measValue:    { fontSize: 14, color: T.ink, fontWeight: '600', marginRight: 12 },
+  measDelete:   { fontSize: 16, color: T.clay },
+  notesInput:   { backgroundColor: T.surface, borderWidth: 1, borderColor: T.line, borderRadius: R.sm, padding: 14, fontSize: 14, color: T.ink, minHeight: 100 },
+  submitBtn:    { backgroundColor: T.sage, borderRadius: R.pill, height: 54, alignItems: 'center', justifyContent: 'center', shadowColor: '#3A6B59', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 5 },
   submitBtnText:{ color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 });
