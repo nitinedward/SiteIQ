@@ -7,7 +7,10 @@ import { useState } from 'react'
 import { router } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { getUserFirm } from '../../lib/firm'
-import { C, FONT, RADIUS } from '../../lib/theme'
+import { theme } from '../../lib/theme'
+
+const T = theme.colors
+const R = theme.radius
 
 export default function CreateProjectScreen() {
   const [name, setName]               = useState('')
@@ -37,7 +40,7 @@ export default function CreateProjectScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>{'<'}</Text>
+          <Text style={S.backArrow}>{'‹'}</Text>
         </TouchableOpacity>
         <Text style={S.headerTitle}>New Project</Text>
         <View style={{ width: 40 }} />
@@ -60,7 +63,7 @@ export default function CreateProjectScreen() {
                 value={field.value}
                 onChangeText={field.setter}
                 placeholder={field.placeholder}
-                placeholderTextColor={C.textMuted}
+                placeholderTextColor={T.mid}
                 multiline={field.multiline}
               />
             </View>
@@ -82,18 +85,28 @@ export default function CreateProjectScreen() {
 }
 
 const S = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: C.bgPage },
-  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, backgroundColor: C.bgCard, borderBottomWidth: 1, borderBottomColor: C.border },
+  container:    { flex: 1, backgroundColor: T.paper },
+  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line },
   backBtn:      { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  backArrow:    { fontSize: 24, color: C.blue },
-  headerTitle:  { fontSize: FONT.lg, fontWeight: '700', color: C.textPrimary },
+  backArrow:    { fontSize: 28, color: T.indigo, lineHeight: 32 },
+  headerTitle:  { fontSize: 17, fontWeight: '700', color: T.ink },
   scroll:       { flex: 1 },
   section:      { padding: 20 },
-  sectionTitle: { fontSize: FONT.xs, fontWeight: '700', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16 },
+  sectionTitle: { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16 },
   field:        { marginBottom: 16 },
-  label:        { fontSize: FONT.sm, fontWeight: '600', color: C.textPrimary, marginBottom: 6 },
-  input:        { backgroundColor: C.bgCard, borderRadius: RADIUS.md, padding: 14, fontSize: FONT.md, color: C.textPrimary, borderWidth: 1, borderColor: C.border },
+  label:        { fontSize: 14, fontWeight: '600', color: T.ink, marginBottom: 6 },
+  input:        { backgroundColor: T.surface, borderRadius: R.md, padding: 14, fontSize: 15, color: T.ink, borderWidth: 1, borderColor: T.line },
   btnWrap:      { paddingHorizontal: 20 },
-  btn:          { backgroundColor: C.blue, borderRadius: RADIUS.md, padding: 16, alignItems: 'center' },
-  btnText:      { fontSize: FONT.md, fontWeight: '700', color: '#fff' },
+  btn:          {
+    backgroundColor: T.marigold,
+    borderRadius: R.pill,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: '#E08D0B',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.42,
+    shadowRadius: 26,
+    elevation: 8,
+  },
+  btnText:      { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
 })
