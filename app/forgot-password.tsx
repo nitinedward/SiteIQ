@@ -1,4 +1,4 @@
-import { C } from '../lib/theme'
+import { theme } from '../lib/theme'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard,
@@ -7,6 +7,9 @@ import {
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { supabase } from '../lib/supabase';
+
+const T = theme.colors;
+const R = theme.radius;
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail]         = useState('');
@@ -49,7 +52,7 @@ export default function ForgotPasswordScreen() {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.inner}>
           <TouchableOpacity style={styles.backArrowBtn} onPress={() => router.back()}>
-            <Text style={styles.backArrow}>{'<'}</Text>
+            <Text style={styles.backArrow}>{'‹'}</Text>
           </TouchableOpacity>
 
           <View style={styles.logoMark}>
@@ -65,7 +68,7 @@ export default function ForgotPasswordScreen() {
           <TextInput
             style={[styles.input, focused && styles.inputFocused]}
             placeholder="engineer@yourfirm.com"
-            placeholderTextColor="#334155"
+            placeholderTextColor={T.mid}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -96,26 +99,26 @@ export default function ForgotPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:       { flex: 1, backgroundColor: C.bgPage },
+  container:       { flex: 1, backgroundColor: T.paper },
   inner:           { flex: 1, paddingHorizontal: 28, paddingTop: 60 },
   backArrowBtn:    { marginBottom: 32 },
-  backArrow:       { fontSize: 24, color: C.blue },
-  logoMark:        { width: 48, height: 48, borderRadius: 14, backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
-  logoMarkText:    { fontSize: 24, fontWeight: '900', color: C.textInverse },
-  title:           { fontSize: 28, fontWeight: '800', color: C.textPrimary, letterSpacing: -0.5, marginBottom: 10 },
-  subtitle:        { fontSize: 14, color: C.textSecondary, lineHeight: 20, marginBottom: 32 },
-  fieldLabel:      { fontSize: 11, color: C.textSecondary, fontWeight: '600', letterSpacing: 1.5, marginBottom: 8 },
-  input:           { backgroundColor: C.bgCard, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: C.textPrimary, marginBottom: 20 },
-  inputFocused:    { borderColor: C.borderFocus, backgroundColor: C.bgCard },
-  submitBtn:       { backgroundColor: C.blue, borderRadius: 14, padding: 16, alignItems: 'center', marginBottom: 14, shadowColor: C.blue, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
-  submitBtnText:   { color: C.textInverse, fontSize: 16, fontWeight: '700' },
+  backArrow:       { fontSize: 28, color: T.indigo },
+  logoMark:        { width: 48, height: 48, borderRadius: 14, backgroundColor: T.marigold, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+  logoMarkText:    { fontSize: 24, fontWeight: '900', color: '#FFFFFF' },
+  title:           { fontSize: 28, fontWeight: '800', color: T.ink, letterSpacing: -0.5, marginBottom: 10 },
+  subtitle:        { fontSize: 14, color: T.mid, lineHeight: 20, marginBottom: 32 },
+  fieldLabel:      { fontSize: 11, color: T.mid, fontWeight: '600', letterSpacing: 1.5, marginBottom: 8 },
+  input:           { backgroundColor: T.surface, borderWidth: 1, borderColor: T.line, borderRadius: 14, paddingHorizontal: 16, height: 52, fontSize: 15, color: T.ink, marginBottom: 20 },
+  inputFocused:    { borderColor: T.indigo },
+  submitBtn:       { backgroundColor: T.indigo, borderRadius: R.pill, height: 54, alignItems: 'center', justifyContent: 'center', marginBottom: 14, shadowColor: T.indigoDeep, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 6 },
+  submitBtnText:   { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   cancelBtn:       { alignItems: 'center', padding: 12 },
-  cancelBtnText:   { fontSize: 14, color: C.textSecondary },
+  cancelBtnText:   { fontSize: 14, color: T.mid },
   centred:         { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 16 },
-  successIcon:     { width: 72, height: 72, borderRadius: 36, backgroundColor: C.blueLight, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 2, borderColor: C.blue },
-  successIconText: { fontSize: 32, color: C.blue },
-  successTitle:    { fontSize: 24, fontWeight: '800', color: C.textPrimary, textAlign: 'center' },
-  successBody:     { fontSize: 14, color: C.textSecondary, textAlign: 'center', lineHeight: 22 },
-  backBtn:         { backgroundColor: C.blue, borderRadius: 14, paddingHorizontal: 32, paddingVertical: 14, marginTop: 8 },
-  backBtnText:     { color: C.textInverse, fontSize: 15, fontWeight: '700' },
+  successIcon:     { width: 72, height: 72, borderRadius: 36, backgroundColor: T.indigoSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 2, borderColor: T.indigo },
+  successIconText: { fontSize: 14, color: T.indigo, fontWeight: '700' },
+  successTitle:    { fontSize: 24, fontWeight: '800', color: T.ink, textAlign: 'center' },
+  successBody:     { fontSize: 14, color: T.mid, textAlign: 'center', lineHeight: 22 },
+  backBtn:         { backgroundColor: T.indigo, borderRadius: R.pill, paddingHorizontal: 32, height: 54, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  backBtnText:     { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
 });
