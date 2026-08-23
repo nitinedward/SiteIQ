@@ -1,4 +1,7 @@
-import { C } from '../../lib/theme'
+import { theme } from '../../lib/theme'
+
+const T = theme.colors;
+const R = theme.radius;
 import {
   View,
   Text,
@@ -423,7 +426,7 @@ function DrawingTab({
           return (
             <G key={zone.id}>
               <Circle cx={sc.x + 1} cy={sc.y + 2} r={10} fill="rgba(0,0,0,0.3)" />
-              <Circle cx={sc.x} cy={sc.y} r={10} fill="#2563EB" />
+              <Circle cx={sc.x} cy={sc.y} r={10} fill={T.indigo} />
               <Circle cx={sc.x} cy={sc.y} r={10} stroke="#FFF" strokeWidth={2} fill="none" />
               <Circle cx={sc.x} cy={sc.y} r={4}  fill="#FFF" />
             </G>
@@ -433,7 +436,7 @@ function DrawingTab({
           try {
             const pr = pdfRectToPage(JSON.parse(zone.shape_data));
             return <Rect key={zone.id} x={pr.x} y={pr.y} width={pr.width} height={pr.height}
-              fill="#2563EB" fillOpacity={0.18} stroke="#2563EB" strokeWidth={2} />;
+              fill={T.indigo} fillOpacity={0.18} stroke={T.indigo} strokeWidth={2} />;
           } catch { return null; }
         }
         if (zone.markup_type === 'freehand' && zone.shape_data) {
@@ -496,7 +499,7 @@ function DrawingTab({
           {!isLoading && !pdfError && drawing.preview_url && (
             <Image
               source={{ uri: drawing.preview_url }}
-              style={{ width: SW, height: pdfH, backgroundColor: C.bgMuted }}
+              style={{ width: SW, height: pdfH, backgroundColor: T.line }}
               resizeMode="contain"
             />
           )}
@@ -506,7 +509,7 @@ function DrawingTab({
 
         {isLoading && (
           <View style={D.overlay}>
-            <ActivityIndicator size="large" color="#2563EB" />
+            <ActivityIndicator size="large" color={T.indigo} />
             <Text style={D.overlayText}>Loading drawing...</Text>
           </View>
         )}
@@ -564,7 +567,7 @@ function buildReportHtml(
                </div>` : '';
 
           const transcriptHtml = obs.transcript
-            ? `<div style="background:#f0f9ff;border-left:3px solid #2563EB;padding:10px;border-radius:4px;margin:8px 0">
+            ? `<div style="background:#EEF1F6;border-left:3px solid #3A4A63;padding:10px;border-radius:4px;margin:8px 0">
                 <div style="font-size:11px;color:#64748b;margin-bottom:4px">VOICE NOTE</div>
                 <div style="font-size:13px;color:#1e293b">${obs.transcript}</div>
                </div>` : '';
@@ -613,13 +616,13 @@ function buildReportHtml(
 body { font-family:-apple-system,Helvetica,Arial,sans-serif; color:#1e293b; background:#fff; }
 .page { max-width:800px; margin:0 auto; padding:40px 32px; }
 </style></head><body><div class="page">
-  <div style="border-bottom:3px solid #2563EB;padding-bottom:24px;margin-bottom:28px">
+  <div style="border-bottom:3px solid #3A4A63;padding-bottom:24px;margin-bottom:28px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div>
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Site Inspection Report</div>
-        <div style="font-size:24px;font-weight:800;color:#2563EB">${projectName}</div>
+        <div style="font-size:24px;font-weight:800;color:#3A4A63">${projectName}</div>
       </div>
-      <div style="background:#2563EB;color:#fff;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700">Report #${inspection.report_no}</div>
+      <div style="background:#3A4A63;color:#fff;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700">Report #${inspection.report_no}</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0;background:#f8fafc;border-radius:8px;padding:16px">
       <div><div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:3px">Date</div><div style="font-size:13px;font-weight:600">${inspection.date}</div></div>
@@ -629,7 +632,7 @@ body { font-family:-apple-system,Helvetica,Arial,sans-serif; color:#1e293b; back
       <div><div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:3px">Drawings</div><div style="font-size:13px;font-weight:600">${drawingNames}</div></div>
       <div><div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:3px">Total Zones</div><div style="font-size:13px;font-weight:600">${zones.length}</div></div>
     </div>
-    ${inspection.purpose ? `<div style="background:#f0f9ff;border-left:3px solid #2563EB;padding:12px;border-radius:4px"><div style="font-size:11px;color:#64748b;margin-bottom:4px;font-weight:600">PURPOSE / SCOPE</div><div style="font-size:13px">${inspection.purpose}</div></div>` : ''}
+    ${inspection.purpose ? `<div style="background:#EEF1F6;border-left:3px solid #3A4A63;padding:12px;border-radius:4px"><div style="font-size:11px;color:#64748b;margin-bottom:4px;font-weight:600">PURPOSE / SCOPE</div><div style="font-size:13px">${inspection.purpose}</div></div>` : ''}
   </div>
 
   <div style="font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:28px 0 12px;border-top:1px solid #e2e8f0;padding-top:20px">
@@ -802,7 +805,7 @@ export default function ReportScreen() {
           <View style={{ width: 60 }} />
         </View>
         <View style={S.centred}>
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color={T.indigo} />
           <Text style={S.loadingText}>Loading report...</Text>
         </View>
       </View>
@@ -823,7 +826,7 @@ export default function ReportScreen() {
         </View>
         <TouchableOpacity style={S.exportBtn} onPress={generateWordReport} disabled={isGenerating || isExporting}>
           {isGenerating
-            ? <ActivityIndicator size="small" color="#2563EB" />
+            ? <ActivityIndicator size="small" color={T.indigo} />
             : <Text style={S.exportBtnText}>AI Report</Text>}
         </TouchableOpacity>
       </View>
@@ -977,110 +980,110 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 // ── STYLES ─────────────────────────────────────────────
 const S = StyleSheet.create({
-  container:          { flex: 1, backgroundColor: C.bgPage },
-  header:             { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.bgCard },
+  container:          { flex: 1, backgroundColor: T.paper },
+  header:             { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: T.surface },
   backBtn:            { flexDirection: 'row', alignItems: 'center', gap: 4, width: 60 },
-  backArrow:          { fontSize: 20, color: C.blue },
-  backText:           { fontSize: 14, color: C.blue },
-  headerTitle:        { fontSize: 14, fontWeight: '700', color: C.textPrimary },
-  headerSub:          { fontSize: 11, color: C.textSecondary, marginTop: 2 },
-  tabs:               { flexDirection: 'row', backgroundColor: C.bgCard, borderBottomWidth: 1, borderBottomColor: C.border },
+  backArrow:          { fontSize: 20, color: T.indigo },
+  backText:           { fontSize: 14, color: T.indigo },
+  headerTitle:        { fontSize: 14, fontWeight: '700', color: T.ink },
+  headerSub:          { fontSize: 11, color: T.mid, marginTop: 2 },
+  tabs:               { flexDirection: 'row', backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line },
   tab:                { flex: 1, paddingVertical: 12, alignItems: 'center' },
-  tabOn:              { borderBottomWidth: 2, borderBottomColor: C.blue },
-  tabText:            { fontSize: 13, color: C.textSecondary, fontWeight: '600' },
-  tabTextOn:          { color: C.blue },
-  drawingStrip:       { backgroundColor: C.bgCard, borderBottomWidth: 1, borderBottomColor: C.border, maxHeight: 48 },
+  tabOn:              { borderBottomWidth: 2, borderBottomColor: T.indigo },
+  tabText:            { fontSize: 13, color: T.mid, fontWeight: '600' },
+  tabTextOn:          { color: T.indigo },
+  drawingStrip:       { backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line, maxHeight: 48 },
   drawingStripContent:{ paddingHorizontal: 16, gap: 8, alignItems: 'center', paddingVertical: 10 },
-  drawingChip:        { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: C.bgMuted, borderWidth: 1, borderColor: C.border },
-  drawingChipOn:      { backgroundColor: C.blueLight, borderColor: C.blue },
-  drawingChipText:    { fontSize: 12, color: C.textSecondary, fontWeight: '500' },
-  drawingChipTextOn:  { color: C.blue },
-  exportBtn:          { backgroundColor: C.blueLight, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: C.blue, minWidth: 60, alignItems: 'center' },
-  exportBtnText:      { fontSize: 12, color: C.blue, fontWeight: '700' },
+  drawingChip:        { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: T.line, borderWidth: 1, borderColor: T.line },
+  drawingChipOn:      { backgroundColor: T.indigoSoft, borderColor: T.indigo },
+  drawingChipText:    { fontSize: 12, color: T.mid, fontWeight: '500' },
+  drawingChipTextOn:  { color: T.indigo },
+  exportBtn:          { backgroundColor: T.indigoSoft, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: T.indigo, minWidth: 60, alignItems: 'center' },
+  exportBtnText:      { fontSize: 12, color: T.indigo, fontWeight: '700' },
   centred:            { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  loadingText:        { color: C.textSecondary, fontSize: 14 },
+  loadingText:        { color: T.mid, fontSize: 14 },
   emptyIcon:          { fontSize: 32 },
-  emptyText:          { fontSize: 14, color: C.textSecondary, textAlign: 'center', paddingHorizontal: 40 },
+  emptyText:          { fontSize: 14, color: T.mid, textAlign: 'center', paddingHorizontal: 40 },
   scroll:             { flex: 1 },
   reportSection:      { padding: 20, paddingBottom: 8 },
-  reportSectionTitle: { fontSize: 13, fontWeight: '600', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
-  detailsCard:        { backgroundColor: C.bgCard, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: C.border, gap: 10 },
+  reportSectionTitle: { fontSize: 13, fontWeight: '600', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
+  detailsCard:        { backgroundColor: T.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: T.line, gap: 10 },
   detailRow:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  detailLabel:        { fontSize: 13, color: C.textSecondary, fontWeight: '500' },
-  detailValue:        { fontSize: 13, color: C.textPrimary, fontWeight: '600', flex: 1, textAlign: 'right' },
-  purposeBox:         { borderTopWidth: 1, borderTopColor: C.border, paddingTop: 10, gap: 6 },
-  purposeLabel:       { fontSize: 12, color: C.textSecondary, fontWeight: '500' },
-  purposeText:        { fontSize: 13, color: C.textPrimary, lineHeight: 20 },
-  zoneCard:           { backgroundColor: C.bgCard, borderRadius: 14, marginBottom: 12, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
-  zoneCardHeader:     { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: C.border, gap: 10 },
+  detailLabel:        { fontSize: 13, color: T.mid, fontWeight: '500' },
+  detailValue:        { fontSize: 13, color: T.ink, fontWeight: '600', flex: 1, textAlign: 'right' },
+  purposeBox:         { borderTopWidth: 1, borderTopColor: T.line, paddingTop: 10, gap: 6 },
+  purposeLabel:       { fontSize: 12, color: T.mid, fontWeight: '500' },
+  purposeText:        { fontSize: 13, color: T.ink, lineHeight: 20 },
+  zoneCard:           { backgroundColor: T.surface, borderRadius: 14, marginBottom: 12, borderWidth: 1, borderColor: T.line, overflow: 'hidden' },
+  zoneCardHeader:     { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: T.line, gap: 10 },
   zoneCardIcon:       { fontSize: 18 },
-  zoneCardLabel:      { fontSize: 15, fontWeight: '700', color: C.textPrimary, flex: 1 },
-  zoneCardCount:      { fontSize: 12, color: C.textSecondary },
-  obsRow:             { padding: 14, borderBottomWidth: 1, borderBottomColor: C.border, gap: 6 },
+  zoneCardLabel:      { fontSize: 15, fontWeight: '700', color: T.ink, flex: 1 },
+  zoneCardCount:      { fontSize: 12, color: T.mid },
+  obsRow:             { padding: 14, borderBottomWidth: 1, borderBottomColor: T.line, gap: 6 },
   obsRowHeader:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  obsRowNum:          { fontSize: 12, color: C.textSecondary, fontWeight: '600' },
+  obsRowNum:          { fontSize: 12, color: T.mid, fontWeight: '600' },
   severityPill:       { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   severityPillText:   { fontSize: 11, fontWeight: '700' },
-  obsDetail:          { fontSize: 13, color: C.textSecondary, lineHeight: 18 },
-  emptyCard:          { backgroundColor: C.bgCard, borderRadius: 14, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  obsDetail:          { fontSize: 13, color: T.mid, lineHeight: 18 },
+  emptyCard:          { backgroundColor: T.surface, borderRadius: 14, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: T.line },
 });
 
 // Drawing tab styles
 const D = StyleSheet.create({
-  hintBar:     { backgroundColor: C.bgSubtle, paddingVertical: 7, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: C.border },
-  hintText:    { fontSize: 12, color: C.textSecondary, textAlign: 'center' },
-  pdfWrap:     { flex: 1, overflow: 'hidden', backgroundColor: C.bgMuted },
-  overlay:     { ...StyleSheet.absoluteFillObject, backgroundColor: C.bgPage, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  overlayText: { color: C.textSecondary, fontSize: 14 },
-  labelBubble: { backgroundColor: C.blue, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 4, elevation: 6 },
+  hintBar:     { backgroundColor: T.indigoSoft, paddingVertical: 7, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: T.line },
+  hintText:    { fontSize: 12, color: T.mid, textAlign: 'center' },
+  pdfWrap:     { flex: 1, overflow: 'hidden', backgroundColor: T.line },
+  overlay:     { ...StyleSheet.absoluteFillObject, backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  overlayText: { color: T.mid, fontSize: 14 },
+  labelBubble: { backgroundColor: T.indigo, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 4, elevation: 6 },
   labelFree:   { backgroundColor: '#D97706' },
-  labelText:   { fontSize: 12, color: C.textInverse, fontWeight: '700' },
-  labelStem:   { width: 2, height: 8, backgroundColor: C.blue },
+  labelText:   { fontSize: 12, color: '#FFFFFF', fontWeight: '700' },
+  labelStem:   { width: 2, height: 8, backgroundColor: T.indigo },
   obsBadge:    { backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
-  obsBadgeText:{ fontSize: 10, color: C.textInverse, fontWeight: '700' },
+  obsBadgeText:{ fontSize: 10, color: '#FFFFFF', fontWeight: '700' },
 });
 
 // Zone panel styles
 const P = StyleSheet.create({
   overlay:          { ...StyleSheet.absoluteFillObject, zIndex: 100 },
   backdrop:         { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
-  panel:            { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: C.bgCard, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: SH * 0.75, borderTopWidth: 1, borderColor: C.border },
-  handle:           { width: 40, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginTop: 12 },
-  panelHeader:      { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: C.border, gap: 12 },
-  panelIcon:        { width: 40, height: 40, borderRadius: 10, backgroundColor: C.blueLight, alignItems: 'center', justifyContent: 'center' },
+  panel:            { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: SH * 0.75, borderTopWidth: 1, borderColor: T.line },
+  handle:           { width: 40, height: 4, backgroundColor: T.line, borderRadius: 2, alignSelf: 'center', marginTop: 12 },
+  panelHeader:      { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: T.line, gap: 12 },
+  panelIcon:        { width: 40, height: 40, borderRadius: 10, backgroundColor: T.indigoSoft, alignItems: 'center', justifyContent: 'center' },
   panelIconText:    { fontSize: 20 },
-  panelTitle:       { fontSize: 17, fontWeight: '700', color: C.textPrimary },
-  panelSub:         { fontSize: 12, color: C.textSecondary, marginTop: 2 },
-  closeBtn:         { width: 32, height: 32, borderRadius: 16, backgroundColor: C.bgMuted, alignItems: 'center', justifyContent: 'center' },
-  closeBtnText:     { fontSize: 14, color: C.textSecondary },
+  panelTitle:       { fontSize: 17, fontWeight: '700', color: T.ink },
+  panelSub:         { fontSize: 12, color: T.mid, marginTop: 2 },
+  closeBtn:         { width: 32, height: 32, borderRadius: 16, backgroundColor: T.indigoSoft, alignItems: 'center', justifyContent: 'center' },
+  closeBtnText:     { fontSize: 14, color: T.mid },
   panelScroll:      { flex: 1 },
   emptyObs:         { padding: 30, alignItems: 'center' },
-  emptyObsText:     { fontSize: 14, color: C.textSecondary, textAlign: 'center' },
-  obsCard:          { margin: 16, marginBottom: 12, backgroundColor: C.bgCard, borderRadius: 12, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
-  obsCardHeader:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1, borderBottomColor: C.border },
-  editBtn:          { backgroundColor: C.blueLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: C.blue },
-  editBtnText:      { fontSize: 11, color: C.blue, fontWeight: '700' },
-  obsCardNum:       { fontSize: 13, color: C.textSecondary, fontWeight: '600' },
+  emptyObsText:     { fontSize: 14, color: T.mid, textAlign: 'center' },
+  obsCard:          { margin: 16, marginBottom: 12, backgroundColor: T.surface, borderRadius: 12, borderWidth: 1, borderColor: T.line, overflow: 'hidden' },
+  obsCardHeader:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1, borderBottomColor: T.line },
+  editBtn:          { backgroundColor: T.indigoSoft, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: T.indigo },
+  editBtnText:      { fontSize: 11, color: T.indigo, fontWeight: '700' },
+  obsCardNum:       { fontSize: 13, color: T.mid, fontWeight: '600' },
   severityBadge:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 },
   severityDot:      { width: 6, height: 6, borderRadius: 3 },
   severityText:     { fontSize: 11, fontWeight: '700' },
   photoScroll:      { marginVertical: 12 },
   photo:            { width: 120, height: 120, borderRadius: 8 },
   photoOverlay:     { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
-  photoExpand:      { fontSize: 12, color: C.textInverse },
-  transcriptBox:    { margin: 12, marginTop: 0, backgroundColor: C.bgSubtle, borderRadius: 8, padding: 12, borderLeftWidth: 3, borderLeftColor: C.blue },
-  transcriptLabel:  { fontSize: 11, color: C.textSecondary, marginBottom: 6, fontWeight: '600' },
-  transcriptText:   { fontSize: 13, color: C.textPrimary, lineHeight: 20 },
-  notesBox:         { margin: 12, marginTop: 0, backgroundColor: C.successBg, borderRadius: 8, padding: 12, borderLeftWidth: 3, borderLeftColor: C.success },
-  notesLabel:       { fontSize: 11, color: C.textSecondary, marginBottom: 6, fontWeight: '600' },
-  notesText:        { fontSize: 13, color: C.textPrimary, lineHeight: 20 },
+  photoExpand:      { fontSize: 12, color: '#FFFFFF' },
+  transcriptBox:    { margin: 12, marginTop: 0, backgroundColor: T.indigoSoft, borderRadius: 8, padding: 12, borderLeftWidth: 3, borderLeftColor: T.indigo },
+  transcriptLabel:  { fontSize: 11, color: T.mid, marginBottom: 6, fontWeight: '600' },
+  transcriptText:   { fontSize: 13, color: T.ink, lineHeight: 20 },
+  notesBox:         { margin: 12, marginTop: 0, backgroundColor: T.sageSoft, borderRadius: 8, padding: 12, borderLeftWidth: 3, borderLeftColor: T.sage },
+  notesLabel:       { fontSize: 11, color: T.mid, marginBottom: 6, fontWeight: '600' },
+  notesText:        { fontSize: 13, color: T.ink, lineHeight: 20 },
   measureBox:       { margin: 12, marginTop: 0, gap: 6 },
-  measureLabel:     { fontSize: 11, color: C.textSecondary, fontWeight: '600' },
-  measureRow:       { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: C.bgMuted, borderRadius: 8, padding: 10 },
-  measureName:      { fontSize: 13, color: C.textSecondary },
-  measureValue:     { fontSize: 13, color: C.textPrimary, fontWeight: '600' },
+  measureLabel:     { fontSize: 11, color: T.mid, fontWeight: '600' },
+  measureRow:       { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: T.paper, borderRadius: 8, padding: 10 },
+  measureName:      { fontSize: 13, color: T.mid },
+  measureValue:     { fontSize: 13, color: T.ink, fontWeight: '600' },
   fullscreen:       { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' },
   fullscreenImg:    { width: SW, height: SH * 0.85 },
-  fullscreenClose:  { position: 'absolute', top: 60, right: 20, backgroundColor: C.bgMuted, borderRadius: 20, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  fullscreenCloseText: { fontSize: 16, color: C.textPrimary },
+  fullscreenClose:  { position: 'absolute', top: 60, right: 20, backgroundColor: T.indigoSoft, borderRadius: 20, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  fullscreenCloseText: { fontSize: 16, color: T.ink },
 });
