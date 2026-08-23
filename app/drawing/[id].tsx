@@ -8,7 +8,10 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import Svg, { Circle, Rect, Path, G } from 'react-native-svg';
+import { theme } from '../../lib/theme';
 
+const T = theme.colors;
+const R = theme.radius;
 const { width: SW, height: SH } = Dimensions.get('window');
 
 type MarkupType = 'pin' | 'rectangle' | 'freehand';
@@ -332,7 +335,7 @@ export default function DrawingViewerScreen() {
           return (
             <G key={zone.id}>
               <Circle cx={sc.x + 1} cy={sc.y + 2} r={10} fill="rgba(0,0,0,0.2)" />
-              <Circle cx={sc.x}     cy={sc.y}     r={10} fill="#2563EB" />
+              <Circle cx={sc.x}     cy={sc.y}     r={10} fill={T.indigo} />
               <Circle cx={sc.x}     cy={sc.y}     r={10} stroke="#FFF" strokeWidth={2} fill="none" />
               <Circle cx={sc.x}     cy={sc.y}     r={4}  fill="#FFF" />
             </G>
@@ -341,7 +344,7 @@ export default function DrawingViewerScreen() {
         if (zone.markup_type === 'rectangle' && zone.shape_data) {
           try {
             const pr = pdfRectToPage(JSON.parse(zone.shape_data));
-            return <Rect key={zone.id} x={pr.x} y={pr.y} width={pr.width} height={pr.height} fill="#2563EB" fillOpacity={0.18} stroke="#2563EB" strokeWidth={2} />;
+            return <Rect key={zone.id} x={pr.x} y={pr.y} width={pr.width} height={pr.height} fill={T.indigo} fillOpacity={0.18} stroke={T.indigo} strokeWidth={2} />;
           } catch { return null; }
         }
         if (zone.markup_type === 'freehand' && zone.shape_data) {
@@ -353,7 +356,7 @@ export default function DrawingViewerScreen() {
         }
         return null;
       })}
-      {liveRect && <Rect x={liveRect.x} y={liveRect.y} width={liveRect.width} height={liveRect.height} fill="#2563EB" fillOpacity={0.1} stroke="#2563EB" strokeWidth={2} strokeDasharray="6,4" />}
+      {liveRect && <Rect x={liveRect.x} y={liveRect.y} width={liveRect.width} height={liveRect.height} fill={T.indigo} fillOpacity={0.1} stroke={T.indigo} strokeWidth={2} strokeDasharray="6,4" />}
       {livePath.length > 1 && <Path d={livePath.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')} stroke="#F59E0B" strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" />}
     </Svg>
   );
@@ -405,7 +408,7 @@ export default function DrawingViewerScreen() {
               {!isLoading && renderSvg(pdfH)}
               {!isLoading && renderLabels()}
             </Animated.View>
-            {isLoading && <View style={S.overlay}><ActivityIndicator size="large" color="#2563EB" /><Text style={S.loadingTxt}>Loading drawing...</Text></View>}
+            {isLoading && <View style={S.overlay}><ActivityIndicator size="large" color={T.indigo} /><Text style={S.loadingTxt}>Loading drawing...</Text></View>}
             {!!pdfError && <View style={S.overlay}><Text style={S.errTxt}>{pdfError}</Text><TouchableOpacity onPress={loadPreviewDimensions}><Text style={S.retryTxt}>Tap to retry</Text></TouchableOpacity></View>}
           </View>
           {zones.length > 0 && (
@@ -441,7 +444,7 @@ export default function DrawingViewerScreen() {
               </View>
             ) : zones.map(zone => (
               <TouchableOpacity key={zone.id} style={S.zoneRow} onPress={() => handleTapZone(zone)} activeOpacity={0.7}>
-                <View style={[S.zoneBadge, zone.markup_type === 'freehand' && { backgroundColor: '#FFFBEB' }]}>
+                <View style={[S.zoneBadge, zone.markup_type === 'freehand' && { backgroundColor: '#FEF3C7' }]}>
                   <Text style={S.zoneBadgeIcon}>{!zone.markup_type || zone.markup_type === 'pin' ? 'Pin' : zone.markup_type === 'rectangle' ? 'Area' : 'Draw'}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
@@ -479,64 +482,64 @@ export default function DrawingViewerScreen() {
 }
 
 const S = StyleSheet.create({
-  container:     { flex: 1, backgroundColor: '#F8FAFC' },
-  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#FFFFFF', zIndex: 10 },
+  container:     { flex: 1, backgroundColor: T.paper },
+  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: T.surface, zIndex: 10 },
   backBtn:       { flexDirection: 'row', alignItems: 'center', gap: 4, width: 52 },
-  backArrow:     { fontSize: 20, color: '#2563EB' },
-  backText:      { fontSize: 14, color: '#2563EB' },
-  headerTitle:   { fontSize: 13, fontWeight: '600', color: '#0F172A', flex: 1, textAlign: 'center' },
-  toggleBtn:     { backgroundColor: '#EFF6FF', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#BFDBFE' },
-  toggleText:    { fontSize: 13, color: '#2563EB', fontWeight: '600' },
+  backArrow:     { fontSize: 28, color: T.indigo, lineHeight: 32 },
+  backText:      { fontSize: 14, color: T.indigo },
+  headerTitle:   { fontSize: 13, fontWeight: '600', color: T.ink, flex: 1, textAlign: 'center' },
+  toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 14, paddingVertical: 7, borderRadius: R.pill, borderWidth: 1, borderColor: T.indigo },
+  toggleText:    { fontSize: 13, color: T.indigo, fontWeight: '600' },
   pdfScreen:     { flex: 1 },
-  toolbar:       { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 8, paddingHorizontal: 10, gap: 6, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', zIndex: 10 },
-  toolBtn:       { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 10, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', gap: 2 },
-  toolBtnOn:     { backgroundColor: '#EFF6FF', borderColor: '#2563EB' },
-  toolIcon:      { fontSize: 16 },
-  toolLabel:     { fontSize: 9, color: '#64748B', fontWeight: '600' },
-  toolLabelOn:   { color: '#2563EB' },
-  hintBar:       { backgroundColor: '#F8FAFC', paddingVertical: 7, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', zIndex: 10 },
-  hintText:      { fontSize: 12, color: '#64748B', textAlign: 'center' },
-  pdfWrap:       { flex: 1, overflow: 'hidden', backgroundColor: '#E2E8F0' },
-  overlay:       { ...StyleSheet.absoluteFillObject, backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center', gap: 12 },
-  loadingTxt:    { color: '#64748B', fontSize: 14 },
-  errTxt:        { color: '#EF4444', fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
-  retryTxt:      { color: '#2563EB', fontSize: 14, fontWeight: '500' },
-  labelBubble:   { backgroundColor: '#2563EB', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, alignSelf: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 6 },
+  toolbar:       { flexDirection: 'row', backgroundColor: T.surface, paddingVertical: 8, paddingHorizontal: 10, gap: 6, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
+  toolBtn:       { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 10, backgroundColor: T.paper, borderWidth: 1, borderColor: T.line, gap: 2 },
+  toolBtnOn:     { backgroundColor: T.indigoSoft, borderColor: T.indigo },
+  toolIcon:      { fontSize: 14, color: T.mid },
+  toolLabel:     { fontSize: 9, color: T.mid, fontWeight: '600' },
+  toolLabelOn:   { color: T.indigo },
+  hintBar:       { backgroundColor: T.paper, paddingVertical: 7, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
+  hintText:      { fontSize: 12, color: T.mid, textAlign: 'center' },
+  pdfWrap:       { flex: 1, overflow: 'hidden', backgroundColor: T.line },
+  overlay:       { ...StyleSheet.absoluteFillObject, backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingTxt:    { color: T.mid, fontSize: 14 },
+  errTxt:        { color: T.clay, fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
+  retryTxt:      { color: T.indigo, fontSize: 14, fontWeight: '500' },
+  labelBubble:   { backgroundColor: T.indigo, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, alignSelf: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 6 },
   labelText:     { fontSize: 12, color: '#FFFFFF', fontWeight: '700' },
   labelFree:     { backgroundColor: '#F59E0B' },
-  labelStem:     { width: 2, height: 8, backgroundColor: '#2563EB' },
-  strip:         { backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E2E8F0', maxHeight: 52 },
+  labelStem:     { width: 2, height: 8, backgroundColor: T.indigo },
+  strip:         { backgroundColor: T.surface, borderTopWidth: 1, borderTopColor: T.line, maxHeight: 52 },
   stripContent:  { paddingHorizontal: 16, gap: 8, alignItems: 'center', paddingVertical: 10 },
-  chip:          { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#EFF6FF', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: '#2563EB' },
-  chipFree:      { backgroundColor: '#FFFBEB', borderColor: '#F59E0B' },
-  chipIcon:      { fontSize: 12 },
-  chipText:      { fontSize: 12, color: '#2563EB', fontWeight: '500' },
-  scroll:        { flex: 1, backgroundColor: '#F8FAFC' },
+  chip:          { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: T.indigoSoft, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: T.indigo },
+  chipFree:      { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
+  chipIcon:      { fontSize: 11, color: T.mid, fontWeight: '700' },
+  chipText:      { fontSize: 12, color: T.indigo, fontWeight: '500' },
+  scroll:        { flex: 1, backgroundColor: T.paper },
   section:       { padding: 20, paddingBottom: 8 },
-  sectionTitle:  { fontSize: 12, fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
-  openBtn:       { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 14, padding: 18, gap: 14, borderWidth: 1.5, borderColor: '#2563EB' },
-  openIcon:      { fontSize: 28 },
-  openTitle:     { fontSize: 16, fontWeight: '700', color: '#0F172A', marginBottom: 3 },
-  openSub:       { fontSize: 12, color: '#64748B' },
-  openArrow:     { fontSize: 24, color: '#2563EB' },
-  empty:         { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 28, alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed', gap: 8 },
-  emptyIcon:     { fontSize: 32 },
-  emptyTitle:    { fontSize: 15, color: '#0F172A', fontWeight: '500' },
-  emptyBody:     { fontSize: 12, color: '#64748B', textAlign: 'center', lineHeight: 18 },
-  zoneRow:       { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', gap: 12 },
-  zoneBadge:     { width: 36, height: 36, borderRadius: 10, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
-  zoneBadgeIcon: { fontSize: 16 },
-  zoneLabel:     { fontSize: 15, fontWeight: '600', color: '#0F172A', marginBottom: 2 },
-  zoneMeta:      { fontSize: 11, color: '#64748B' },
-  zoneArrow:     { fontSize: 20, color: '#94A3B8' },
+  sectionTitle:  { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
+  openBtn:       { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.md, padding: 18, gap: 14, borderWidth: 1.5, borderColor: T.indigo, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
+  openIcon:      { fontSize: 14, fontWeight: '800', color: T.indigo },
+  openTitle:     { fontSize: 16, fontWeight: '700', color: T.ink, marginBottom: 3 },
+  openSub:       { fontSize: 12, color: T.mid },
+  openArrow:     { fontSize: 24, color: T.indigo },
+  empty:         { backgroundColor: T.surface, borderRadius: R.md, padding: 28, alignItems: 'center', borderWidth: 1, borderColor: T.line, borderStyle: 'dashed', gap: 8 },
+  emptyIcon:     { fontSize: 14, color: T.mid },
+  emptyTitle:    { fontSize: 15, color: T.ink, fontWeight: '500' },
+  emptyBody:     { fontSize: 12, color: T.mid, textAlign: 'center', lineHeight: 18 },
+  zoneRow:       { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.md, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: T.line, gap: 12, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
+  zoneBadge:     { width: 36, height: 36, borderRadius: 10, backgroundColor: T.indigoSoft, alignItems: 'center', justifyContent: 'center' },
+  zoneBadgeIcon: { fontSize: 11, fontWeight: '700', color: T.indigo },
+  zoneLabel:     { fontSize: 15, fontWeight: '600', color: T.ink, marginBottom: 2 },
+  zoneMeta:      { fontSize: 11, color: T.mid },
+  zoneArrow:     { fontSize: 20, color: T.mid },
   modalOverlay:  { flex: 1, justifyContent: 'flex-end' },
-  modalCard:     { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, gap: 10, borderTopWidth: 1, borderColor: '#E2E8F0' },
-  modalTitle:    { fontSize: 18, fontWeight: '700', color: '#0F172A' },
-  modalSub:      { fontSize: 13, color: '#64748B' },
-  modalInput:    { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, padding: 14, fontSize: 15, color: '#0F172A', marginTop: 4 },
+  modalCard:     { backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, gap: 10, borderTopWidth: 1, borderColor: T.line },
+  modalTitle:    { fontSize: 18, fontWeight: '700', color: T.ink },
+  modalSub:      { fontSize: 13, color: T.mid },
+  modalInput:    { backgroundColor: T.paper, borderWidth: 1, borderColor: T.line, borderRadius: 10, padding: 14, fontSize: 15, color: T.ink, marginTop: 4 },
   modalBtns:     { flexDirection: 'row', gap: 10, marginTop: 6 },
-  modalCancel:   { flex: 1, backgroundColor: '#F1F5F9', borderRadius: 10, padding: 14, alignItems: 'center' },
-  modalCancelTxt:{ color: '#64748B', fontSize: 15, fontWeight: '500' },
-  modalSave:     { flex: 1, backgroundColor: '#2563EB', borderRadius: 10, padding: 14, alignItems: 'center' },
+  modalCancel:   { flex: 1, backgroundColor: T.indigoSoft, borderRadius: 10, padding: 14, alignItems: 'center' },
+  modalCancelTxt:{ color: T.mid, fontSize: 15, fontWeight: '500' },
+  modalSave:     { flex: 1, backgroundColor: T.indigo, borderRadius: 10, padding: 14, alignItems: 'center' },
   modalSaveTxt:  { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
 });
