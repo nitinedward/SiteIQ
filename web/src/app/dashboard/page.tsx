@@ -12,16 +12,77 @@ type Project = {
 type Inspection = {
   id: string; project_id: string; date: string; report_no: string
   weather: string; site_contact: string; status: string; created_at: string
+  report_status?: string | null
   projects: { name: string; project_number: string } | null
+}
+type WeekBucket = { label: string; completed: number; pending: number }
+
+// ── DATE HELPERS ─────────────────────────────────────────────────────────────
+// inspections.date is stored as free text like "24 August 2026" (day + full
+// month name + year), NOT an ISO/date column. The built-in Date constructor's
+// handling of non-ISO strings is implementation-defined (Safari is strict,
+// Chrome/Node are lenient), so this parses the known format explicitly rather
+// than relying on `new Date(str)`.
+const MONTH_NAMES = ['january','february','march','april','may','june','july','august','september','october','november','december']
+
+function parseVisitDate(raw: string): Date | null {
+  if (!raw) return null
+  const match = raw.trim().match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/)
+  if (!match) return null
+  const monthIndex = MONTH_NAMES.indexOf(match[2].toLowerCase())
+  if (monthIndex === -1) return null
+  const d = new Date(parseInt(match[3], 10), monthIndex, parseInt(match[1], 10))
+  return isNaN(d.getTime()) ? null : d
+}
+
+// A report is overdue when its site visit was more than 2 days ago and the
+// report has not yet been finalised.
+function isOverdue(visitDate: string, status?: string | null): boolean {
+  if (status === 'finalised') return false
+  const v = parseVisitDate(visitDate)
+  if (!v) return false
+  const cutoff = new Date()
+  cutoff.setHours(0, 0, 0, 0)
+  cutoff.setDate(cutoff.getDate() - 2)
+  return v < cutoff
+}
+
+function daysOverdue(visitDate: string): number {
+  const v = parseVisitDate(visitDate)
+  if (!v) return 0
+  const diff = Date.now() - v.getTime()
+  return Math.max(0, Math.floor(diff / 86400000) - 2)
+}
+
+// ── WEEKLY CHART HELPERS ─────────────────────────────────────────────────────
+// Monday-start weeks, most recent 6 weeks including the current one. Buckets
+// by created_at (a proper timestamp) rather than the free-text visit date.
+function getWeekBuckets(): { start: Date; end: Date; label: string }[] {
+  const now = new Date()
+  const diffToMonday = (now.getDay() + 6) % 7
+  const thisMonday = new Date(now)
+  thisMonday.setHours(0, 0, 0, 0)
+  thisMonday.setDate(now.getDate() - diffToMonday)
+
+  const buckets: { start: Date; end: Date; label: string }[] = []
+  for (let i = 5; i >= 0; i--) {
+    const start = new Date(thisMonday)
+    start.setDate(thisMonday.getDate() - i * 7)
+    const end = new Date(start)
+    end.setDate(start.getDate() + 7)
+    buckets.push({ start, end, label: start.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) })
+  }
+  return buckets
 }
 
 // ── PANEL HEADER ──────────────────────────────────────────────────────────────
 function PanelHeader({
-  dot, title, count, action, accentBorder,
+  dot, title, count, action, accentBorder, extra,
 }: {
   dot: string; title: string
   count?: number; action?: { label: string; onClick: () => void }
   accentBorder?: string
+  extra?: React.ReactNode
 }) {
   return (
     <div style={{
@@ -39,6 +100,7 @@ function PanelHeader({
             fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
           }}>{count}</span>
         )}
+        {extra}
       </div>
       {action && (
         <button onClick={action.onClick} style={{
@@ -75,6 +137,11 @@ export default function DashboardPage() {
 
   // new: delete tracking
   const [deletingId, setDeletingId]           = useState<string | null>(null)
+
+  // new: weekly reports chart (additive — failure never affects the rest of the dashboard)
+  const [weeklyChart, setWeeklyChart]         = useState<WeekBucket[]>([])
+  const [weeklyChartLoading, setWeeklyChartLoading] = useState(true)
+  const [weeklyChartError, setWeeklyChartError]     = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -129,9 +196,46 @@ export default function DashboardPage() {
         .limit(4)
       setPendingReports((pendingData as Inspection[]) ?? [])
       setFinalisedReports((finalisedData as Inspection[]) ?? [])
+
+      // Additive: fired without awaiting so it can never delay or break the
+      // existing dashboard load; failures are caught inside and only affect
+      // the new chart card's own empty/error state.
+      loadWeeklyReports(projectIds)
+    } else {
+      setWeeklyChartLoading(false)
     }
 
     setLoading(false)
+  }
+
+  // new: weekly reports chart data — additive, wrapped so failures never
+  // surface outside this card
+  const loadWeeklyReports = async (projectIds: string[]) => {
+    try {
+      const buckets = getWeekBuckets()
+      const { data, error } = await supabase
+        .from('inspections')
+        .select('report_status, created_at')
+        .in('project_id', projectIds)
+        .eq('status', 'COMPLETED')
+        .gte('created_at', buckets[0].start.toISOString())
+      if (error) throw error
+
+      const counts: WeekBucket[] = buckets.map(b => ({ label: b.label, completed: 0, pending: 0 }))
+      ;(data ?? []).forEach((row: any) => {
+        const created = new Date(row.created_at)
+        const idx = buckets.findIndex(b => created >= b.start && created < b.end)
+        if (idx === -1) return
+        if (row.report_status === 'finalised') counts[idx].completed++
+        else counts[idx].pending++
+      })
+      setWeeklyChart(counts)
+    } catch (err) {
+      console.error('[loadWeeklyReports] error:', err)
+      setWeeklyChartError(true)
+    } finally {
+      setWeeklyChartLoading(false)
+    }
   }
 
   // existing loadReports() — unchanged
@@ -173,6 +277,14 @@ export default function DashboardPage() {
   const recentCompleted = finalisedReports.slice(0, 4)
   const pendingByProject = (projectId: string) =>
     pendingReports.filter(i => i.project_id === projectId).length
+
+  // new: overdue = visit date more than 2 days ago and not yet finalised
+  const overdueCount = pendingReports.filter(i => isOverdue(i.date, i.report_status)).length
+  const sortedPendingReports = [...pendingReports].sort((a, b) => {
+    const aOverdue = isOverdue(a.date, a.report_status)
+    const bOverdue = isOverdue(b.date, b.report_status)
+    return aOverdue === bOverdue ? 0 : aOverdue ? -1 : 1
+  })
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16 }}>
@@ -334,13 +446,25 @@ export default function DashboardPage() {
 
           {/* Panel 2 — Pending Reports */}
           <Card style={{ overflow: 'hidden', borderTop: '3px solid var(--marigold)' }}>
-            <PanelHeader dot="var(--marigold)" title="Pending Reports" count={pendingReports.length} />
+            <PanelHeader
+              dot="var(--marigold)"
+              title="Pending Reports"
+              count={pendingReports.length}
+              extra={overdueCount > 0 ? (
+                <span style={{
+                  background: '#FBE4DF', color: '#E5735B',
+                  fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                }}>{overdueCount} overdue</span>
+              ) : undefined}
+            />
             <div style={{ background: 'var(--marigold-soft)', padding: '10px 24px', fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--marigold-ink)', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid rgba(224,141,11,0.15)' }}>
               Completed on mobile - ready for AI report generation
             </div>
             {pendingReports.length === 0 ? (
               <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>No pending reports - all caught up</div>
-            ) : pendingReports.slice(0, 5).map(ins => (
+            ) : sortedPendingReports.slice(0, 5).map(ins => {
+              const overdue = isOverdue(ins.date, ins.report_status)
+              return (
               <div
                 key={ins.id}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid var(--border-line)', gap: 12 }}
@@ -353,7 +477,15 @@ export default function DashboardPage() {
                     <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
                       {(ins.projects as any)?.name ?? '—'}
                     </div>
-                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 1 }}>{ins.date}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
+                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)' }}>{ins.date}</span>
+                      {overdue && (
+                        <span style={{
+                          background: '#FBE4DF', color: '#E5735B',
+                          fontFamily: 'var(--f-heading)', fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 20,
+                        }}>Overdue · {daysOverdue(ins.date)}d</span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 7, flexShrink: 0 }}>
@@ -372,7 +504,8 @@ export default function DashboardPage() {
                   </button>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </Card>
 
           {/* Panel 3 — On Hold */}
@@ -431,6 +564,60 @@ export default function DashboardPage() {
             ))}
           </Card>
 
+        </div>
+
+        {/* WEEKLY REPORTS CHART — additive */}
+        <div style={{ marginTop: 24 }}>
+          <Card style={{ padding: '22px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 10 }}>
+              <span style={{ fontFamily: 'var(--f-heading)', fontSize: 16, fontWeight: 700, color: 'var(--text-ink)' }}>Reports — last 6 weeks</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--sage)', display: 'inline-block' }} /> Completed
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--marigold)', display: 'inline-block' }} /> Pending
+                </span>
+              </div>
+            </div>
+
+            {weeklyChartError || (!weeklyChartLoading && weeklyChart.every(w => w.completed + w.pending === 0)) ? (
+              <div style={{ padding: '36px 0', textAlign: 'center', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>
+                Not enough report history yet
+              </div>
+            ) : weeklyChartLoading ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '36px 0' }}><Spinner size={24} /></div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, padding: '0 4px' }}>
+                {(() => {
+                  const maxTotal = Math.max(1, ...weeklyChart.map(w => w.completed + w.pending))
+                  return weeklyChart.map(w => {
+                    const total = w.completed + w.pending
+                    const barHeight = total === 0 ? 0 : Math.max(6, (total / maxTotal) * 110)
+                    const pendingHeight = total === 0 ? 0 : (w.pending / total) * barHeight
+                    const completedHeight = barHeight - pendingHeight
+                    return (
+                      <div key={w.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-mid)' }}>{total}</div>
+                        <div style={{ width: '100%', maxWidth: 32, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: 110 }}>
+                          {pendingHeight > 0 && (
+                            <div style={{ width: '100%', height: pendingHeight, background: 'var(--marigold)', borderTopLeftRadius: 6, borderTopRightRadius: 6 }} />
+                          )}
+                          {completedHeight > 0 && (
+                            <div style={{ width: '100%', height: completedHeight, background: 'var(--sage)', borderTopLeftRadius: pendingHeight > 0 ? 0 : 6, borderTopRightRadius: pendingHeight > 0 ? 0 : 6 }} />
+                          )}
+                          {total === 0 && (
+                            <div style={{ width: '100%', height: 4, background: 'var(--border-line)', borderRadius: 2 }} />
+                          )}
+                        </div>
+                        <div style={{ fontFamily: 'var(--f-text)', fontSize: 11, color: 'var(--text-mid)' }}>{w.label}</div>
+                      </div>
+                    )
+                  })
+                })()}
+              </div>
+            )}
+          </Card>
         </div>
       </div>
     </Shell>
