@@ -8,6 +8,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import Svg, { Circle, Rect, Path, G } from 'react-native-svg';
+import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../lib/theme';
 
 const T = theme.colors;
@@ -378,7 +379,7 @@ export default function DrawingViewerScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>{'<'}</Text>
+          <Ionicons name="chevron-back" size={24} color={T.indigo} />
           <Text style={S.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={S.headerTitle} numberOfLines={1}>{title}</Text>
@@ -431,7 +432,7 @@ export default function DrawingViewerScreen() {
                 <Text style={S.openTitle}>{viewOnly ? 'View Drawing' : 'Open & Mark Up Drawing'}</Text>
                 <Text style={S.openSub}>{viewOnly ? 'Tap markers to view observations' : 'Pinch to zoom · Pin · Area · Freehand'}</Text>
               </View>
-              <Text style={S.openArrow}>{'>'}</Text>
+              <Ionicons name="chevron-forward" size={22} color={T.indigo} />
             </TouchableOpacity>
           </View>
           <View style={S.section}>
@@ -451,7 +452,7 @@ export default function DrawingViewerScreen() {
                   <Text style={S.zoneLabel}>{zone.label}</Text>
                   <Text style={S.zoneMeta}>{!zone.markup_type || zone.markup_type === 'pin' ? 'Pin marker' : zone.markup_type === 'rectangle' ? 'Area highlight' : 'Freehand drawing'}{' · Tap to inspect'}</Text>
                 </View>
-                <Text style={S.zoneArrow}>{'>'}</Text>
+                <Ionicons name="chevron-forward" size={18} color={T.mid} />
               </TouchableOpacity>
             ))}
           </View>

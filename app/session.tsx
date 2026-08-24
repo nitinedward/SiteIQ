@@ -461,7 +461,7 @@ export default function SessionScreen() {
               <Text style={S.addCardTitle}>General Observation</Text>
               <Text style={S.addCardSub}>Site-wide notes not tied to a specific drawing</Text>
             </View>
-            <Text style={S.arrow}>{'>'}</Text>
+            <Ionicons name="chevron-forward" size={18} color={T.mid} />
           </TouchableOpacity>
         </View>
 

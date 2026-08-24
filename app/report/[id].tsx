@@ -1,4 +1,5 @@
 import { theme } from '../../lib/theme'
+import { Ionicons } from '@expo/vector-icons';
 
 const T = theme.colors;
 const R = theme.radius;
@@ -798,7 +799,7 @@ export default function ReportScreen() {
       <View style={S.container}>
         <View style={S.header}>
           <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-            <Text style={S.backArrow}>{'<'}</Text>
+            <Ionicons name="chevron-back" size={24} color={T.indigo} />
             <Text style={S.backText}>Back</Text>
           </TouchableOpacity>
           <Text style={S.headerTitle}>Site Report</Text>
@@ -817,7 +818,7 @@ export default function ReportScreen() {
       {/* Header */}
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>{'<'}</Text>
+          <Ionicons name="chevron-back" size={24} color={T.indigo} />
           <Text style={S.backText}>Back</Text>
         </TouchableOpacity>
         <View style={{ flex: 1, alignItems: 'center' }}>
