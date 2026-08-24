@@ -7,7 +7,6 @@ import { useState, useCallback } from 'react'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { getUserFirm } from '../../lib/firm'
-import { Ionicons } from '@expo/vector-icons'
 import { theme } from '../../lib/theme'
 
 const T = theme.colors
@@ -18,6 +17,7 @@ type Project = {
   address: string; status: string
   inspection_count?: number; last_inspection?: string
 }
+type ProjectStats = { reports: number; photos: number; drawings: number }
 
 function statusPill(status: string): { bg: string; text: string; label: string } {
   switch ((status ?? '').toUpperCase()) {
@@ -35,6 +35,7 @@ export default function ProjectsScreen() {
   const [search, setSearch]         = useState('')
   const [firmName, setFirmName]     = useState('')
   const [userName, setUserName]     = useState('')
+  const [projectStats, setProjectStats] = useState<Record<string, ProjectStats>>({})
 
   // ── Data fetching — identical logic, only added setUserName from existing user object ──
   const fetchProjects = async () => {
@@ -77,6 +78,55 @@ export default function ProjectsScreen() {
     setProjects((data as Project[]) ?? [])
     setLoading(false)
     setRefreshing(false)
+
+    // Additive — card stat counts. Fired without awaiting so it never
+    // delays the list; failure just leaves cards without a stats row.
+    loadProjectStats((data ?? []).map((p: any) => p.id))
+  }
+
+  // Batched (not per-card) so N projects still costs 3 queries total.
+  const loadProjectStats = async (projectIds: string[]) => {
+    if (projectIds.length === 0) return
+    try {
+      const { data: inspections } = await supabase
+        .from('inspections')
+        .select('id, project_id, status')
+        .in('project_id', projectIds)
+      const inspList = inspections ?? []
+      const inspectionToProject = new Map(inspList.map((i: any) => [i.id, i.project_id]))
+      const inspectionIds = inspList.map((i: any) => i.id)
+
+      const { data: drawings } = await supabase
+        .from('drawings')
+        .select('project_id')
+        .in('project_id', projectIds)
+
+      const { data: observations } = inspectionIds.length > 0
+        ? await supabase.from('observations').select('inspection_id, photos').in('inspection_id', inspectionIds)
+        : { data: [] as any[] }
+
+      const stats: Record<string, ProjectStats> = {}
+      projectIds.forEach(id => { stats[id] = { reports: 0, photos: 0, drawings: 0 } })
+
+      inspList.forEach((i: any) => {
+        if (i.status === 'COMPLETED' && stats[i.project_id]) stats[i.project_id].reports++
+      })
+      ;(drawings ?? []).forEach((d: any) => {
+        if (stats[d.project_id]) stats[d.project_id].drawings++
+      })
+      ;(observations ?? []).forEach((o: any) => {
+        const pid = inspectionToProject.get(o.inspection_id)
+        if (!pid || !stats[pid]) return
+        let photos: string[] = []
+        if (Array.isArray(o.photos)) photos = o.photos
+        else if (typeof o.photos === 'string') { try { photos = JSON.parse(o.photos) } catch { /* ignore */ } }
+        stats[pid].photos += photos.length
+      })
+
+      setProjectStats(stats)
+    } catch (err) {
+      console.error('[loadProjectStats] error:', err)
+    }
   }
 
   useFocusEffect(useCallback(() => { fetchProjects() }, []))
@@ -89,6 +139,7 @@ export default function ProjectsScreen() {
   // ── Card ──────────────────────────────────────────────────────────────────
   const renderProject = ({ item }: { item: Project }) => {
     const pill = statusPill(item.status)
+    const stats = projectStats[item.id] ?? { reports: 0, photos: 0, drawings: 0 }
     return (
       <TouchableOpacity
         style={S.card}
@@ -111,11 +162,12 @@ export default function ProjectsScreen() {
           <Text style={S.cardAddress} numberOfLines={1}>{item.address}</Text>
         )}
 
-        {/* Divider + footer */}
+        {/* Divider + stats */}
         <View style={S.cardDivider} />
-        <View style={S.cardFooter}>
-          <Text style={S.cardFooterLabel}>View project</Text>
-          <Ionicons name="chevron-forward" size={18} color={T.indigo} />
+        <View style={S.cardStatsRow}>
+          <Text style={S.cardStat}><Text style={S.cardStatNum}>{stats.reports}</Text> Reports</Text>
+          <Text style={S.cardStat}><Text style={S.cardStatNum}>{stats.photos}</Text> Photos</Text>
+          <Text style={S.cardStat}><Text style={S.cardStatNum}>{stats.drawings}</Text> Drawings</Text>
         </View>
       </TouchableOpacity>
     )
@@ -315,21 +367,18 @@ const S = StyleSheet.create({
     marginTop: 12,
     marginBottom: 10,
   },
-  cardFooter: {
+  cardStatsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
+    gap: 18,
   },
-  cardFooterLabel: {
+  cardStat: {
+    fontSize: 12,
+    color: T.mid,
+  },
+  cardStatNum: {
     fontSize: 13,
-    fontWeight: '600',
-    color: T.indigo,
-  },
-  cardChevron: {
-    fontSize: 20,
-    color: T.indigo,
-    marginLeft: 2,
-    lineHeight: 20,
+    fontWeight: '800',
+    color: T.ink,
   },
 
   // ── Empty / loading ──────────────────────────────────────────────────────
