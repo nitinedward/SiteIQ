@@ -41,6 +41,7 @@ export default function ProjectDetailScreen() {
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState('');
+  const [photoCount, setPhotoCount]   = useState(0);
 
   const fetchData = async () => {
     setLoading(true);
@@ -65,6 +66,27 @@ export default function ProjectDetailScreen() {
     setDrawings(d as Drawing[] ?? []);
     setInspections(ins as Inspection[] ?? []);
     setLoading(false);
+
+    // Additive — total photo count across this project's reports. Best-effort:
+    // failure just leaves the stat tile at 0, never blocks the rest of the screen.
+    try {
+      const inspectionIds = (ins ?? []).map((i: any) => i.id);
+      if (inspectionIds.length > 0) {
+        const { data: obs } = await supabase.from('observations').select('photos').in('inspection_id', inspectionIds);
+        let total = 0;
+        (obs ?? []).forEach((o: any) => {
+          let arr: string[] = [];
+          if (Array.isArray(o.photos)) arr = o.photos;
+          else if (typeof o.photos === 'string') { try { arr = JSON.parse(o.photos); } catch { /* ignore */ } }
+          total += arr.length;
+        });
+        setPhotoCount(total);
+      } else {
+        setPhotoCount(0);
+      }
+    } catch (err) {
+      console.error('[photoCount] error:', err);
+    }
   };
 
   useFocusEffect(useCallback(() => { fetchData(); }, [id]));
@@ -112,13 +134,29 @@ export default function ProjectDetailScreen() {
               <View style={S.startLeft}>
                 <Text style={S.startTitle}>Start Inspection</Text>
                 <Text style={S.startSub}>
-                  {inspections.length > 0 ? `Last: ${inspections[0].date}` : 'No inspections yet'}
+                  {inspections.length > 0 ? `Last visit ${inspections[0].date}` : 'No inspections yet'}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={26} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         )}
+
+        {/* STATS */}
+        <View style={S.statsRow}>
+          <View style={S.statTile}>
+            <Text style={S.statNum}>{inspections.length}</Text>
+            <Text style={S.statLabel}>Reports</Text>
+          </View>
+          <View style={S.statTile}>
+            <Text style={S.statNum}>{photoCount}</Text>
+            <Text style={S.statLabel}>Photos</Text>
+          </View>
+          <View style={S.statTile}>
+            <Text style={S.statNum}>{drawings.length}</Text>
+            <Text style={S.statLabel}>Drawings</Text>
+          </View>
+        </View>
 
         {/* DRAWINGS */}
         <View style={S.section}>
@@ -207,6 +245,17 @@ const S = StyleSheet.create({
   startTitle:  { fontSize: 20, fontWeight: '800', color: '#FFFFFF' },
   startSub:    { fontSize: 13, color: 'rgba(255,255,255,0.8)' },
   startArrow:  { fontSize: 32, color: '#FFFFFF', lineHeight: 36 },
+
+  // Stats
+  statsRow:  { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginBottom: 8 },
+  statTile:  {
+    flex: 1, backgroundColor: T.surface, borderRadius: R.md,
+    paddingVertical: 14, alignItems: 'center',
+    shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
+  },
+  statNum:   { fontSize: 22, fontWeight: '800', color: T.ink },
+  statLabel: { fontSize: 12, color: T.mid, marginTop: 2 },
 
   // Sections
   section:      { paddingHorizontal: 16, paddingBottom: 8 },
