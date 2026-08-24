@@ -55,7 +55,7 @@ export default function ReportPage() {
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/'); return }
+      if (!user) { router.push('/login'); return }
 
       const [inspRes, memberRes] = await Promise.all([
         supabase.from('inspections').select('*, projects(name, project_number)').eq('id', id).single(),

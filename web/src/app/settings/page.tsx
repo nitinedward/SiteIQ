@@ -75,7 +75,7 @@ export default function SettingsPage() {
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/'); return }
+      if (!user) { router.push('/login'); return }
 
       const { data: member } = await supabase
         .from('firm_members')
@@ -229,7 +229,7 @@ export default function SettingsPage() {
     setDisconnecting(false)
   }
 
-  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/') }
+  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/login') }
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>

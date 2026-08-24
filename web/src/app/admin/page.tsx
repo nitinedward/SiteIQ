@@ -164,7 +164,7 @@ export default function AdminPage() {
   // ── existing functions (unchanged) ────────────────────────────────────────
   const loadData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/'); return }
+    if (!user) { router.push('/login'); return }
     setAdminUserId(user.id)
     setCurrentUserId(user.id)
 
@@ -330,7 +330,7 @@ export default function AdminPage() {
     loadData()
   }
 
-  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/') }
+  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/login') }
 
   // ── new functions ─────────────────────────────────────────────────────────
   const saveJoinCode = async () => {

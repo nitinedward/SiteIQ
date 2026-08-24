@@ -148,7 +148,7 @@ export default function DashboardPage() {
   // existing load() — queries unchanged
   const load = async () => {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/'); return }
+    if (!user) { router.push('/login'); return }
 
     const { data: member } = await supabase
       .from('firm_members')
@@ -254,7 +254,7 @@ export default function DashboardPage() {
     setLoadingReports(false)
   }
 
-  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/') }
+  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/login') }
 
   // delete a site report (also removes observations and zones)
   const deleteInspection = async (id: string) => {
