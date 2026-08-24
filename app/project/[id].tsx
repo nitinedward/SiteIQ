@@ -112,7 +112,7 @@ export default function ProjectDetailScreen() {
       {/* Header */}
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>{'⬅️'}</Text>
+          <Ionicons name="arrow-back" size={20} color={T.indigo} />
         </TouchableOpacity>
         <View style={S.headerMid}>
           <Text style={S.headerTitle} numberOfLines={1}>{project.name}</Text>
@@ -218,8 +218,10 @@ const S = StyleSheet.create({
 
   // Header
   header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 14, backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line, gap: 12 },
-  backBtn:     { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  backArrow:   { fontSize: 28, color: T.indigo, lineHeight: 32 },
+  backBtn:     {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center',
+  },
   headerMid:   { flex: 1 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: T.ink },
   headerSub:   { fontSize: 12, color: T.mid, marginTop: 1 },
