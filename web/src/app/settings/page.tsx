@@ -238,13 +238,13 @@ export default function SettingsPage() {
   )
 
   const labelStyle: React.CSSProperties = {
-    display: 'block', fontSize: 15, fontWeight: 500,
-    color: 'var(--dark)', marginBottom: 8,
+    display: 'block', fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700,
+    color: 'var(--text-mid)', marginBottom: 8,
   }
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '12px 16px',
-    background: 'var(--stone)', border: '1px solid var(--line)',
-    borderRadius: 8, fontSize: 15, color: 'var(--ink)', outline: 'none',
+    background: 'var(--surface)', border: '1.5px solid var(--border-line)',
+    borderRadius: 'var(--radius-sm)', fontFamily: 'var(--f-text)', fontSize: 15, color: 'var(--text-ink)', outline: 'none',
   }
 
   return (
@@ -265,15 +265,15 @@ export default function SettingsPage() {
 
         {/* Page heading */}
         <div>
-          <h1 style={{ fontSize: 36, fontWeight: 500, color: 'var(--ink)', lineHeight: 1 }}>Settings</h1>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--mid)', marginTop: 8 }}>
+          <h1 style={{ fontFamily: 'var(--f-heading)', fontSize: 32, fontWeight: 800, color: 'var(--indigo-deep)', lineHeight: 1 }}>Settings</h1>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--text-mid)', marginTop: 8 }}>
             {firm?.name}
           </div>
         </div>
 
         {/* Success toast */}
         {uploadSuccess && (
-          <div style={{ background: 'var(--green2)', border: '1px solid #b3ddd1', borderRadius: 6, padding: '10px 14px', fontSize: 13, color: 'var(--green)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ background: 'var(--sage-soft)', border: '1px solid rgba(91,146,121,.3)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--sage-ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
             {uploadSuccess}
           </div>
@@ -281,8 +281,8 @@ export default function SettingsPage() {
 
         {/* ── CARD 1: Firm Details ─────────────────────────── */}
         <Card className="settings-card">
-          <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--line)' }}>
-            <h2 style={{ fontFamily: 'var(--f-serif)', fontSize: 17, fontWeight: 600, color: 'var(--ink)' }}>Firm Details</h2>
+          <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--border-line)' }}>
+            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 17, fontWeight: 800, color: 'var(--text-ink)' }}>Firm Details</h2>
           </div>
           <div style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div>
@@ -292,8 +292,8 @@ export default function SettingsPage() {
                   value={firmNameEdit}
                   onChange={e => setFirmNameEdit(e.target.value)}
                   style={{ ...inputStyle, flex: 1 }}
-                  onFocus={e => { e.target.style.background = 'var(--white)'; e.target.style.borderColor = 'var(--accent)' }}
-                  onBlur={e =>  { e.target.style.background = 'var(--stone)'; e.target.style.borderColor = 'var(--line)' }}
+                  onFocus={e => { e.target.style.borderColor = 'var(--indigo)' }}
+                  onBlur={e =>  { e.target.style.borderColor = 'var(--border-line)' }}
                 />
                 <Btn variant="primary" onClick={saveFirmName} disabled={savingFirmName || firmNameEdit === firm?.name}>
                   {savingFirmName ? 'Saving…' : 'Save'}
@@ -302,12 +302,12 @@ export default function SettingsPage() {
             </div>
             <div>
               <label style={labelStyle}>Join Code</label>
-              <p style={{ fontSize: 12, color: 'var(--mid)', marginBottom: 8, lineHeight: 1.5 }}>
+              <p style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginBottom: 8, lineHeight: 1.5 }}>
                 Share this with engineers — they enter it when signing up on the mobile app.
               </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ background: 'var(--accent2)', border: '1px solid var(--line2)', borderRadius: 8, padding: '10px 18px', flex: 1 }}>
-                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 24, fontWeight: 500, color: 'var(--accent)', letterSpacing: '0.3em' }}>
+                <div style={{ background: 'var(--indigo-soft)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)', padding: '10px 18px', flex: 1 }}>
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 24, fontWeight: 600, color: 'var(--indigo)', letterSpacing: '0.3em' }}>
                     {firm?.join_code ?? '—'}
                   </span>
                 </div>
@@ -321,24 +321,24 @@ export default function SettingsPage() {
 
         {/* ── CARD 2: Report Template ──────────────────────── */}
         <Card className="settings-card">
-          <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--line)' }}>
-            <h2 style={{ fontFamily: 'var(--f-serif)', fontSize: 20, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>Report Template</h2>
-            <p style={{ fontSize: 13, color: 'var(--mid)', lineHeight: 1.6, marginBottom: 10 }}>
+          <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--border-line)' }}>
+            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 18, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 4 }}>Report Template</h2>
+            <p style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.6, marginBottom: 10 }}>
               Upload your firm's Word template (.docx). Use these placeholders where AI content is inserted:
             </p>
-            <div style={{ background: 'var(--stone)', border: '1px solid var(--line)', borderRadius: 6, padding: '9px 12px', fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--dark)', lineHeight: 1.8 }}>
+            <div style={{ background: 'var(--paper)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)', padding: '9px 12px', fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-ink)', lineHeight: 1.8 }}>
               {'{{project_name}}  {{date}}  {{report_no}}  {{engineer_name}}  {{weather}}'}<br/>
               {'{{site_contact}}  {{purpose}}  {{findings}}  {{recommendations}}'}
             </div>
           </div>
           <div style={{ padding: 28 }}>
             {firm?.report_template_url ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--green2)', border: '1px solid #b3ddd1', borderRadius: 8, padding: '14px 18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--sage-soft)', border: '1px solid rgba(91,146,121,.3)', borderRadius: 'var(--radius-sm)', padding: '14px 18px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ fontSize: 28 }}>📄</div>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>Template uploaded</div>
-                    <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 2 }}>AI reports are enabled for your firm</div>
+                    <div style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>Template uploaded</div>
+                    <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--sage-ink)', marginTop: 2 }}>AI reports are enabled for your firm</div>
                   </div>
                 </div>
                 <Btn variant="outline" small onClick={() => templateInputRef.current?.click()}>Replace</Btn>
@@ -350,22 +350,22 @@ export default function SettingsPage() {
                 onDrop={e => handleDrop(e, 'template')}
                 onClick={() => templateInputRef.current?.click()}
                 style={{
-                  border: `2px dashed ${templateDragging ? 'var(--accent)' : 'var(--line2)'}`,
-                  borderRadius: 8, padding: 36, textAlign: 'center', cursor: 'pointer',
-                  background: templateDragging ? 'var(--accent2)' : 'var(--stone)',
+                  border: `2px dashed ${templateDragging ? 'var(--indigo)' : 'var(--border-line)'}`,
+                  borderRadius: 'var(--radius-md)', padding: 36, textAlign: 'center', cursor: 'pointer',
+                  background: templateDragging ? 'var(--indigo-soft)' : 'var(--paper)',
                   transition: 'all .15s',
                 }}
               >
                 {templateUploading ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
                     <Spinner size={22} />
-                    <div style={{ fontSize: 13, color: 'var(--mid)' }}>Uploading…</div>
+                    <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>Uploading…</div>
                   </div>
                 ) : (
                   <>
                     <div style={{ fontSize: 32, marginBottom: 10 }}>📄</div>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--dark)' }}>Drop your Word template here</div>
-                    <div style={{ fontSize: 12, color: 'var(--mid)', marginTop: 4 }}>or click to browse · .docx files only</div>
+                    <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}>Drop your Word template here</div>
+                    <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 4 }}>or click to browse · .docx files only</div>
                   </>
                 )}
               </div>
@@ -377,21 +377,22 @@ export default function SettingsPage() {
 
         {/* ── CARD 3: Microsoft 365 ────────────────────────── */}
         <Card className="settings-card">
-          <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--border-line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <h2 style={{ fontFamily: 'var(--f-serif)', fontSize: 20, fontWeight: 500, color: 'var(--ink)', marginBottom: 4 }}>
+              <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 18, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 4 }}>
                 Microsoft 365
               </h2>
-              <p style={{ fontSize: 13, color: 'var(--mid)' }}>
+              <p style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>
                 Edit reports in Word Online and save to OneDrive automatically
               </p>
             </div>
             {msToken && (
               <span style={{
-                background: 'var(--green2)',
-                color: 'var(--green)',
+                background: 'var(--sage-soft)',
+                color: 'var(--sage-ink)',
+                fontFamily: 'var(--f-heading)',
                 fontSize: 11,
-                fontWeight: 600,
+                fontWeight: 700,
                 padding: '3px 10px',
                 borderRadius: 99,
                 display: 'flex',
@@ -406,16 +407,16 @@ export default function SettingsPage() {
 
           <div style={{ padding: 28 }}>
             {msLoading ? (
-              <div style={{ padding: 20, textAlign: 'center', color: 'var(--mid)', fontSize: 14 }}>
+              <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-mid)', fontSize: 14 }}>
                 <Spinner size={18} />
               </div>
             ) : msToken ? (
               /* CONNECTED STATE */
               <div>
                 <div style={{
-                  background: 'var(--green2)',
-                  border: '1px solid #bbf7d0',
-                  borderRadius: 10,
+                  background: 'var(--sage-soft)',
+                  border: '1px solid rgba(91,146,121,.3)',
+                  borderRadius: 'var(--radius-md)',
                   padding: '16px 20px',
                   display: 'flex',
                   alignItems: 'center',
@@ -427,8 +428,8 @@ export default function SettingsPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{
                       width: 40, height: 40,
-                      background: 'var(--accent)',
-                      borderRadius: 8,
+                      background: 'var(--indigo)',
+                      borderRadius: 'var(--radius-sm)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -437,10 +438,10 @@ export default function SettingsPage() {
                       fontWeight: 700,
                     }}>⊞</div>
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
+                      <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}>
                         Connected
                       </div>
-                      <div style={{ fontSize: 13, color: 'var(--mid)', marginTop: 2 }}>
+                      <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 2 }}>
                         {msToken.connected_email}
                       </div>
                     </div>
@@ -451,15 +452,15 @@ export default function SettingsPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
-                        background: 'var(--white)',
-                        border: '1px solid var(--line)',
-                        borderRadius: 7,
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border-line)',
+                        borderRadius: 'var(--radius-pill)',
                         padding: '7px 14px',
                         fontSize: 13,
-                        color: 'var(--accent)',
-                        fontWeight: 500,
+                        color: 'var(--indigo)',
+                        fontWeight: 700,
                         textDecoration: 'none',
-                        fontFamily: 'var(--f-body)',
+                        fontFamily: 'var(--f-heading)',
                       }}
                     >
                       Open OneDrive ↗
@@ -468,15 +469,15 @@ export default function SettingsPage() {
                       onClick={disconnectMicrosoft}
                       disabled={disconnecting}
                       style={{
-                        background: 'var(--red2)',
-                        border: '1px solid #f5c6c3',
-                        borderRadius: 7,
+                        background: 'var(--clay-soft)',
+                        border: '1px solid rgba(229,115,91,.3)',
+                        borderRadius: 'var(--radius-pill)',
                         padding: '7px 14px',
                         fontSize: 13,
-                        color: 'var(--red)',
-                        fontWeight: 500,
+                        color: 'var(--clay-ink)',
+                        fontWeight: 700,
                         cursor: disconnecting ? 'not-allowed' : 'pointer',
-                        fontFamily: 'var(--f-body)',
+                        fontFamily: 'var(--f-heading)',
                       }}
                     >
                       {disconnecting ? 'Disconnecting...' : 'Disconnect'}
@@ -485,12 +486,13 @@ export default function SettingsPage() {
                 </div>
 
                 <div style={{
-                  background: 'var(--accent2)',
-                  border: '1px solid #c5d8f5',
-                  borderRadius: 8,
+                  background: 'var(--indigo-soft)',
+                  border: '1px solid var(--border-line)',
+                  borderRadius: 'var(--radius-sm)',
                   padding: '12px 16px',
+                  fontFamily: 'var(--f-text)',
                   fontSize: 13,
-                  color: 'var(--accent)',
+                  color: 'var(--indigo)',
                   lineHeight: 1.5,
                 }}>
                   ✅ Reports will automatically open in Word Online for editing. Files are saved to your OneDrive under
@@ -500,9 +502,9 @@ export default function SettingsPage() {
             ) : (
               /* DISCONNECTED STATE */
               <div style={{
-                background: 'var(--accent2)',
-                border: '1px solid #c5d8f5',
-                borderRadius: 10,
+                background: 'var(--indigo-soft)',
+                border: '1px solid var(--border-line)',
+                borderRadius: 'var(--radius-md)',
                 padding: '20px 24px',
                 display: 'flex',
                 alignItems: 'center',
@@ -513,8 +515,8 @@ export default function SettingsPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <div style={{
                     width: 44, height: 44,
-                    background: 'var(--accent)',
-                    borderRadius: 10,
+                    background: 'var(--indigo)',
+                    borderRadius: 'var(--radius-sm)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -524,10 +526,10 @@ export default function SettingsPage() {
                     flexShrink: 0,
                   }}>⊞</div>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
+                    <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>
                       Not connected
                     </div>
-                    <div style={{ fontSize: 13, color: 'var(--mid)', marginTop: 3 }}>
+                    <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 3 }}>
                       Connect your Microsoft 365 work account to edit reports in Word Online
                     </div>
                   </div>
@@ -535,15 +537,15 @@ export default function SettingsPage() {
                 <button
                   onClick={connectMicrosoft}
                   style={{
-                    background: 'var(--accent)',
+                    background: 'var(--indigo)',
                     color: 'white',
                     border: 'none',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-pill)',
                     padding: '10px 22px',
+                    fontFamily: 'var(--f-heading)',
                     fontSize: 14,
-                    fontWeight: 600,
+                    fontWeight: 700,
                     cursor: 'pointer',
-                    fontFamily: 'var(--f-body)',
                     flexShrink: 0,
                   }}
                 >
@@ -555,16 +557,16 @@ export default function SettingsPage() {
         </Card>
 
         {/* ── CARD 4: Danger Zone ──────────────────────────── */}
-        <div style={{ border: '1px solid var(--red)', borderRadius: 10, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
-          <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--red)', background: 'var(--red2)' }}>
-            <h2 style={{ fontFamily: 'var(--f-serif)', fontSize: 17, fontWeight: 600, color: 'var(--red)' }}>Danger Zone</h2>
-            <p style={{ fontSize: 13, color: 'var(--red)', opacity: 0.75, marginTop: 2 }}>Irreversible actions — proceed with caution</p>
+        <div style={{ border: '1px solid var(--clay)', borderRadius: 'var(--radius-md)', overflow: 'hidden', boxShadow: 'var(--shadow-card-v3)' }}>
+          <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--clay)', background: 'var(--clay-soft)' }}>
+            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 17, fontWeight: 800, color: 'var(--clay-ink)' }}>Danger Zone</h2>
+            <p style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--clay-ink)', opacity: 0.85, marginTop: 2 }}>Irreversible actions — proceed with caution</p>
           </div>
-          <div style={{ padding: 28, background: 'var(--white)' }}>
+          <div style={{ padding: 28, background: 'var(--surface)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0' }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>Delete Account</div>
-                <div style={{ fontSize: 13, color: 'var(--mid)', marginTop: 4 }}>Permanently delete your firm and all associated data</div>
+                <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>Delete Account</div>
+                <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 4 }}>Permanently delete your firm and all associated data</div>
               </div>
               <Btn variant="danger" onClick={() => { if (confirm('This will permanently delete your firm and all data. This cannot be undone. Are you sure?')) alert('Please contact support to delete your account.') }}>
                 Delete Account
