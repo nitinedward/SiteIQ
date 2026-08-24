@@ -41,22 +41,16 @@ export default function LoginPage() {
           .login-heading     { font-size: 32px !important; }
         }
       `}</style>
-      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: 'var(--f-body)' }}>
+      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: 'var(--f-text)' }}>
 
       {/* LEFT PANEL (42%) */}
       <div className="login-left-panel" style={{
         width: '42%', minWidth: 380, flexShrink: 0,
-        background: 'linear-gradient(145deg, #1e3a5f 0%, #2c5282 60%, #2d6a8f 100%)',
+        background: 'var(--indigo-deep)',
         position: 'relative', overflow: 'hidden',
         display: 'flex', flexDirection: 'column', justifyContent: 'center',
         padding: '60px 56px',
       }}>
-
-        {/* Circle 1 */}
-        <div style={{ position: 'absolute', top: -120, right: -120, width: 380, height: 380, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
-
-        {/* Circle 2 */}
-        <div style={{ position: 'absolute', bottom: -180, left: -140, width: 520, height: 520, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
 
         {/* Grid overlay */}
         <div style={{
@@ -84,17 +78,17 @@ export default function LoginPage() {
           </div>
 
           {/* Brand name */}
-          <div style={{ fontFamily: 'var(--f-serif)', fontSize: 56, fontWeight: 600, color: '#fff', lineHeight: 1, marginBottom: 12 }}>
+          <div style={{ fontFamily: 'var(--f-heading)', fontSize: 46, fontWeight: 800, color: '#fff', lineHeight: 1, marginBottom: 12 }}>
             SiteIQ
           </div>
 
           {/* Tagline */}
-          <div style={{ fontSize: 16, lineHeight: 1.6, color: 'rgba(255,255,255,0.65)', marginBottom: 48 }}>
+          <div style={{ fontFamily: 'var(--f-text)', fontSize: 16, lineHeight: 1.6, color: 'rgba(255,255,255,0.65)', marginBottom: 48 }}>
             Structural Engineering<br />Inspection Platform
           </div>
 
           {/* Divider */}
-          <div style={{ width: 40, height: 2, background: 'rgba(255,255,255,0.25)', borderRadius: 1, marginBottom: 32 }} />
+          <div style={{ width: 40, height: 3, background: 'var(--marigold)', borderRadius: 2, marginBottom: 32 }} />
 
           {/* Feature list */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -102,15 +96,14 @@ export default function LoginPage() {
               <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{
                   width: 22, height: 22, flexShrink: 0,
-                  background: 'rgba(255,255,255,0.12)', borderRadius: '50%',
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  background: 'var(--sage)', borderRadius: '50%',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
                   <svg width="10" height="10" fill="none" stroke="white" strokeWidth="2.5" viewBox="0 0 24 24">
                     <polyline points="20,6 9,17 4,12"/>
                   </svg>
                 </div>
-                <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>{f}</span>
+                <span style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>{f}</span>
               </div>
             ))}
           </div>
@@ -129,41 +122,41 @@ export default function LoginPage() {
 
       {/* RIGHT PANEL (58%) */}
       <div className="login-right-panel" style={{
-        flex: 1, background: 'white',
+        flex: 1, background: 'var(--paper)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '60px',
       }}>
         <div style={{ width: '100%', maxWidth: 400 }}>
 
           {/* Eyebrow */}
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--mid)', marginBottom: 16 }}>
+          <div style={{ fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--marigold-deep)', marginBottom: 16 }}>
             Welcome back
           </div>
 
           {/* Heading */}
-          <h2 className="login-heading" style={{ fontFamily: 'var(--f-serif)', fontSize: 42, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.1, margin: '0 0 8px 0' }}>
+          <h2 className="login-heading" style={{ fontFamily: 'var(--f-heading)', fontSize: 40, fontWeight: 800, color: 'var(--indigo-deep)', lineHeight: 1.1, margin: '0 0 8px 0' }}>
             Sign in to SiteIQ
           </h2>
 
           {/* Subtext */}
-          <p style={{ fontSize: 15, color: 'var(--mid)', margin: '0 0 40px 0' }}>
+          <p style={{ fontFamily: 'var(--f-text)', fontSize: 15, color: 'var(--text-mid)', margin: '0 0 40px 0' }}>
             Enter your credentials to continue
           </p>
 
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>Email address</label>
+              <label style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-mid)' }}>Email address</label>
               <input
                 type="email" value={email} onChange={e => setEmail(e.target.value)}
                 placeholder="you@firm.com" required
                 style={{
-                  padding: '12px 16px',
-                  background: focusEmail ? 'white' : 'var(--stone)',
-                  border: `1.5px solid ${focusEmail ? 'var(--accent)' : 'var(--line)'}`,
-                  borderRadius: 'var(--r2)', fontSize: 15, color: 'var(--ink)',
+                  height: 52, padding: '0 16px',
+                  background: 'var(--surface)',
+                  border: `1.5px solid ${focusEmail ? 'var(--indigo)' : 'var(--border-line)'}`,
+                  borderRadius: 'var(--radius-sm)', fontFamily: 'var(--f-text)', fontSize: 15, color: 'var(--text-ink)',
                   outline: 'none', transition: 'all .15s', width: '100%',
-                  boxShadow: focusEmail ? '0 0 0 3px var(--accent2)' : 'none',
+                  boxShadow: focusEmail ? '0 0 0 3px var(--indigo-soft)' : 'none',
                 }}
                 onFocus={() => setFocusEmail(true)}
                 onBlur={() => setFocusEmail(false)}
@@ -171,17 +164,17 @@ export default function LoginPage() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>Password</label>
+              <label style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-mid)' }}>Password</label>
               <input
                 type="password" value={password} onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••" required
                 style={{
-                  padding: '12px 16px',
-                  background: focusPass ? 'white' : 'var(--stone)',
-                  border: `1.5px solid ${focusPass ? 'var(--accent)' : 'var(--line)'}`,
-                  borderRadius: 'var(--r2)', fontSize: 15, color: 'var(--ink)',
+                  height: 52, padding: '0 16px',
+                  background: 'var(--surface)',
+                  border: `1.5px solid ${focusPass ? 'var(--indigo)' : 'var(--border-line)'}`,
+                  borderRadius: 'var(--radius-sm)', fontFamily: 'var(--f-text)', fontSize: 15, color: 'var(--text-ink)',
                   outline: 'none', transition: 'all .15s', width: '100%',
-                  boxShadow: focusPass ? '0 0 0 3px var(--accent2)' : 'none',
+                  boxShadow: focusPass ? '0 0 0 3px var(--indigo-soft)' : 'none',
                 }}
                 onFocus={() => setFocusPass(true)}
                 onBlur={() => setFocusPass(false)}
@@ -189,7 +182,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div style={{ background: 'var(--red2)', border: '1px solid rgba(192,57,43,.2)', borderRadius: 'var(--r1)', padding: '10px 14px', fontSize: 13, color: 'var(--red)' }}>
+              <div style={{ background: 'var(--clay-soft)', border: '1px solid rgba(229,115,91,.3)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--clay-ink)' }}>
                 {error}
               </div>
             )}
@@ -198,23 +191,23 @@ export default function LoginPage() {
               type="submit"
               disabled={loading}
               style={{
-                width: '100%', padding: '13px 24px', marginTop: 8,
-                background: 'var(--accent)', color: 'white',
-                border: 'none', borderRadius: 'var(--r2)',
-                fontSize: 15, fontWeight: 600, letterSpacing: '0.3px',
+                width: '100%', height: 52, padding: '0 24px', marginTop: 8,
+                background: 'var(--indigo)', color: 'white',
+                border: 'none', borderRadius: 'var(--radius-pill)',
+                fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 800, letterSpacing: '0.3px',
                 cursor: loading ? 'not-allowed' : 'pointer',
                 transition: 'all .2s', opacity: loading ? 0.7 : 1,
               }}
               onMouseEnter={e => {
                 if (!loading) {
-                  e.currentTarget.style.background = '#1e3a5f'
+                  e.currentTarget.style.background = 'var(--indigo-deep)'
                   e.currentTarget.style.transform = 'translateY(-1px)'
-                  e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+                  e.currentTarget.style.boxShadow = 'var(--shadow-card-v3)'
                 }
               }}
               onMouseLeave={e => {
                 if (!loading) {
-                  e.currentTarget.style.background = 'var(--accent)'
+                  e.currentTarget.style.background = 'var(--indigo)'
                   e.currentTarget.style.transform = 'translateY(0)'
                   e.currentTarget.style.boxShadow = 'none'
                 }
@@ -225,11 +218,11 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p style={{ marginTop: 24, fontSize: 14, color: 'var(--mid)', textAlign: 'center' }}>
+          <p style={{ marginTop: 24, fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)', textAlign: 'center' }}>
             New to SiteIQ?{' '}
             <button
               onClick={() => router.push('/signup')}
-              style={{ color: 'var(--accent)', fontWeight: 500, cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline', fontSize: 14 }}
+              style={{ color: 'var(--indigo)', fontWeight: 600, cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline', fontSize: 14, fontFamily: 'var(--f-text)' }}
             >
               Create an account
             </button>
