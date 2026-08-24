@@ -92,7 +92,7 @@ export default function DrawingsPickerScreen() {
               activeOpacity={0.7}
             >
               <View style={styles.drawingIconBox}>
-                <Text style={styles.drawingIcon}>DWG</Text>
+                <Text style={styles.drawingIcon}>📐</Text>
               </View>
               <View style={styles.drawingInfo}>
                 <Text style={styles.drawingTitle}>{drawing.title}</Text>
@@ -109,7 +109,7 @@ export default function DrawingsPickerScreen() {
 
           {drawings.length === 0 && (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyIcon}>DWG</Text>
+              <Text style={styles.emptyIcon}>📐</Text>
               <Text style={styles.emptyTitle}>No drawings uploaded</Text>
               <Text style={styles.emptySub}>
                 Drawings are uploaded via the desktop web app
@@ -139,14 +139,14 @@ const styles = StyleSheet.create({
   sectionTitle:      { fontSize: 11, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
   drawingCard:       { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.md, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: T.line, gap: 12, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
   drawingIconBox:    { width: 44, height: 44, borderRadius: R.sm, backgroundColor: T.indigoSoft, alignItems: 'center', justifyContent: 'center' },
-  drawingIcon:       { fontSize: 11, fontWeight: '800', color: T.indigo },
+  drawingIcon:       { fontSize: 20 },
   drawingInfo:       { flex: 1, gap: 2 },
   drawingTitle:      { fontSize: 14, fontWeight: '600', color: T.ink },
   drawingMeta:       { fontSize: 12, color: T.mid },
   drawingZones:      { fontSize: 12, color: T.indigo, marginTop: 2, fontWeight: '500' },
   drawingArrow:      { fontSize: 22, color: T.mid },
   emptyCard:         { backgroundColor: T.surface, borderRadius: R.md, padding: 32, alignItems: 'center', borderWidth: 1, borderColor: T.line, borderStyle: 'dashed', gap: 8, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 1 },
-  emptyIcon:         { fontSize: 11, fontWeight: '800', color: T.mid },
+  emptyIcon:         { fontSize: 36 },
   emptyTitle:        { fontSize: 16, fontWeight: '600', color: T.ink },
   emptySub:          { fontSize: 13, color: T.mid, textAlign: 'center', lineHeight: 18 },
 });

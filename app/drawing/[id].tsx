@@ -391,9 +391,9 @@ export default function DrawingViewerScreen() {
         <View style={S.pdfScreen}>
           {!viewOnly && (
             <View style={S.toolbar}>
-              <ToolBtn icon="Pin"  label="Pin"  active={tool==='pin'}       onPress={() => updateTool('pin')} />
-              <ToolBtn icon="Area" label="Area" active={tool==='rectangle'} onPress={() => updateTool('rectangle')} />
-              <ToolBtn icon="Draw" label="Draw" active={tool==='freehand'}  onPress={() => updateTool('freehand')} />
+              <ToolBtn icon="📍" label="Pin"  active={tool==='pin'}       onPress={() => updateTool('pin')} />
+              <ToolBtn icon="🔲" label="Area" active={tool==='rectangle'} onPress={() => updateTool('rectangle')} />
+              <ToolBtn icon="✏️" label="Draw" active={tool==='freehand'}  onPress={() => updateTool('freehand')} />
             </View>
           )}
           <View ref={pdfWrapRef} style={S.pdfWrap} onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h > 0) pdfWrapH.current = h; measureWrap(); setTimeout(measureWrap, 50); }} {...panResponder.panHandlers}>
@@ -415,7 +415,7 @@ export default function DrawingViewerScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>
               {zones.map(zone => (
                 <TouchableOpacity key={zone.id} style={[S.chip, zone.markup_type === 'freehand' && S.chipFree]} onPress={() => handleTapZone(zone)}>
-                  <Text style={S.chipIcon}>{!zone.markup_type || zone.markup_type === 'pin' ? 'Pin' : zone.markup_type === 'rectangle' ? 'Area' : 'Draw'}</Text>
+                  <Text style={S.chipIcon}>{!zone.markup_type || zone.markup_type === 'pin' ? '📍' : zone.markup_type === 'rectangle' ? '🔲' : '✏️'}</Text>
                   <Text style={S.chipText}>{zone.label}</Text>
                 </TouchableOpacity>
               ))}
@@ -426,7 +426,7 @@ export default function DrawingViewerScreen() {
         <ScrollView style={S.scroll} showsVerticalScrollIndicator={false}>
           <View style={S.section}>
             <TouchableOpacity style={S.openBtn} onPress={() => { setIsLoading(true); setPdfError(''); setShowPdf(true); }}>
-              <Text style={S.openIcon}>PDF</Text>
+              <Text style={S.openIcon}>📐</Text>
               <View style={{ flex: 1 }}>
                 <Text style={S.openTitle}>{viewOnly ? 'View Drawing' : 'Open & Mark Up Drawing'}</Text>
                 <Text style={S.openSub}>{viewOnly ? 'Tap markers to view observations' : 'Pinch to zoom · Pin · Area · Freehand'}</Text>
@@ -438,14 +438,14 @@ export default function DrawingViewerScreen() {
             <Text style={S.sectionTitle}>Marked Zones ({zones.length})</Text>
             {zones.length === 0 ? (
               <View style={S.empty}>
-                <Text style={S.emptyIcon}>( )</Text>
+                <Text style={S.emptyIcon}>📍</Text>
                 <Text style={S.emptyTitle}>No zones yet</Text>
                 <Text style={S.emptyBody}>{viewOnly ? 'No markup was added during this inspection' : 'Open the drawing and use the tools to mark zones'}</Text>
               </View>
             ) : zones.map(zone => (
               <TouchableOpacity key={zone.id} style={S.zoneRow} onPress={() => handleTapZone(zone)} activeOpacity={0.7}>
                 <View style={[S.zoneBadge, zone.markup_type === 'freehand' && { backgroundColor: '#FEF3C7' }]}>
-                  <Text style={S.zoneBadgeIcon}>{!zone.markup_type || zone.markup_type === 'pin' ? 'Pin' : zone.markup_type === 'rectangle' ? 'Area' : 'Draw'}</Text>
+                  <Text style={S.zoneBadgeIcon}>{!zone.markup_type || zone.markup_type === 'pin' ? '📍' : zone.markup_type === 'rectangle' ? '🔲' : '✏️'}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={S.zoneLabel}>{zone.label}</Text>
@@ -494,7 +494,7 @@ const S = StyleSheet.create({
   toolbar:       { flexDirection: 'row', backgroundColor: T.surface, paddingVertical: 8, paddingHorizontal: 10, gap: 6, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
   toolBtn:       { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 10, backgroundColor: T.paper, borderWidth: 1, borderColor: T.line, gap: 2 },
   toolBtnOn:     { backgroundColor: T.indigoSoft, borderColor: T.indigo },
-  toolIcon:      { fontSize: 14, color: T.mid },
+  toolIcon:      { fontSize: 17 },
   toolLabel:     { fontSize: 9, color: T.mid, fontWeight: '600' },
   toolLabelOn:   { color: T.indigo },
   hintBar:       { backgroundColor: T.paper, paddingVertical: 7, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
@@ -512,23 +512,23 @@ const S = StyleSheet.create({
   stripContent:  { paddingHorizontal: 16, gap: 8, alignItems: 'center', paddingVertical: 10 },
   chip:          { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: T.indigoSoft, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: T.indigo },
   chipFree:      { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
-  chipIcon:      { fontSize: 11, color: T.mid, fontWeight: '700' },
+  chipIcon:      { fontSize: 13 },
   chipText:      { fontSize: 12, color: T.indigo, fontWeight: '500' },
   scroll:        { flex: 1, backgroundColor: T.paper },
   section:       { padding: 20, paddingBottom: 8 },
   sectionTitle:  { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
   openBtn:       { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.md, padding: 18, gap: 14, borderWidth: 1.5, borderColor: T.indigo, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
-  openIcon:      { fontSize: 14, fontWeight: '800', color: T.indigo },
+  openIcon:      { fontSize: 24 },
   openTitle:     { fontSize: 16, fontWeight: '700', color: T.ink, marginBottom: 3 },
   openSub:       { fontSize: 12, color: T.mid },
   openArrow:     { fontSize: 24, color: T.indigo },
   empty:         { backgroundColor: T.surface, borderRadius: R.md, padding: 28, alignItems: 'center', borderWidth: 1, borderColor: T.line, borderStyle: 'dashed', gap: 8 },
-  emptyIcon:     { fontSize: 14, color: T.mid },
+  emptyIcon:     { fontSize: 36 },
   emptyTitle:    { fontSize: 15, color: T.ink, fontWeight: '500' },
   emptyBody:     { fontSize: 12, color: T.mid, textAlign: 'center', lineHeight: 18 },
   zoneRow:       { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.md, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: T.line, gap: 12, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
   zoneBadge:     { width: 36, height: 36, borderRadius: 10, backgroundColor: T.indigoSoft, alignItems: 'center', justifyContent: 'center' },
-  zoneBadgeIcon: { fontSize: 11, fontWeight: '700', color: T.indigo },
+  zoneBadgeIcon: { fontSize: 17 },
   zoneLabel:     { fontSize: 15, fontWeight: '600', color: T.ink, marginBottom: 2 },
   zoneMeta:      { fontSize: 11, color: T.mid },
   zoneArrow:     { fontSize: 20, color: T.mid },
