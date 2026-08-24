@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Cormorant:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
   --white:   #ffffff;
@@ -34,6 +35,42 @@
   --r2: 10px;
   --r3: 14px;
   --r4: 20px;
+
+  /* ── New soft/friendly design system (v3) ──────────────────────────────
+     Additive only — old vars above are untouched so unconverted pages
+     keep rendering exactly as before. Each page's redesign commit swaps
+     its own inline styles from the old vars to these. */
+  --indigo:        #3A4A63;
+  --indigo-deep:   #2C3950;
+  --indigo-soft:   #EEF1F6;
+  --marigold:      #F5A524;
+  --marigold-deep: #E08D0B;
+  --marigold-soft: #FBEAD1;
+  --marigold-ink:  #8A5A0E;
+  --sage:          #5B9279;
+  --sage-soft:     #E7F0EB;
+  --sage-ink:      #33684C;
+  --paper:         #FAF8F4;
+  --surface:       #FFFFFF;
+  --text-ink:      #2A2E37;
+  --text-mid:      #7A8290;
+  --border-line:   #ECE8E1;
+  --clay:          #E5735B;
+  --clay-soft:     #FBE5E0;
+  --clay-ink:      #B23D24;
+
+  --radius-sm:     14px;
+  --radius-md:     18px;
+  --radius-lg:     20px;
+  --radius-xl:     26px;
+  --radius-pill:   999px;
+  --radius-status: 20px;
+
+  --shadow-card-v3: 0 8px 24px rgba(44,57,80,.08);
+  --shadow-glow-v3: 0 10px 26px rgba(224,141,11,.32);
+
+  --f-heading: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --f-text:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 *, *::before, *::after {
