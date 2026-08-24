@@ -320,11 +320,10 @@ export default function SessionScreen() {
       <KeyboardAvoidingView style={S.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={S.header}>
           <TouchableOpacity style={S.backBtn} onPress={handleBack}>
-            <Text style={S.backArrow}>{'←'}</Text>
-            <Text style={S.backText}>Back</Text>
+            <Ionicons name="arrow-back" size={20} color={T.indigo} />
           </TouchableOpacity>
           <Text style={S.headerTitle}>New Inspection</Text>
-          <View style={{ width: 60 }} />
+          <View style={{ width: 40 }} />
         </View>
 
         <ScrollView style={S.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -413,11 +412,10 @@ export default function SessionScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => setStep('details')}>
-          <Text style={S.backArrow}>{'←'}</Text>
-          <Text style={S.backText}>Back</Text>
+          <Ionicons name="arrow-back" size={20} color={T.indigo} />
         </TouchableOpacity>
         <Text style={S.headerTitle}>Capturing</Text>
-        <View style={{ width: 60 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView style={S.scroll} showsVerticalScrollIndicator={false}>
@@ -484,9 +482,11 @@ const S = StyleSheet.create({
 
   // Header
   header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line },
-  backBtn:      { flexDirection: 'row', alignItems: 'center', gap: 6, width: 60 },
-  backArrow:    { fontSize: 20, color: T.indigo },
-  backText:     { fontSize: 16, color: T.indigo },
+  backBtn:      {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: T.surface, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#2C3950', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 2,
+  },
   headerTitle:  { fontSize: 18, fontWeight: '700', color: T.ink },
 
   // Banner
