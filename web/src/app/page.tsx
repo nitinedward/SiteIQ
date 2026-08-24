@@ -1,5 +1,8 @@
 'use client'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { createFirm, joinFirm } from '@/lib/firm'
 
 // ── ICONS ──────────────────────────────────────────────────────────────────
 function Icon({ id, size = 20 }: { id: string; size?: number }) {
@@ -52,6 +55,12 @@ function Icon({ id, size = 20 }: { id: string; size?: number }) {
         <polyline points="12 5 19 12 12 19" />
       </>
     ),
+    x: (
+      <>
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </>
+    ),
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -95,8 +104,97 @@ const ACCENT: Record<string, { bg: string; fg: string }> = {
   indigo:   { bg: 'var(--indigo-soft)',   fg: 'var(--indigo)' },
 }
 
+const inputStyle: React.CSSProperties = {
+  width: '100%', height: 46, padding: '0 14px',
+  background: 'var(--surface)', border: '1.5px solid var(--border-line)',
+  borderRadius: 'var(--radius-sm)', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-ink)',
+  outline: 'none',
+}
+const fieldLabelStyle: React.CSSProperties = {
+  display: 'block', fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, color: 'var(--text-mid)', marginBottom: 6,
+}
+
+type SignupMode = 'create' | 'join'
+type SignupSuccess = { type: 'create'; joinCode: string } | { type: 'join'; firmName: string } | null
+
 export default function LandingPage() {
   const router = useRouter()
+
+  // ── login dropdown state ───────────────────────────────────────────────
+  const [loginOpen, setLoginOpen]         = useState(false)
+  const [loginEmail, setLoginEmail]       = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginLoading, setLoginLoading]   = useState(false)
+  const [loginError, setLoginError]       = useState('')
+
+  const closeLogin = () => { setLoginOpen(false); setLoginError('') }
+
+  // Same auth call as /login — signInWithPassword, redirect to /dashboard on success
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoginLoading(true)
+    setLoginError('')
+    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password: loginPassword })
+    if (error) {
+      setLoginError(error.message)
+      setLoginLoading(false)
+    } else {
+      router.push('/dashboard')
+    }
+  }
+
+  // ── signup modal state ─────────────────────────────────────────────────
+  const [signupOpen, setSignupOpen]       = useState(false)
+  const [signupMode, setSignupMode]       = useState<SignupMode>('create')
+  const [fullName, setFullName]           = useState('')
+  const [signupEmail, setSignupEmail]     = useState('')
+  const [signupPassword, setSignupPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [firmName, setFirmName]           = useState('')
+  const [joinCode, setJoinCode]           = useState('')
+  const [signupLoading, setSignupLoading] = useState(false)
+  const [signupError, setSignupError]     = useState('')
+  const [signupSuccess, setSignupSuccess] = useState<SignupSuccess>(null)
+
+  const closeSignup = () => {
+    setSignupOpen(false); setSignupError(''); setSignupSuccess(null)
+    setFullName(''); setSignupEmail(''); setSignupPassword(''); setConfirmPassword(''); setFirmName(''); setJoinCode('')
+  }
+
+  // Same validation + createFirm/joinFirm logic as the mobile app's signup screen
+  const handleSignupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSignupError('')
+    if (!fullName.trim())  { setSignupError('Please enter your full name.'); return }
+    if (!signupEmail.trim()) { setSignupError('Please enter your email.'); return }
+    if (!signupPassword)   { setSignupError('Please enter a password.'); return }
+    if (signupPassword.length < 6) { setSignupError('Password must be at least 6 characters.'); return }
+    if (signupPassword !== confirmPassword) { setSignupError('Passwords do not match.'); return }
+    if (signupMode === 'create' && !firmName.trim()) { setSignupError('Please enter your firm name.'); return }
+    if (signupMode === 'join' && !joinCode.trim())   { setSignupError('Please enter the join code.'); return }
+
+    setSignupLoading(true)
+    const { data, error } = await supabase.auth.signUp({
+      email: signupEmail.trim(), password: signupPassword,
+      options: { data: { full_name: fullName.trim(), firm_name: signupMode === 'create' ? firmName.trim() : '' } },
+    })
+
+    if (error) { setSignupError(error.message); setSignupLoading(false); return }
+    const userId = data.user?.id
+    if (!userId) { setSignupError('Could not create account. Please try again.'); setSignupLoading(false); return }
+
+    if (signupMode === 'create') {
+      const result = await createFirm(firmName.trim(), userId, signupEmail.trim(), fullName.trim())
+      setSignupLoading(false)
+      if (!result) { setSignupError('Account created but could not set up your firm.'); return }
+      setSignupSuccess({ type: 'create', joinCode: result.joinCode })
+    } else {
+      const result = await joinFirm(joinCode.trim(), userId, signupEmail.trim(), fullName.trim())
+      setSignupLoading(false)
+      if (!result) { setSignupError('That join code is incorrect. Please check with your admin.'); return }
+      setSignupSuccess({ type: 'join', firmName: result.firmName })
+    }
+  }
 
   return (
     <>
@@ -134,14 +232,59 @@ export default function LandingPage() {
           </nav>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+            {/* LOGIN — inline dropdown, no navigation */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => { setLoginOpen(v => !v); setLoginError('') }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}
+              >
+                Login
+              </button>
+
+              {loginOpen && (
+                <>
+                  <div onClick={closeLogin} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 12px)', right: 0, width: 300, zIndex: 41,
+                    background: 'var(--surface)', border: '1px solid var(--border-line)',
+                    borderRadius: 'var(--radius-md)', boxShadow: '0 16px 40px rgba(44,57,80,.18)',
+                    padding: 20,
+                  }}>
+                    <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 800, color: 'var(--indigo-deep)', marginBottom: 14 }}>
+                      Sign in to SiteIQ
+                    </div>
+                    <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div>
+                        <label style={fieldLabelStyle}>Email</label>
+                        <input type="email" required autoFocus value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="you@firm.com" style={inputStyle} />
+                      </div>
+                      <div>
+                        <label style={fieldLabelStyle}>Password</label>
+                        <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} placeholder="••••••••" style={inputStyle} />
+                      </div>
+                      {loginError && (
+                        <div style={{ background: 'var(--clay-soft)', border: '1px solid rgba(229,115,91,.3)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', fontSize: 12, color: 'var(--clay-ink)' }}>
+                          {loginError}
+                        </div>
+                      )}
+                      <button
+                        type="submit" disabled={loginLoading}
+                        style={{
+                          width: '100%', height: 44, background: 'var(--indigo)', color: '#fff', border: 'none',
+                          borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
+                          cursor: loginLoading ? 'not-allowed' : 'pointer', opacity: loginLoading ? 0.7 : 1, marginTop: 2,
+                        }}
+                      >
+                        {loginLoading ? 'Signing in…' : 'Sign in'}
+                      </button>
+                    </form>
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
-              onClick={() => router.push('/login')}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}
-            >
-              Login
-            </button>
-            <button
-              onClick={() => router.push('/login')}
+              onClick={() => setSignupOpen(true)}
               style={{
                 background: 'var(--marigold)', color: 'var(--indigo-deep)',
                 border: 'none', borderRadius: 'var(--radius-pill)', padding: '10px 20px',
@@ -149,7 +292,7 @@ export default function LandingPage() {
                 boxShadow: 'var(--shadow-glow-v3)',
               }}
             >
-              Sign in
+              Sign up
             </button>
           </div>
         </header>
@@ -181,7 +324,7 @@ export default function LandingPage() {
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 18 }}>
                 <button
-                  onClick={() => router.push('/login')}
+                  onClick={() => setSignupOpen(true)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     background: 'var(--marigold)', color: 'var(--indigo-deep)',
@@ -190,7 +333,7 @@ export default function LandingPage() {
                     boxShadow: 'var(--shadow-glow-v3)',
                   }}
                 >
-                  Sign in to SiteIQ <Icon id="arrow" size={16} />
+                  Sign up <Icon id="arrow" size={16} />
                 </button>
                 <a
                   href="#how-it-works"
@@ -339,6 +482,162 @@ export default function LandingPage() {
         </footer>
 
       </div>
+
+      {/* ── SIGN UP MODAL ─────────────────────────────────────────────── */}
+      {signupOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div onClick={closeSignup} style={{ position: 'absolute', inset: 0, background: 'rgba(44,57,80,.45)' }} />
+          <div style={{
+            position: 'relative', width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto',
+            background: 'var(--surface)', borderRadius: 'var(--radius-xl)', boxShadow: '0 30px 70px rgba(0,0,0,.3)',
+            padding: 32,
+          }}>
+            <button
+              onClick={closeSignup}
+              aria-label="Close"
+              style={{ position: 'absolute', top: 20, right: 20, background: 'var(--paper)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-mid)' }}
+            >
+              <Icon id="x" size={16} />
+            </button>
+
+            {signupSuccess ? (
+              <div style={{ paddingTop: 8 }}>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--sage-soft)', color: 'var(--sage-ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
+                  <Icon id="check" size={22} />
+                </div>
+                {signupSuccess.type === 'create' ? (
+                  <>
+                    <h3 style={{ fontFamily: 'var(--f-heading)', fontSize: 22, fontWeight: 800, color: 'var(--indigo-deep)', margin: '0 0 8px' }}>Firm created!</h3>
+                    <p style={{ fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.6, marginBottom: 16 }}>
+                      Welcome to SiteIQ. Share this join code with your engineers so they can join your firm from the mobile app:
+                    </p>
+                    <div style={{ background: 'var(--indigo-soft)', borderRadius: 'var(--radius-sm)', padding: '16px 18px', textAlign: 'center', marginBottom: 24 }}>
+                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 26, fontWeight: 700, color: 'var(--indigo)', letterSpacing: '0.3em' }}>{signupSuccess.joinCode}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h3 style={{ fontFamily: 'var(--f-heading)', fontSize: 22, fontWeight: 800, color: 'var(--indigo-deep)', margin: '0 0 8px' }}>Welcome to {signupSuccess.firmName}!</h3>
+                    <p style={{ fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.6, marginBottom: 24 }}>
+                      Your account has been added to the firm. You're ready to go.
+                    </p>
+                  </>
+                )}
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  style={{ width: '100%', height: 50, background: 'var(--indigo)', color: '#fff', border: 'none', borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Continue to dashboard
+                </button>
+              </div>
+            ) : (
+              <>
+                <h3 style={{ fontFamily: 'var(--f-heading)', fontSize: 22, fontWeight: 800, color: 'var(--indigo-deep)', margin: '0 0 4px' }}>Create your account</h3>
+                <p style={{ fontSize: 13, color: 'var(--text-mid)', marginBottom: 20 }}>Join SiteIQ to start capturing inspections</p>
+
+                <div style={{ display: 'flex', background: 'var(--paper)', borderRadius: 'var(--radius-sm)', padding: 4, marginBottom: 18 }}>
+                  <button
+                    type="button" onClick={() => setSignupMode('create')}
+                    style={{
+                      flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+                      fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700,
+                      background: signupMode === 'create' ? 'var(--indigo)' : 'none',
+                      color: signupMode === 'create' ? '#fff' : 'var(--text-mid)',
+                    }}
+                  >
+                    Create Firm
+                  </button>
+                  <button
+                    type="button" onClick={() => setSignupMode('join')}
+                    style={{
+                      flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+                      fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700,
+                      background: signupMode === 'join' ? 'var(--indigo)' : 'none',
+                      color: signupMode === 'join' ? '#fff' : 'var(--text-mid)',
+                    }}
+                  >
+                    Join Firm
+                  </button>
+                </div>
+
+                {signupMode === 'create' && (
+                  <div style={{ background: 'var(--indigo-soft)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', fontSize: 12.5, color: 'var(--indigo)', lineHeight: 1.5, marginBottom: 18 }}>
+                    You'll be the Admin — create projects and manage your team.
+                  </div>
+                )}
+
+                <form onSubmit={handleSignupSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div>
+                    <label style={fieldLabelStyle}>Full name</label>
+                    <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Sarah Chen" style={inputStyle} />
+                  </div>
+
+                  {signupMode === 'create' ? (
+                    <div>
+                      <label style={fieldLabelStyle}>Firm name</label>
+                      <input value={firmName} onChange={e => setFirmName(e.target.value)} placeholder="Chen Structural Engineers" style={inputStyle} />
+                    </div>
+                  ) : (
+                    <div>
+                      <label style={fieldLabelStyle}>Join code</label>
+                      <input
+                        value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                        placeholder="ABC123" maxLength={6}
+                        style={{ ...inputStyle, fontFamily: 'var(--f-mono)', fontWeight: 700, letterSpacing: '4px', textAlign: 'center', textTransform: 'uppercase' }}
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label style={fieldLabelStyle}>Email</label>
+                    <input type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} placeholder="engineer@yourfirm.com" style={inputStyle} />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label style={fieldLabelStyle}>Password</label>
+                      <input type="password" value={signupPassword} onChange={e => setSignupPassword(e.target.value)} placeholder="6+ characters" style={inputStyle} />
+                    </div>
+                    <div>
+                      <label style={fieldLabelStyle}>Confirm</label>
+                      <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Re-enter" style={inputStyle} />
+                    </div>
+                  </div>
+
+                  {signupError && (
+                    <div style={{ background: 'var(--clay-soft)', border: '1px solid rgba(229,115,91,.3)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', fontSize: 13, color: 'var(--clay-ink)' }}>
+                      {signupError}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit" disabled={signupLoading}
+                    style={{
+                      width: '100%', height: 50, marginTop: 4,
+                      background: 'var(--marigold)', color: 'var(--indigo-deep)', border: 'none',
+                      borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 800,
+                      cursor: signupLoading ? 'not-allowed' : 'pointer', opacity: signupLoading ? 0.7 : 1,
+                      boxShadow: 'var(--shadow-glow-v3)',
+                    }}
+                  >
+                    {signupLoading ? 'Creating account…' : signupMode === 'create' ? 'Create Firm & Account' : 'Join Firm & Sign Up'}
+                  </button>
+                </form>
+
+                <p style={{ marginTop: 16, textAlign: 'center', fontSize: 13, color: 'var(--text-mid)' }}>
+                  Already have an account?{' '}
+                  <button
+                    onClick={() => { closeSignup(); setLoginOpen(true) }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--indigo)', fontWeight: 700, fontSize: 13 }}
+                  >
+                    Sign in
+                  </button>
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </>
   )
 }
