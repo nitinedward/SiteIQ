@@ -137,7 +137,7 @@ export default function ProjectDetailScreen() {
                   {inspections.length > 0 ? `Last visit ${inspections[0].date}` : 'No inspections yet'}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={26} color="#FFFFFF" />
+              <Ionicons name="chevron-forward" size={26} color={T.indigoDeep} />
             </TouchableOpacity>
           </View>
         )}
@@ -244,20 +244,20 @@ const S = StyleSheet.create({
     elevation: 6,
   },
   startLeft:   { gap: 4 },
-  startTitle:  { fontSize: 20, fontWeight: '800', color: '#FFFFFF' },
-  startSub:    { fontSize: 13, color: 'rgba(255,255,255,0.8)' },
-  startArrow:  { fontSize: 32, color: '#FFFFFF', lineHeight: 36 },
+  startTitle:  { fontSize: 20, fontWeight: '800', color: T.indigoDeep },
+  startSub:    { fontSize: 13, color: 'rgba(44,57,80,0.72)' },
+  startArrow:  { fontSize: 32, color: T.indigoDeep, lineHeight: 36 },
 
   // Stats
-  statsRow:  { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginBottom: 8 },
+  statsRow:  { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginBottom: 20 },
   statTile:  {
-    flex: 1, backgroundColor: T.surface, borderRadius: R.md,
-    paddingVertical: 14, alignItems: 'center',
+    flex: 1, backgroundColor: T.surface, borderRadius: R.lg,
+    paddingVertical: 18, paddingHorizontal: 8, alignItems: 'center',
     shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
   },
   statNum:   { fontSize: 22, fontWeight: '800', color: T.ink },
-  statLabel: { fontSize: 12, color: T.mid, marginTop: 2 },
+  statLabel: { fontSize: 12, color: T.mid, marginTop: 4 },
 
   // Sections
   section:      { paddingHorizontal: 16, paddingBottom: 8 },
