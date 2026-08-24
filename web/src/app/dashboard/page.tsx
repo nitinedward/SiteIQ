@@ -254,7 +254,7 @@ export default function DashboardPage() {
     setLoadingReports(false)
   }
 
-  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/login') }
+  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/') }
 
   // delete a site report (also removes observations and zones)
   const deleteInspection = async (id: string) => {

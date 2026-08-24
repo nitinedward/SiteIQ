@@ -330,7 +330,7 @@ export default function AdminPage() {
     loadData()
   }
 
-  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/login') }
+  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/') }
 
   // ── new functions ─────────────────────────────────────────────────────────
   const saveJoinCode = async () => {

@@ -229,7 +229,7 @@ export default function SettingsPage() {
     setDisconnecting(false)
   }
 
-  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/login') }
+  const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/') }
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
