@@ -8,6 +8,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
+import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../lib/theme';
 
 const T = theme.colors;
@@ -352,11 +353,10 @@ export default function ObservationScreen() {
     <KeyboardAvoidingView style={S.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>{'⬅️'}</Text>
-          <Text style={S.backText}>Back</Text>
+          <Ionicons name="arrow-back" size={20} color={T.indigo} />
         </TouchableOpacity>
         <Text style={S.headerTitle} numberOfLines={1}>{isEditMode ? 'Edit Observation' : 'New Observation'}</Text>
-        <View style={{ width: 60 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView style={S.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -494,9 +494,10 @@ const S = StyleSheet.create({
   container:    { flex: 1, backgroundColor: T.paper },
   scroll:       { flex: 1 },
   header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 12, backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line },
-  backBtn:      { flexDirection: 'row', alignItems: 'center', gap: 4, width: 60 },
-  backArrow:    { fontSize: 28, color: T.indigo, lineHeight: 32 },
-  backText:     { fontSize: 16, color: T.indigo },
+  backBtn:      {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center',
+  },
   headerTitle:  { fontSize: 16, fontWeight: '600', color: T.ink, flex: 1, textAlign: 'center' },
   zoneBanner:   { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: T.surface, margin: 16, borderRadius: R.md, padding: 16, borderWidth: 1, borderColor: T.line, borderLeftWidth: 4, borderLeftColor: T.marigold, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
   zoneLabel:    { fontSize: 16, fontWeight: '700', color: T.ink, marginBottom: 2 },
@@ -505,7 +506,7 @@ const S = StyleSheet.create({
   sectionTitle: { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
   sectionRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   photoActions: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  photoBtn:     { flex: 1, backgroundColor: T.indigo, borderRadius: R.sm, height: 48, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  photoBtn:     { flex: 1, backgroundColor: T.indigo, borderRadius: R.pill, height: 48, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   photoBtnSecondary: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.indigo },
   photoBtnText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
   photoThumb:   { width: 80, height: 80, borderRadius: 8, marginRight: 8, marginBottom: 8 },
