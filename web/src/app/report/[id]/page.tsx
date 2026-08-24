@@ -459,15 +459,15 @@ export default function ReportPage() {
   if (loading) return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      height: '100vh', background: '#f8f7f5', flexDirection: 'column', gap: 12,
+      height: '100vh', background: 'var(--paper)', flexDirection: 'column', gap: 12,
     }}>
       <div style={{
-        width: 28, height: 28, border: '2px solid #2c5282',
+        width: 28, height: 28, border: '2px solid var(--indigo)',
         borderTopColor: 'transparent', borderRadius: '50%',
         animation: 'spin .8s linear infinite',
       }} />
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#9b968d' }}>Loading</div>
+      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--text-mid)' }}>Loading</div>
     </div>
   )
   if (!pageData) return null
@@ -497,7 +497,7 @@ export default function ReportPage() {
           --r1: 6px; --r2: 10px; --r3: 14px; --r4: 20px;
         }
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-        html,body{height:100%;font-family:'Outfit',sans-serif;background:#f8f7f5;-webkit-font-smoothing:antialiased;}
+        html,body{height:100%;font-family:var(--f-text);background:var(--paper);-webkit-font-smoothing:antialiased;}
         @keyframes spin{to{transform:rotate(360deg)}}
 
         /* ── Mobile tab bar (hidden on desktop) ── */
@@ -515,7 +515,7 @@ export default function ReportPage() {
           .panel-show-document .report-editor-area { display: flex !important; width: 100% !important; }
 
           /* Attachments tab active */
-          .panel-show-attachments .report-left-panel  { display: flex !important; width: 100% !important; height: 100% !important; border-right: none !important; border-bottom: 1px solid #e4e0d9; }
+          .panel-show-attachments .report-left-panel  { display: flex !important; width: 100% !important; height: 100% !important; border-right: none !important; border-bottom: 1px solid var(--border-line); }
           .panel-show-attachments .report-editor-area { display: none !important; }
 
           /* Topbar */
@@ -529,46 +529,46 @@ export default function ReportPage() {
         }
       `}</style>
 
-      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#f8f7f5', overflow: 'hidden' }}>
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--paper)', overflow: 'hidden' }}>
 
         {/* ── TOPBAR ───────────────────────────────────────────────────────── */}
         <header className="report-topbar" style={{
           height: 56, display: 'flex', alignItems: 'center',
-          padding: '0 20px', gap: 12, background: '#ffffff',
-          borderBottom: '1px solid #e4e0d9', flexShrink: 0, zIndex: 20,
+          padding: '0 20px', gap: 12, background: 'var(--surface)',
+          borderBottom: '1px solid var(--border-line)', flexShrink: 0, zIndex: 20,
         }}>
           {/* Brand */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <div style={{ width: 22, height: 22, background: '#2c5282', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 22, height: 22, background: 'var(--indigo)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="11" height="11" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             </div>
-            <span style={{ fontFamily: "'Cormorant',serif", fontSize: 17, fontWeight: 600, color: '#1a1917' }}>
-              Site<span style={{ color: '#2c5282' }}>IQ</span>
+            <span style={{ fontFamily: 'var(--f-heading)', fontSize: 16, fontWeight: 800, color: 'var(--text-ink)' }}>
+              Site<span style={{ color: 'var(--indigo)' }}>IQ</span>
             </span>
           </div>
 
-          <div className="report-breadcrumb" style={{ width: 1, height: 18, background: '#e4e0d9' }} />
+          <div className="report-breadcrumb" style={{ width: 1, height: 18, background: 'var(--border-line)' }} />
 
           <button
             onClick={() => router.push('/dashboard')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2c5282', fontSize: 12, fontWeight: 500, fontFamily: "'Outfit',sans-serif" }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mid)', fontSize: 12, fontWeight: 700, fontFamily: 'var(--f-heading)' }}
           >
             ← Dashboard
           </button>
 
-          <div className="report-breadcrumb" style={{ width: 1, height: 18, background: '#e4e0d9' }} />
+          <div className="report-breadcrumb" style={{ width: 1, height: 18, background: 'var(--border-line)' }} />
 
           {/* Title */}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: "'Cormorant',serif", fontSize: 16, fontWeight: 600, color: '#1a1917', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {projectName}
             </span>
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: '#9b968d' }}>#{reportNo}</span>
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-mid)' }}>#{reportNo}</span>
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 3,
-              padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600,
-              background: reportStatus === 'finalised' ? '#e6f4ef' : '#fef9e7',
-              color: reportStatus === 'finalised' ? '#27705a' : '#b8860b',
+              padding: '2px 8px', borderRadius: 99, fontFamily: 'var(--f-heading)', fontSize: 10, fontWeight: 700,
+              background: reportStatus === 'finalised' ? 'var(--sage-soft)' : 'var(--marigold-soft)',
+              color: reportStatus === 'finalised' ? 'var(--sage-ink)' : 'var(--marigold-ink)',
             }}>
               <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
               {reportStatus === 'finalised' ? 'Finalised' : 'Pending Review'}
@@ -581,11 +581,10 @@ export default function ReportPage() {
               <button
                 onClick={() => { setEditorError(false); setEditorKey(prev => prev + 1) }}
                 style={{
-                  background: '#fef9e7', color: '#b8860b',
-                  border: '1px solid rgba(184,134,11,0.3)',
-                  borderRadius: 7, padding: '7px 14px',
-                  fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                  fontFamily: "'Outfit',sans-serif",
+                  background: 'var(--marigold-soft)', color: 'var(--marigold-ink)',
+                  border: '1px solid rgba(224,141,11,0.3)',
+                  borderRadius: 'var(--radius-pill)', padding: '7px 14px',
+                  fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
                 }}
               >
                 ⚠ Editor Offline — Retry
@@ -596,9 +595,9 @@ export default function ReportPage() {
                 onClick={finaliseReport}
                 disabled={finalisingReport}
                 style={{
-                  background: '#27705a', color: 'white', border: 'none', borderRadius: 7,
-                  padding: '7px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  fontFamily: "'Outfit',sans-serif", opacity: finalisingReport ? 0.6 : 1,
+                  background: 'var(--sage)', color: 'white', border: 'none', borderRadius: 'var(--radius-pill)',
+                  padding: '7px 18px', fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  opacity: finalisingReport ? 0.6 : 1,
                 }}
               >
                 {finalisingReport
@@ -609,10 +608,10 @@ export default function ReportPage() {
               <button
                 onClick={reopenReport}
                 style={{
-                  background: '#ffffff', color: '#2c2a27',
-                  border: '1px solid #e4e0d9', borderRadius: 7,
-                  padding: '7px 18px', fontSize: 13, fontWeight: 500,
-                  cursor: 'pointer', fontFamily: "'Outfit',sans-serif",
+                  background: 'var(--surface)', color: 'var(--text-ink)',
+                  border: '1px solid var(--border-line)', borderRadius: 'var(--radius-pill)',
+                  padding: '7px 18px', fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700,
+                  cursor: 'pointer',
                 }}
               >
                 ✏<span className="report-btn-text"> Edit Report</span>
@@ -622,15 +621,15 @@ export default function ReportPage() {
               onClick={downloadDoc}
               disabled={downloading || !docReady}
               style={{
-                background: 'var(--white)',
-                border: '1.5px solid var(--line)',
-                borderRadius: 'var(--r2)',
+                background: 'var(--surface)',
+                border: '1.5px solid var(--indigo)',
+                borderRadius: 'var(--radius-pill)',
                 padding: '8px 16px',
+                fontFamily: 'var(--f-heading)',
                 fontSize: 13,
-                fontWeight: 500,
+                fontWeight: 700,
                 cursor: downloading || !docReady ? 'not-allowed' : 'pointer',
-                color: 'var(--dark)',
-                fontFamily: 'var(--f-body)',
+                color: 'var(--indigo)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
@@ -642,8 +641,8 @@ export default function ReportPage() {
                 <>
                   <div style={{
                     width: 12, height: 12,
-                    border: '2px solid var(--line)',
-                    borderTopColor: 'var(--accent)',
+                    border: '2px solid var(--border-line)',
+                    borderTopColor: 'var(--indigo)',
                     borderRadius: '50%',
                     animation: 'spin 0.7s linear infinite',
                     flexShrink: 0,
@@ -660,16 +659,16 @@ export default function ReportPage() {
         </header>
 
         {/* ── MOBILE TAB BAR ───────────────────────────────────────────────── */}
-        <div className="mobile-tab-bar" style={{ borderBottom: '1px solid #e4e0d9', background: '#ffffff', flexShrink: 0 }}>
+        <div className="mobile-tab-bar" style={{ borderBottom: '1px solid var(--border-line)', background: 'var(--surface)', flexShrink: 0 }}>
           <button
             onClick={() => setMobileTab('document')}
             style={{
               flex: 1, padding: '12px 16px', background: 'none', border: 'none',
-              borderBottom: mobileTab === 'document' ? '2px solid #2c5282' : '2px solid transparent',
-              color: mobileTab === 'document' ? '#2c5282' : '#9b968d',
-              fontSize: 14, fontWeight: mobileTab === 'document' ? 600 : 400,
+              borderBottom: mobileTab === 'document' ? '2px solid var(--indigo)' : '2px solid transparent',
+              color: mobileTab === 'document' ? 'var(--indigo)' : 'var(--text-mid)',
+              fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
               cursor: 'pointer', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', gap: 6, fontFamily: "'Outfit',sans-serif",
+              justifyContent: 'center', gap: 6,
             }}
           >
             <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
@@ -682,11 +681,11 @@ export default function ReportPage() {
             onClick={() => setMobileTab('attachments')}
             style={{
               flex: 1, padding: '12px 16px', background: 'none', border: 'none',
-              borderBottom: mobileTab === 'attachments' ? '2px solid #2c5282' : '2px solid transparent',
-              color: mobileTab === 'attachments' ? '#2c5282' : '#9b968d',
-              fontSize: 14, fontWeight: mobileTab === 'attachments' ? 600 : 400,
+              borderBottom: mobileTab === 'attachments' ? '2px solid var(--indigo)' : '2px solid transparent',
+              color: mobileTab === 'attachments' ? 'var(--indigo)' : 'var(--text-mid)',
+              fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
               cursor: 'pointer', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', gap: 6, fontFamily: "'Outfit',sans-serif",
+              justifyContent: 'center', gap: 6,
             }}
           >
             <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
@@ -695,9 +694,9 @@ export default function ReportPage() {
             Attachments
             {totalAttachments > 0 && (
               <span style={{
-                background: '#2c5282', color: 'white', borderRadius: 99,
+                background: 'var(--indigo)', color: 'white', borderRadius: 99,
                 fontSize: 10, fontWeight: 700, padding: '1px 6px',
-                fontFamily: "'JetBrains Mono',monospace",
+                fontFamily: 'var(--f-mono)',
               }}>
                 {totalAttachments}
               </span>
@@ -706,22 +705,22 @@ export default function ReportPage() {
         </div>
 
         {/* ── BODY ─────────────────────────────────────────────────────────── */}
-        <div className={`report-layout ${mobileTab === 'document' ? 'panel-show-document' : 'panel-show-attachments'}`} style={{ flex: 1, display: 'flex', overflow: 'hidden', background: '#e8e4de' }}>
+        <div className={`report-layout ${mobileTab === 'document' ? 'panel-show-document' : 'panel-show-attachments'}`} style={{ flex: 1, display: 'flex', overflow: 'hidden', background: 'var(--paper)' }}>
 
           {/* ── LEFT PANEL ───────────────────────────────────────────────── */}
           <div className="report-left-panel" style={{
             width: 272,
-            background: 'var(--white)',
-            borderRight: '1px solid var(--line)',
+            background: 'var(--surface)',
+            borderRight: '1px solid var(--border-line)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
             flexShrink: 0,
           }}>
 
-            {/* ── NAVY HEADER ─────────────────────────────────────────── */}
+            {/* ── INDIGO HEADER ─────────────────────────────────────────── */}
             <div style={{
-              background: 'var(--accent)',
+              background: 'var(--indigo-deep)',
               padding: '14px 16px',
               flexShrink: 0,
             }}>
@@ -732,10 +731,10 @@ export default function ReportPage() {
                 marginBottom: 12,
               }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'white', lineHeight: 1 }}>
+                  <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 800, color: 'white', lineHeight: 1 }}>
                     Attachments
                   </div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 3 }}>
+                  <div style={{ fontFamily: 'var(--f-text)', fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 3 }}>
                     Included when you download
                   </div>
                 </div>
@@ -780,7 +779,7 @@ export default function ReportPage() {
                     <div style={{
                       fontSize: 20,
                       fontWeight: 700,
-                      color: stat.highlight ? '#4ade80' : 'white',
+                      color: 'white',
                       lineHeight: 1,
                       fontFamily: 'var(--f-mono)',
                     }}>
@@ -802,7 +801,7 @@ export default function ReportPage() {
             {/* ── AI GENERATE BUTTON ──────────────────────────────────── */}
             <div style={{
               padding: '12px 14px',
-              borderBottom: '1px solid var(--line)',
+              borderBottom: '1px solid var(--border-line)',
               flexShrink: 0,
             }}>
               <button
@@ -810,29 +809,30 @@ export default function ReportPage() {
                 disabled={generatingAI || !docReady}
                 style={{
                   width: '100%',
-                  background: generatingAI ? 'var(--stone)' : 'var(--accent)',
-                  color: generatingAI ? 'var(--mid)' : 'white',
+                  background: generatingAI ? 'var(--paper)' : 'var(--marigold)',
+                  color: generatingAI ? 'var(--text-mid)' : 'var(--indigo-deep)',
                   border: 'none',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-pill)',
                   padding: '10px 14px',
+                  fontFamily: 'var(--f-heading)',
                   fontSize: 13,
-                  fontWeight: 600,
+                  fontWeight: 800,
                   cursor: generatingAI || !docReady ? 'not-allowed' : 'pointer',
-                  fontFamily: 'var(--f-body)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 7,
                   transition: 'all 0.15s',
                   opacity: !docReady ? 0.5 : 1,
+                  boxShadow: generatingAI ? 'none' : 'var(--shadow-glow-v3)',
                 }}
               >
                 {generatingAI ? (
                   <>
                     <div style={{
                       width: 13, height: 13,
-                      border: '2px solid var(--line2)',
-                      borderTopColor: 'var(--accent)',
+                      border: '2px solid var(--border-line)',
+                      borderTopColor: 'var(--indigo)',
                       borderRadius: '50%',
                       animation: 'spin 0.7s linear infinite',
                     }} />
@@ -850,12 +850,12 @@ export default function ReportPage() {
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
                   padding: '32px 16px', gap: 12,
-                  color: 'var(--mid)', fontSize: 13,
+                  color: 'var(--text-mid)', fontSize: 13,
                 }}>
                   <div style={{
                     width: 24, height: 24,
-                    border: '2px solid var(--line)',
-                    borderTopColor: 'var(--accent)',
+                    border: '2px solid var(--border-line)',
+                    borderTopColor: 'var(--indigo)',
                     borderRadius: '50%',
                     animation: 'spin 0.7s linear infinite',
                   }} />
@@ -870,9 +870,9 @@ export default function ReportPage() {
                       justifyContent: 'space-between', marginBottom: 10,
                     }}>
                       <div style={{
-                        fontFamily: 'var(--f-mono)', fontSize: 10,
+                        fontFamily: 'var(--f-heading)', fontSize: 11,
                         fontWeight: 700, textTransform: 'uppercase',
-                        letterSpacing: '1.2px', color: 'var(--mid)',
+                        letterSpacing: '1.2px', color: 'var(--text-mid)',
                         display: 'flex', alignItems: 'center', gap: 6,
                       }}>
                         <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
@@ -885,9 +885,9 @@ export default function ReportPage() {
 
                     {drawings.length === 0 ? (
                       <div style={{
-                        background: 'var(--stone)', borderRadius: 8,
+                        background: 'var(--paper)', borderRadius: 'var(--radius-sm)',
                         padding: '16px 14px', textAlign: 'center',
-                        fontSize: 12, color: 'var(--mid)', lineHeight: 1.5,
+                        fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5,
                       }}>
                         No drawings were marked up during this inspection
                       </div>
@@ -895,10 +895,10 @@ export default function ReportPage() {
                       <div
                         key={d.id}
                         style={{
-                          border: `1.5px solid ${d.selected && d.captured ? 'var(--accent)' : 'var(--line)'}`,
-                          borderRadius: 10, marginBottom: 8,
+                          border: `1.5px solid ${d.selected && d.captured ? 'var(--sage)' : 'var(--border-line)'}`,
+                          borderRadius: 'var(--radius-sm)', marginBottom: 8,
                           overflow: 'hidden',
-                          background: d.selected && d.captured ? 'var(--accent2)' : 'var(--white)',
+                          background: d.selected && d.captured ? 'var(--sage-soft)' : 'var(--surface)',
                           transition: 'all 0.15s',
                         }}
                       >
@@ -913,9 +913,9 @@ export default function ReportPage() {
                               }
                             }}
                             style={{
-                              width: 20, height: 20, borderRadius: 5,
-                              border: `2px solid ${d.captured && d.selected ? 'var(--accent)' : d.capturing ? 'var(--accent)' : 'var(--line2)'}`,
-                              background: d.captured && d.selected ? 'var(--accent)' : 'var(--stone)',
+                              width: 20, height: 20, borderRadius: 6,
+                              border: `2px solid ${d.captured && d.selected ? 'var(--sage)' : d.capturing ? 'var(--indigo)' : 'var(--border-line)'}`,
+                              background: d.captured && d.selected ? 'var(--sage)' : 'var(--paper)',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                               cursor: d.capturing ? 'not-allowed' : 'pointer',
                               flexShrink: 0, transition: 'all 0.15s',
@@ -924,8 +924,8 @@ export default function ReportPage() {
                             {d.capturing ? (
                               <div style={{
                                 width: 10, height: 10,
-                                border: '1.5px solid var(--line)',
-                                borderTopColor: 'var(--accent)',
+                                border: '1.5px solid var(--border-line)',
+                                borderTopColor: 'var(--indigo)',
                                 borderRadius: '50%',
                                 animation: 'spin 0.7s linear infinite',
                               }} />
@@ -934,9 +934,9 @@ export default function ReportPage() {
                                 <polyline points="20,6 9,17 4,12"/>
                               </svg>
                             ) : d.captured ? (
-                              <div style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--line2)' }} />
+                              <div style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--border-line)' }} />
                             ) : (
-                              <svg width="10" height="10" fill="none" stroke="var(--mid)" strokeWidth="1.8" viewBox="0 0 24 24">
+                              <svg width="10" height="10" fill="none" stroke="var(--text-mid)" strokeWidth="1.8" viewBox="0 0 24 24">
                                 <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
                                 <circle cx="12" cy="13" r="4"/>
                               </svg>
@@ -945,35 +945,35 @@ export default function ReportPage() {
 
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{
-                              fontSize: 12, fontWeight: 600, color: 'var(--ink)',
+                              fontFamily: 'var(--f-text)', fontSize: 12, fontWeight: 600, color: 'var(--text-ink)',
                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                             }}>
                               {d.title}
                             </div>
                             <div style={{
                               fontFamily: 'var(--f-mono)', fontSize: 10,
-                              color: 'var(--mid)', marginTop: 2,
+                              color: 'var(--text-mid)', marginTop: 2,
                               display: 'flex', alignItems: 'center', gap: 4,
                             }}>
                               {d.number} · {d.zone_count} zone{d.zone_count !== 1 ? 's' : ''}
                               {' · '}
                               {d.capturing ? (
-                                <span style={{ color: 'var(--accent)' }}>Capturing...</span>
+                                <span style={{ color: 'var(--indigo)' }}>Capturing...</span>
                               ) : d.captured ? (
-                                <span style={{ color: 'var(--green)' }}>✓ Ready</span>
+                                <span style={{ color: 'var(--sage-ink)' }}>✓ Ready</span>
                               ) : (
-                                <span style={{ color: 'var(--orange)' }}>Tap to capture</span>
+                                <span style={{ color: 'var(--marigold-ink)' }}>Tap to capture</span>
                               )}
                             </div>
                           </div>
                         </div>
 
                         {d.previewUrl && (
-                          <div style={{ borderTop: '1px solid var(--line)', overflow: 'hidden', maxHeight: 100 }}>
+                          <div style={{ borderTop: '1px solid var(--border-line)', overflow: 'hidden', maxHeight: 100 }}>
                             <img
                               src={d.previewUrl}
                               alt={d.title}
-                              style={{ width: '100%', display: 'block', objectFit: 'contain', background: 'var(--stone)' }}
+                              style={{ width: '100%', display: 'block', objectFit: 'contain', background: 'var(--paper)' }}
                             />
                           </div>
                         )}
@@ -982,7 +982,7 @@ export default function ReportPage() {
                   </div>
 
                   {/* ── DIVIDER ───────────────────────────────────────── */}
-                  <div style={{ height: 1, background: 'var(--line)', margin: '4px 0 16px' }} />
+                  <div style={{ height: 1, background: 'var(--border-line)', margin: '4px 0 16px' }} />
 
                   {/* ── PHOTOS ────────────────────────────────────────── */}
                   <div>
@@ -991,9 +991,9 @@ export default function ReportPage() {
                       justifyContent: 'space-between', marginBottom: 10,
                     }}>
                       <div style={{
-                        fontFamily: 'var(--f-mono)', fontSize: 10,
+                        fontFamily: 'var(--f-heading)', fontSize: 11,
                         fontWeight: 700, textTransform: 'uppercase',
-                        letterSpacing: '1.2px', color: 'var(--mid)',
+                        letterSpacing: '1.2px', color: 'var(--text-mid)',
                         display: 'flex', alignItems: 'center', gap: 6,
                       }}>
                         <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
@@ -1007,16 +1007,16 @@ export default function ReportPage() {
                           onClick={() => setSelectedPhotos(prev => prev.map(p => ({ ...p, selected: true })))}
                           style={{
                             background: 'none', border: 'none', cursor: 'pointer',
-                            fontSize: 11, color: 'var(--accent)', fontWeight: 600,
-                            fontFamily: 'var(--f-body)', padding: '2px 4px',
+                            fontSize: 11, color: 'var(--indigo)', fontWeight: 700,
+                            fontFamily: 'var(--f-heading)', padding: '2px 4px',
                           }}
                         >All</button>
                         <button
                           onClick={() => setSelectedPhotos(prev => prev.map(p => ({ ...p, selected: false })))}
                           style={{
                             background: 'none', border: 'none', cursor: 'pointer',
-                            fontSize: 11, color: 'var(--mid)',
-                            fontFamily: 'var(--f-body)', padding: '2px 4px',
+                            fontSize: 11, color: 'var(--text-mid)',
+                            fontFamily: 'var(--f-heading)', fontWeight: 700, padding: '2px 4px',
                           }}
                         >None</button>
                       </div>
@@ -1024,9 +1024,9 @@ export default function ReportPage() {
 
                     {selectedPhotos.length === 0 ? (
                       <div style={{
-                        background: 'var(--stone)', borderRadius: 8,
+                        background: 'var(--paper)', borderRadius: 'var(--radius-sm)',
                         padding: '16px 14px', textAlign: 'center',
-                        fontSize: 12, color: 'var(--mid)', lineHeight: 1.5,
+                        fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5,
                       }}>
                         No photos were taken during this inspection
                       </div>
@@ -1047,18 +1047,18 @@ export default function ReportPage() {
                             onClick={() => toggleAllInZone(zone)}
                             style={{
                               display: 'flex', alignItems: 'center', gap: 8,
-                              padding: '7px 10px', background: 'var(--stone)',
-                              borderRadius: 7, cursor: 'pointer',
+                              padding: '7px 10px', background: 'var(--paper)',
+                              borderRadius: 'var(--radius-sm)', cursor: 'pointer',
                               marginBottom: 8, transition: 'background 0.12s',
                             }}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--line)')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'var(--stone)')}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--border-line)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'var(--paper)')}
                           >
                             <div
                               style={{
-                                width: 16, height: 16, borderRadius: 4,
-                                border: `2px solid ${photos.every(p => p.selected) ? 'var(--accent)' : 'var(--line2)'}`,
-                                background: photos.every(p => p.selected) ? 'var(--accent)' : 'var(--white)',
+                                width: 16, height: 16, borderRadius: 5,
+                                border: `2px solid ${photos.every(p => p.selected) ? 'var(--sage)' : 'var(--border-line)'}`,
+                                background: photos.every(p => p.selected) ? 'var(--sage)' : 'var(--surface)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0, transition: 'all 0.12s',
                               }}
@@ -1070,10 +1070,10 @@ export default function ReportPage() {
                                 </svg>
                               )}
                             </div>
-                            <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--dark)' }}>
+                            <span style={{ flex: 1, fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, color: 'var(--text-ink)' }}>
                               {zone}
                             </span>
-                            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--mid)' }}>
+                            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-mid)' }}>
                               {photos.filter(p => p.selected).length}/{photos.length}
                             </span>
                           </div>
@@ -1092,9 +1092,9 @@ export default function ReportPage() {
                                   position: 'relative',
                                   aspectRatio: '4/3',
                                   cursor: 'pointer',
-                                  borderRadius: 8,
+                                  borderRadius: 'var(--radius-sm)',
                                   overflow: 'hidden',
-                                  border: `2px solid ${photo.selected ? 'var(--accent)' : 'transparent'}`,
+                                  border: `2px solid ${photo.selected ? 'var(--sage)' : 'transparent'}`,
                                   opacity: photo.selected ? 1 : 0.35,
                                   transition: 'all 0.15s',
                                   transform: photo.selected ? 'scale(1)' : 'scale(0.97)',
@@ -1109,7 +1109,7 @@ export default function ReportPage() {
                                   <div style={{
                                     position: 'absolute', top: 5, right: 5,
                                     width: 18, height: 18,
-                                    background: 'var(--accent)',
+                                    background: 'var(--sage)',
                                     borderRadius: '50%',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
@@ -1133,13 +1133,13 @@ export default function ReportPage() {
             {/* ── FOOTER ──────────────────────────────────────────────── */}
             <div className="report-panel-footer" style={{
               padding: '12px 14px',
-              borderTop: '1px solid var(--line)',
-              background: 'var(--stone)',
+              borderTop: '1px solid var(--border-line)',
+              background: 'var(--paper)',
               flexShrink: 0,
             }}>
               {/* Summary text */}
               <div style={{
-                fontSize: 11, color: 'var(--mid)',
+                fontSize: 11, color: 'var(--text-mid)',
                 textAlign: 'center', marginBottom: 10,
                 fontFamily: 'var(--f-mono)', lineHeight: 1.5,
               }}>
@@ -1152,7 +1152,7 @@ export default function ReportPage() {
 
                   if (pc === 0 && dc === 0) {
                     return (
-                      <span style={{ color: 'var(--mid)' }}>
+                      <span style={{ color: 'var(--text-mid)' }}>
                         Select photos or drawings to include in report
                       </span>
                     )
@@ -1166,10 +1166,10 @@ export default function ReportPage() {
                   if (dc > 0) parts.push(`${dc} drawing${dc !== 1 ? 's' : ''}`)
 
                   return (
-                    <span style={{ color: 'var(--dark)' }}>
+                    <span style={{ color: 'var(--text-ink)' }}>
                       {parts.join(' · ')}
                       <br />
-                      <span style={{ color: 'var(--green)', fontWeight: 600 }}>
+                      <span style={{ color: 'var(--sage-ink)', fontWeight: 700 }}>
                         ✓ Will be included on download
                       </span>
                     </span>
@@ -1185,15 +1185,15 @@ export default function ReportPage() {
                   && drawings.filter(d => d.selected && d.captured).length === 0)}
                 style={{
                   width: '100%',
-                  background: inserting ? 'var(--stone)' : 'var(--accent)',
-                  color: inserting ? 'var(--mid)' : 'white',
+                  background: inserting ? 'var(--paper)' : 'var(--indigo)',
+                  color: inserting ? 'var(--text-mid)' : 'white',
                   border: 'none',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-pill)',
                   padding: '11px 14px',
+                  fontFamily: 'var(--f-heading)',
                   fontSize: 13,
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: 'pointer',
-                  fontFamily: 'var(--f-body)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1214,15 +1214,15 @@ export default function ReportPage() {
                 disabled={downloading || !docReady}
                 style={{
                   width: '100%',
-                  background: downloading ? 'var(--stone)' : 'var(--accent)',
-                  color: downloading ? 'var(--mid)' : 'white',
+                  background: downloading ? 'var(--paper)' : 'var(--indigo)',
+                  color: downloading ? 'var(--text-mid)' : 'white',
                   border: 'none',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-pill)',
                   padding: '11px 14px',
+                  fontFamily: 'var(--f-heading)',
                   fontSize: 13,
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: downloading || !docReady ? 'not-allowed' : 'pointer',
-                  fontFamily: 'var(--f-body)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1235,8 +1235,8 @@ export default function ReportPage() {
                   <>
                     <div style={{
                       width: 13, height: 13,
-                      border: '2px solid var(--line2)',
-                      borderTopColor: 'var(--accent)',
+                      border: '2px solid var(--border-line)',
+                      borderTopColor: 'white',
                       borderRadius: '50%',
                       animation: 'spin 0.7s linear infinite',
                     }} />
@@ -1251,21 +1251,21 @@ export default function ReportPage() {
           </div>
 
           {/* ── ONLYOFFICE EDITOR ────────────────────────────────────────── */}
-          <div className="report-editor-area" style={{ flex: 1, overflow: 'hidden', position: 'relative', background: '#e8e4de' }}>
+          <div className="report-editor-area" style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--paper)' }}>
             {generating ? (
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 height: '100%', flexDirection: 'column', gap: 16,
-                background: '#e8e4de',
+                background: 'var(--paper)',
               }}>
                 <div style={{
-                  width: 40, height: 40, border: '3px solid #e4e0d9',
-                  borderTopColor: '#2c5282', borderRadius: '50%',
+                  width: 40, height: 40, border: '3px solid var(--border-line)',
+                  borderTopColor: 'var(--indigo)', borderRadius: '50%',
                   animation: 'spin 0.8s linear infinite',
                 }} />
                 <div style={{
-                  fontSize: 14, color: '#9b968d',
-                  fontFamily: "'JetBrains Mono',monospace",
+                  fontSize: 14, color: 'var(--text-mid)',
+                  fontFamily: 'var(--f-mono)',
                   textTransform: 'uppercase', letterSpacing: '1px',
                 }}>
                   Preparing document…
@@ -1282,13 +1282,9 @@ export default function ReportPage() {
                 <div style={{
                   flex: 1,
                   overflow: 'hidden',
-                  borderRadius: '8px',
-                  boxShadow: [
-                    '0 8px 32px rgba(0,0,0,0.16)',
-                    '0 2px 8px rgba(0,0,0,0.08)',
-                    '0 0 0 1px rgba(0,0,0,0.06)',
-                  ].join(', '),
-                  border: '1px solid #ccc8c0',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: 'var(--shadow-card-v3)',
+                  border: '1px solid var(--border-line)',
                 }}>
                   <OnlyOfficeEditor
                     key={editorKey}
@@ -1306,24 +1302,24 @@ export default function ReportPage() {
               <div style={{
                 position: 'absolute',
                 inset: 0,
-                background: 'rgba(248,247,245,0.9)',
+                background: 'rgba(250,248,244,0.9)',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 14,
                 zIndex: 20,
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
               }}>
                 <div style={{
                   width: 36, height: 36,
-                  border: '3px solid var(--line)',
-                  borderTopColor: 'var(--accent)',
+                  border: '3px solid var(--border-line)',
+                  borderTopColor: 'var(--indigo)',
                   borderRadius: '50%',
                   animation: 'spin 0.7s linear infinite',
                 }}/>
                 <div style={{
-                  fontSize: 14, color: 'var(--mid)',
+                  fontSize: 14, color: 'var(--text-mid)',
                   fontFamily: 'var(--f-mono)',
                   textTransform: 'uppercase',
                   letterSpacing: '1px',
