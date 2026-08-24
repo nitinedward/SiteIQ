@@ -68,7 +68,7 @@ export default function ProfileScreen() {
               <Text style={[S.menuBadgeText, { color: T.indigo }]}>PIN</Text>
             </View>
             <Text style={S.menuLabel}>Change PIN</Text>
-            <Text style={S.menuChevron}>›</Text>
+            <Text style={S.menuChevron}>&gt;</Text>
           </TouchableOpacity>
           <View style={S.divider} />
           <TouchableOpacity style={S.menuRow} onPress={() => router.push('/firm-settings')} activeOpacity={0.7}>
@@ -76,7 +76,7 @@ export default function ProfileScreen() {
               <Text style={[S.menuBadgeText, { color: T.sage }]}>Firm</Text>
             </View>
             <Text style={S.menuLabel}>Firm Settings</Text>
-            <Text style={S.menuChevron}>›</Text>
+            <Text style={S.menuChevron}>&gt;</Text>
           </TouchableOpacity>
         </View>
 

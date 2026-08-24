@@ -89,7 +89,7 @@ export default function ProjectDetailScreen() {
       {/* Header */}
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>{'‹'}</Text>
+          <Text style={S.backArrow}>{'⬅️'}</Text>
         </TouchableOpacity>
         <View style={S.headerMid}>
           <Text style={S.headerTitle} numberOfLines={1}>{project.name}</Text>
@@ -114,7 +114,7 @@ export default function ProjectDetailScreen() {
                   {inspections.length > 0 ? `Last: ${inspections[0].date}` : 'No inspections yet'}
                 </Text>
               </View>
-              <Text style={S.startArrow}>{'›'}</Text>
+              <Text style={S.startArrow}>{'>'}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -137,7 +137,7 @@ export default function ProjectDetailScreen() {
                 <Text style={S.rowTitle}>{d.title}</Text>
                 <Text style={S.rowMeta}>Rev {d.revision}</Text>
               </View>
-              <Text style={S.rowArrow}>›</Text>
+              <Text style={S.rowArrow}>&gt;</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -159,7 +159,7 @@ export default function ProjectDetailScreen() {
                 <Text style={S.rowTitle}>{ins.date}</Text>
                 <Text style={S.rowMeta}>{ins.site_contact || 'No contact'} · {ins.weather}</Text>
               </View>
-              <Text style={S.rowArrow}>›</Text>
+              <Text style={S.rowArrow}>&gt;</Text>
             </TouchableOpacity>
           ))}
         </View>

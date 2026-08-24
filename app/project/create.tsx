@@ -40,7 +40,7 @@ export default function CreateProjectScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>{'‹'}</Text>
+          <Text style={S.backArrow}>{'⬅️'}</Text>
         </TouchableOpacity>
         <Text style={S.headerTitle}>New Project</Text>
         <View style={{ width: 40 }} />

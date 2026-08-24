@@ -52,7 +52,7 @@ export default function ForgotPasswordScreen() {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.inner}>
           <TouchableOpacity style={styles.backArrowBtn} onPress={() => router.back()}>
-            <Text style={styles.backArrow}>{'‹'}</Text>
+            <Text style={styles.backArrow}>{'⬅️'}</Text>
           </TouchableOpacity>
 
           <View style={styles.logoMark}>

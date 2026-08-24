@@ -206,7 +206,7 @@ export default function FirmSettingsScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>{'‹'}</Text>
+          <Text style={S.backArrow}>{'⬅️'}</Text>
           <Text style={S.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={S.headerTitle}>Firm Settings</Text>
@@ -267,7 +267,7 @@ export default function FirmSettingsScreen() {
                     <Text style={S.uploadTemplateTitle}>Upload Word Template</Text>
                     <Text style={S.uploadTemplateSub}>Upload a .docx file with placeholders</Text>
                   </View>
-                  <Text style={S.uploadTemplateArrow}>{'›'}</Text>
+                  <Text style={S.uploadTemplateArrow}>{'>'}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -311,7 +311,7 @@ export default function FirmSettingsScreen() {
                 <Text style={S.projectName}>{project.name}</Text>
                 <Text style={S.projectNumber}>#{project.project_number}</Text>
               </View>
-              <Text style={S.projectArrow}>{'Assign Engineers ›'}</Text>
+              <Text style={S.projectArrow}>{'Assign Engineers >'}</Text>
             </TouchableOpacity>
           ))}
         </View>

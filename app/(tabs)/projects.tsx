@@ -114,7 +114,7 @@ export default function ProjectsScreen() {
         <View style={S.cardDivider} />
         <View style={S.cardFooter}>
           <Text style={S.cardFooterLabel}>View project</Text>
-          <Text style={S.cardChevron}>›</Text>
+          <Text style={S.cardChevron}>&gt;</Text>
         </View>
       </TouchableOpacity>
     )

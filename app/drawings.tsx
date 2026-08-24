@@ -56,7 +56,7 @@ export default function DrawingsPickerScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backArrow}>{'‹'}</Text>
+          <Text style={styles.backArrow}>{'⬅️'}</Text>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Select Drawing</Text>
@@ -103,7 +103,7 @@ export default function DrawingsPickerScreen() {
                   {drawing.zones} inspection zones
                 </Text>
               </View>
-              <Text style={styles.drawingArrow}>{'›'}</Text>
+              <Text style={styles.drawingArrow}>{'>'}</Text>
             </TouchableOpacity>
           ))}
 

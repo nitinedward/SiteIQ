@@ -267,7 +267,7 @@ export default function RecorderScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backArrow}>{'‹'}</Text>
+          <Text style={styles.backArrow}>{'⬅️'}</Text>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Voice Notes</Text>

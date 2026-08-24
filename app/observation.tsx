@@ -352,7 +352,7 @@ export default function ObservationScreen() {
     <KeyboardAvoidingView style={S.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Text style={S.backArrow}>{'‹'}</Text>
+          <Text style={S.backArrow}>{'⬅️'}</Text>
           <Text style={S.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={S.headerTitle} numberOfLines={1}>{isEditMode ? 'Edit Observation' : 'New Observation'}</Text>
