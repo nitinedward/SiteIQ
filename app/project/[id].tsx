@@ -116,7 +116,7 @@ export default function ProjectDetailScreen() {
         </TouchableOpacity>
         <View style={S.headerMid}>
           <Text style={S.headerTitle} numberOfLines={1}>{project.name}</Text>
-          <Text style={S.headerSub}>#{project.project_number}</Text>
+          <Text style={S.headerSub} numberOfLines={1}>#{project.project_number}{project.address ? ` · ${project.address}` : ''}</Text>
         </View>
         <View style={[S.statusPill, { backgroundColor: status.bg }]}>
           <Text style={[S.statusText, { color: status.colour }]}>{status.label}</Text>
@@ -173,7 +173,7 @@ export default function ProjectDetailScreen() {
                 <Text style={S.rowBadgeText}>{d.number || '-'}</Text>
               </View>
               <View style={S.rowInfo}>
-                <Text style={S.rowTitle}>{d.title}</Text>
+                <Text style={S.rowTitle} numberOfLines={1}>{d.title}</Text>
                 <Text style={S.rowMeta}>Rev {d.revision}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={T.mid} />
@@ -195,7 +195,7 @@ export default function ProjectDetailScreen() {
                 <Text style={S.rowBadgeText}>#{ins.report_no}</Text>
               </View>
               <View style={S.rowInfo}>
-                <Text style={S.rowTitle}>{ins.date}</Text>
+                <Text style={S.rowTitle} numberOfLines={1}>{ins.date}</Text>
                 <Text style={S.rowMeta}>{ins.site_contact || 'No contact'} · {ins.weather}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={T.mid} />
