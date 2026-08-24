@@ -93,28 +93,27 @@ function NavBtn({ id, label, active, onClick }: {
         display: 'flex', alignItems: 'center', gap: 10,
         width: 'calc(100% - 20px)', padding: '10px 14px',
         margin: '1px 10px',
-        borderRadius: 'var(--r2)',
-        fontSize: 14, fontWeight: active ? 600 : 500,
-        color: active ? 'var(--accent)' : 'var(--mid)',
-        background: active ? 'var(--accent2)' : 'none',
+        borderRadius: 'var(--radius-pill)',
+        fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
+        color: active ? 'var(--indigo)' : 'var(--text-mid)',
+        background: active ? 'var(--indigo-soft)' : 'none',
         border: 'none', textAlign: 'left', cursor: 'pointer',
         transition: 'background .15s, color .15s',
-        boxShadow: active ? 'inset 2px 0 0 var(--accent)' : 'none',
       }}
       onMouseEnter={e => {
         if (!active) {
-          e.currentTarget.style.background = 'var(--stone)'
-          e.currentTarget.style.color = 'var(--dark)'
+          e.currentTarget.style.background = 'var(--paper)'
+          e.currentTarget.style.color = 'var(--text-ink)'
         }
       }}
       onMouseLeave={e => {
         if (!active) {
           e.currentTarget.style.background = 'none'
-          e.currentTarget.style.color = 'var(--mid)'
+          e.currentTarget.style.color = 'var(--text-mid)'
         }
       }}
     >
-      <span style={{ color: active ? 'var(--accent)' : 'var(--mid)' }}>
+      <span style={{ color: active ? 'var(--indigo)' : 'var(--text-mid)' }}>
         <NavIcon id={id} />
       </span>
       {label}
@@ -148,8 +147,8 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
         gridTemplateRows: '60px 1fr',
         height: '100vh',
         overflow: 'hidden',
-        fontFamily: 'var(--f-body)',
-        background: 'var(--off)',
+        fontFamily: 'var(--f-text)',
+        background: 'var(--paper)',
       }}>
 
       {/* ── TOPBAR ───────────────────────────────────────────── */}
@@ -157,16 +156,16 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
         gridColumn: '1 / -1',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 28px',
-        background: 'var(--white)',
-        borderBottom: '1px solid var(--line)',
+        background: 'var(--surface)',
+        borderBottom: '1px solid var(--border-line)',
         zIndex: 50,
       }}>
 
         {/* LEFT — brand */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
-            width: 32, height: 32, borderRadius: 'var(--r2)',
-            background: 'var(--accent)',
+            width: 32, height: 32, borderRadius: 'var(--radius-sm)',
+            background: 'var(--indigo)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
           }}>
@@ -175,28 +174,27 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
               <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
           </div>
-          <span className="topbar-brand" style={{ fontFamily: 'var(--f-serif)', fontSize: 22, fontWeight: 600, color: 'var(--ink)' }}>
-            Site<span style={{ color: 'var(--accent)' }}>IQ</span>
+          <span className="topbar-brand" style={{ fontFamily: 'var(--f-heading)', fontSize: 21, fontWeight: 800, color: 'var(--text-ink)' }}>
+            Site<span style={{ color: 'var(--indigo)' }}>IQ</span>
           </span>
         </div>
 
         {/* CENTRE — live pill */}
         <div className="topbar-firm-pill" style={{
           display: 'flex', alignItems: 'center', gap: 8,
-          background: 'var(--stone)',
-          border: '1px solid var(--line)',
-          borderRadius: 'var(--r4)', padding: '5px 14px 5px 10px',
+          background: 'var(--indigo-soft)',
+          borderRadius: 'var(--radius-pill)', padding: '5px 14px 5px 10px',
         }}>
           <span style={{
             width: 7, height: 7, borderRadius: '50%',
-            background: '#22c55e',
+            background: 'var(--sage)',
             animation: 'pulse 2s infinite',
             display: 'inline-block', flexShrink: 0,
           }} />
           <span style={{
-            fontFamily: 'var(--f-mono)', fontSize: 11,
+            fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700,
             textTransform: 'uppercase', letterSpacing: '1.5px',
-            color: 'var(--dark)',
+            color: 'var(--indigo)',
           }}>
             {firmName || 'SiteIQ'}
           </span>
@@ -206,22 +204,22 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
           padding: '5px 6px 5px 14px',
-          background: 'var(--stone)', borderRadius: 'var(--r4)', border: '1px solid var(--line)',
+          background: 'var(--paper)', borderRadius: 'var(--radius-pill)', border: '1px solid var(--border-line)',
         }}>
           <div style={{ lineHeight: 1.25 }}>
-            <div className="topbar-user-name" style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{fullName}</div>
+            <div className="topbar-user-name" style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>{fullName}</div>
             <div style={{
-              fontFamily: 'var(--f-mono)', fontSize: 10,
+              fontFamily: 'var(--f-heading)', fontSize: 10, fontWeight: 600,
               textTransform: 'uppercase', letterSpacing: '1px',
-              color: role === 'admin' ? 'var(--accent)' : 'var(--mid)',
+              color: role === 'admin' ? 'var(--indigo)' : 'var(--text-mid)',
             }}>
               {role === 'admin' ? 'Administrator' : 'Engineer'}
             </div>
           </div>
           <div style={{
             width: 30, height: 30, borderRadius: '50%',
-            background: 'var(--accent)', color: '#fff',
-            fontSize: 12, fontWeight: 700,
+            background: 'var(--sage)', color: '#fff',
+            fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
           }}>
@@ -232,8 +230,8 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
 
       {/* ── SIDEBAR ──────────────────────────────────────────── */}
       <div className="shell-sidebar" style={{
-        background: 'var(--white)',
-        borderRight: '1px solid var(--line)',
+        background: 'var(--surface)',
+        borderRight: '1px solid var(--border-line)',
         display: 'flex', flexDirection: 'column',
         padding: '20px 0',
         overflowY: 'auto',
@@ -241,9 +239,9 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
 
         {/* Section label */}
         <div style={{
-          fontFamily: 'var(--f-mono)', fontSize: 10,
+          fontFamily: 'var(--f-heading)', fontSize: 10, fontWeight: 700,
           textTransform: 'uppercase', letterSpacing: '2px',
-          color: 'var(--mid)', padding: '0 20px 8px',
+          color: 'var(--text-mid)', padding: '0 20px 8px',
         }}>
           Workspace
         </div>
@@ -256,7 +254,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
         </div>
 
         {/* Bottom section */}
-        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border-line)', paddingTop: 12 }}>
           <NavBtn id="settings" label="Settings" active={activePage === 'settings'} onClick={() => router.push('/settings')} />
 
           <button
@@ -264,14 +262,14 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
             style={{
               display: 'flex', alignItems: 'center', gap: 10,
               width: 'calc(100% - 20px)', margin: '1px 10px',
-              padding: '10px 14px', borderRadius: 'var(--r2)',
-              fontSize: 14, fontWeight: 500,
-              color: 'var(--red)',
+              padding: '10px 14px', borderRadius: 'var(--radius-pill)',
+              fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
+              color: 'var(--clay)',
               background: 'none', border: 'none',
               textAlign: 'left', cursor: 'pointer',
               transition: 'background .15s',
             }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--red2)')}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--clay-soft)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'none')}
           >
             <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
@@ -285,7 +283,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
       </div>
 
       {/* ── MAIN ─────────────────────────────────────────────── */}
-      <div className="shell-main shell-content" style={{ overflowY: 'auto', background: 'var(--off)', animation: 'fadeIn 0.2s ease-out' }}>
+      <div className="shell-main shell-content" style={{ overflowY: 'auto', background: 'var(--paper)', animation: 'fadeIn 0.2s ease-out' }}>
         {children}
       </div>
 
@@ -297,8 +295,8 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
       position: 'fixed',
       bottom: 0, left: 0, right: 0,
       height: 60,
-      background: 'var(--white)',
-      borderTop: '1px solid var(--line)',
+      background: 'var(--surface)',
+      borderTop: '1px solid var(--border-line)',
       zIndex: 100,
       alignItems: 'center',
       justifyContent: 'space-around',
@@ -307,7 +305,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
       <button onClick={() => router.push('/dashboard')} style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
         background: 'none', border: 'none', cursor: 'pointer', padding: '8px 16px',
-        color: activePage === 'dashboard' ? 'var(--accent)' : 'var(--mid)', flex: 1,
+        color: activePage === 'dashboard' ? 'var(--indigo)' : 'var(--text-mid)', flex: 1,
       }}>
         <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
           <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -318,7 +316,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
       <button onClick={() => router.push('/admin')} style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
         background: 'none', border: 'none', cursor: 'pointer', padding: '8px 16px',
-        color: activePage === 'projects' ? 'var(--accent)' : 'var(--mid)', flex: 1,
+        color: activePage === 'projects' ? 'var(--indigo)' : 'var(--text-mid)', flex: 1,
       }}>
         <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
           <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
@@ -328,7 +326,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
       <button onClick={() => router.push('/admin?tab=team')} style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
         background: 'none', border: 'none', cursor: 'pointer', padding: '8px 16px',
-        color: activePage === 'team' ? 'var(--accent)' : 'var(--mid)', flex: 1,
+        color: activePage === 'team' ? 'var(--indigo)' : 'var(--text-mid)', flex: 1,
       }}>
         <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
           <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
@@ -340,7 +338,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
       <button onClick={() => router.push('/settings')} style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
         background: 'none', border: 'none', cursor: 'pointer', padding: '8px 16px',
-        color: activePage === 'settings' ? 'var(--accent)' : 'var(--mid)', flex: 1,
+        color: activePage === 'settings' ? 'var(--indigo)' : 'var(--text-mid)', flex: 1,
       }}>
         <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="3"/>
@@ -369,17 +367,18 @@ export function Btn({
   const size = small ? 13 : 14
   const base: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 6,
-    padding: pad, borderRadius: 'var(--r2)', fontSize: size, fontWeight: 500,
+    padding: pad, borderRadius: 'var(--radius-pill)',
+    fontFamily: 'var(--f-heading)', fontSize: size, fontWeight: 700,
     cursor: disabled ? 'not-allowed' : 'pointer',
     border: 'none', transition: 'all .15s', opacity: disabled ? 0.5 : 1,
   }
   const vs: Record<string, React.CSSProperties> = {
-    primary: { background: 'var(--accent)',   color: '#fff',          border: '1px solid var(--accent)' },
-    outline: { background: 'var(--white)',    color: 'var(--dark)',   border: '1.5px solid var(--line)' },
-    ghost:   { background: 'var(--stone)',    color: 'var(--dark)',   border: 'none' },
-    danger:  { background: 'var(--red2)',     color: 'var(--red)',    border: '1px solid rgba(192,57,43,.2)' },
-    success: { background: 'var(--green2)',   color: 'var(--green)',  border: '1px solid #b3ddd1' },
-    orange:  { background: 'var(--orange2)',  color: 'var(--orange)', border: '1px solid rgba(192,86,33,.2)' },
+    primary: { background: 'var(--indigo)',       color: '#fff',              border: '1px solid var(--indigo)' },
+    outline: { background: 'var(--surface)',      color: 'var(--text-ink)',   border: '1.5px solid var(--border-line)' },
+    ghost:   { background: 'var(--paper)',        color: 'var(--text-ink)',   border: 'none' },
+    danger:  { background: 'var(--clay-soft)',    color: 'var(--clay-ink)',   border: '1px solid rgba(229,115,91,.3)' },
+    success: { background: 'var(--sage-soft)',    color: 'var(--sage-ink)',   border: '1px solid rgba(91,146,121,.3)' },
+    orange:  { background: 'var(--marigold-soft)',color: 'var(--marigold-ink)', border: '1px solid rgba(224,141,11,.3)' },
   }
   return (
     <button onClick={onClick} disabled={disabled} style={{ ...base, ...vs[variant], ...extra }}>
@@ -390,21 +389,20 @@ export function Btn({
 
 export function Badge({ status }: { status: string }) {
   const map: Record<string, { label: string; color: string; bg: string }> = {
-    ACTIVE:    { label: 'Active',    color: 'var(--green)',  bg: 'var(--green2)'  },
-    ON_HOLD:   { label: 'On Hold',   color: 'var(--amber)',  bg: 'var(--amber2)'  },
-    COMPLETED: { label: 'Completed', color: 'var(--accent)', bg: 'var(--accent2)' },
-    draft:     { label: 'Draft',     color: 'var(--amber)',  bg: 'var(--amber2)'  },
-    final:     { label: 'Final',     color: 'var(--green)',  bg: 'var(--green2)'  },
-    pending:   { label: 'Pending',   color: 'var(--orange)', bg: 'var(--orange2)' },
+    ACTIVE:    { label: 'Active',    color: 'var(--sage-ink)',     bg: 'var(--sage-soft)'     },
+    ON_HOLD:   { label: 'On Hold',   color: 'var(--marigold-ink)', bg: 'var(--marigold-soft)' },
+    COMPLETED: { label: 'Completed', color: 'var(--indigo)',       bg: 'var(--indigo-soft)'   },
+    draft:     { label: 'Draft',     color: 'var(--marigold-ink)', bg: 'var(--marigold-soft)' },
+    final:     { label: 'Final',     color: 'var(--sage-ink)',     bg: 'var(--sage-soft)'     },
+    pending:   { label: 'Pending',   color: 'var(--marigold-ink)', bg: 'var(--marigold-soft)' },
   }
-  const s = map[status] ?? { label: status, color: 'var(--mid)', bg: 'var(--stone)' }
+  const s = map[status] ?? { label: status, color: 'var(--text-mid)', bg: 'var(--paper)' }
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
       padding: '3px 10px', borderRadius: 99,
-      fontSize: 11, fontWeight: 600,
+      fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700,
       color: s.color, background: s.bg,
-      fontFamily: 'var(--f-mono)',
     }}>
       <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }}/>
       {s.label}
@@ -416,8 +414,8 @@ export function Spinner({ size = 24 }: { size?: number }) {
   return (
     <div style={{
       width: size, height: size,
-      border: '2px solid var(--line)',
-      borderTopColor: 'var(--accent)',
+      border: '2px solid var(--border-line)',
+      borderTopColor: 'var(--indigo)',
       borderRadius: '50%', animation: 'spin .8s linear infinite',
       flexShrink: 0,
     }}/>
@@ -427,10 +425,10 @@ export function Spinner({ size = 24 }: { size?: number }) {
 export function Card({ children, style, className }: { children: React.ReactNode; style?: React.CSSProperties; className?: string }) {
   return (
     <div className={className} style={{
-      background: 'var(--white)',
-      border: '1px solid var(--line)',
-      borderRadius: 'var(--r3)',
-      boxShadow: 'var(--shadow-card)',
+      background: 'var(--surface)',
+      border: '1px solid var(--border-line)',
+      borderRadius: 'var(--radius-md)',
+      boxShadow: 'var(--shadow-card-v3)',
       ...style,
     }}>
       {children}
