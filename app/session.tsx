@@ -8,6 +8,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as SecureStore from 'expo-secure-store';
 import { Audio } from 'expo-av';
+import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../lib/theme';
 
 const T = theme.colors;
@@ -364,7 +365,7 @@ export default function SessionScreen() {
               return (
                 <TouchableOpacity key={drawing.id} style={[S.checkRow, sel && S.checkRowActive]} onPress={() => toggleDrawing(drawing.id)} activeOpacity={0.7}>
                   <View style={[S.checkbox, sel && S.checkboxActive]}>
-                    {sel && <Text style={S.checkmark}>{'v'}</Text>}
+                    {sel && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
                   </View>
                   <View style={S.checkInfo}>
                     <Text style={S.checkTitle}>{drawing.title}</Text>

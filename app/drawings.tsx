@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../lib/theme';
 
 const T = theme.colors;
@@ -103,7 +104,7 @@ export default function DrawingsPickerScreen() {
                   {drawing.zones} inspection zones
                 </Text>
               </View>
-              <Text style={styles.drawingArrow}>{'>'}</Text>
+              <Ionicons name="chevron-forward" size={20} color={T.mid} />
             </TouchableOpacity>
           ))}
 

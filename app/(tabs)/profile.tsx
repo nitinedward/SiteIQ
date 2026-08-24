@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'rea
 import { useState, useCallback } from 'react'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
+import { Ionicons } from '@expo/vector-icons'
 import { theme } from '../../lib/theme'
 
 const T = theme.colors
@@ -68,7 +69,7 @@ export default function ProfileScreen() {
               <Text style={[S.menuBadgeText, { color: T.indigo }]}>PIN</Text>
             </View>
             <Text style={S.menuLabel}>Change PIN</Text>
-            <Text style={S.menuChevron}>&gt;</Text>
+            <Ionicons name="chevron-forward" size={20} color={T.mid} />
           </TouchableOpacity>
           <View style={S.divider} />
           <TouchableOpacity style={S.menuRow} onPress={() => router.push('/firm-settings')} activeOpacity={0.7}>
@@ -76,7 +77,7 @@ export default function ProfileScreen() {
               <Text style={[S.menuBadgeText, { color: T.sage }]}>Firm</Text>
             </View>
             <Text style={S.menuLabel}>Firm Settings</Text>
-            <Text style={S.menuChevron}>&gt;</Text>
+            <Ionicons name="chevron-forward" size={20} color={T.mid} />
           </TouchableOpacity>
         </View>
 

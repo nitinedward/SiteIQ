@@ -6,6 +6,7 @@ import {
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../lib/theme';
 
 const T = theme.colors;
@@ -114,7 +115,7 @@ export default function ProjectDetailScreen() {
                   {inspections.length > 0 ? `Last: ${inspections[0].date}` : 'No inspections yet'}
                 </Text>
               </View>
-              <Text style={S.startArrow}>{'>'}</Text>
+              <Ionicons name="chevron-forward" size={26} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         )}
@@ -137,7 +138,7 @@ export default function ProjectDetailScreen() {
                 <Text style={S.rowTitle}>{d.title}</Text>
                 <Text style={S.rowMeta}>Rev {d.revision}</Text>
               </View>
-              <Text style={S.rowArrow}>&gt;</Text>
+              <Ionicons name="chevron-forward" size={18} color={T.mid} />
             </TouchableOpacity>
           ))}
         </View>
@@ -159,7 +160,7 @@ export default function ProjectDetailScreen() {
                 <Text style={S.rowTitle}>{ins.date}</Text>
                 <Text style={S.rowMeta}>{ins.site_contact || 'No contact'} · {ins.weather}</Text>
               </View>
-              <Text style={S.rowArrow}>&gt;</Text>
+              <Ionicons name="chevron-forward" size={18} color={T.mid} />
             </TouchableOpacity>
           ))}
         </View>

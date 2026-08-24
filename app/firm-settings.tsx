@@ -1,4 +1,5 @@
 import { theme } from '../lib/theme'
+import { Ionicons } from '@expo/vector-icons';
 import {
   View,
   Text,
@@ -262,12 +263,12 @@ export default function FirmSettingsScreen() {
                 <ActivityIndicator size="small" color={T.indigo} />
               ) : (
                 <>
-                  <Text style={S.uploadTemplateIcon}>Upload</Text>
+                  <Ionicons name="cloud-upload-outline" size={22} color={T.indigo} />
                   <View style={{ flex: 1 }}>
                     <Text style={S.uploadTemplateTitle}>Upload Word Template</Text>
                     <Text style={S.uploadTemplateSub}>Upload a .docx file with placeholders</Text>
                   </View>
-                  <Text style={S.uploadTemplateArrow}>{'>'}</Text>
+                  <Ionicons name="chevron-forward" size={20} color={T.indigo} />
                 </>
               )}
             </TouchableOpacity>
@@ -311,7 +312,10 @@ export default function FirmSettingsScreen() {
                 <Text style={S.projectName}>{project.name}</Text>
                 <Text style={S.projectNumber}>#{project.project_number}</Text>
               </View>
-              <Text style={S.projectArrow}>{'Assign Engineers >'}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                <Text style={S.projectArrow}>Assign Engineers</Text>
+                <Ionicons name="chevron-forward" size={16} color={T.indigo} />
+              </View>
             </TouchableOpacity>
           ))}
         </View>

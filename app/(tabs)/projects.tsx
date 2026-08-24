@@ -7,6 +7,7 @@ import { useState, useCallback } from 'react'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { getUserFirm } from '../../lib/firm'
+import { Ionicons } from '@expo/vector-icons'
 import { theme } from '../../lib/theme'
 
 const T = theme.colors
@@ -114,7 +115,7 @@ export default function ProjectsScreen() {
         <View style={S.cardDivider} />
         <View style={S.cardFooter}>
           <Text style={S.cardFooterLabel}>View project</Text>
-          <Text style={S.cardChevron}>&gt;</Text>
+          <Ionicons name="chevron-forward" size={18} color={T.indigo} />
         </View>
       </TouchableOpacity>
     )
