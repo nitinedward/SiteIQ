@@ -249,7 +249,7 @@ const S = StyleSheet.create({
   startArrow:  { fontSize: 32, color: T.indigoDeep, lineHeight: 36 },
 
   // Stats
-  statsRow:  { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginBottom: 20 },
+  statsRow:  { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginTop: 8, marginBottom: 20 },
   statTile:  {
     flex: 1, backgroundColor: T.surface, borderRadius: R.lg,
     paddingVertical: 18, paddingHorizontal: 8, alignItems: 'center',
