@@ -379,8 +379,7 @@ export default function DrawingViewerScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color={T.indigo} />
-          <Text style={S.backText}>Back</Text>
+          <Ionicons name="arrow-back" size={20} color={T.indigo} />
         </TouchableOpacity>
         <Text style={S.headerTitle} numberOfLines={1}>{title}</Text>
         <TouchableOpacity style={S.toggleBtn} onPress={() => { setIsLoading(true); setPdfError(''); setShowPdf(v => !v); }}>
@@ -485,9 +484,10 @@ export default function DrawingViewerScreen() {
 const S = StyleSheet.create({
   container:     { flex: 1, backgroundColor: T.paper },
   header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: T.surface, zIndex: 10 },
-  backBtn:       { flexDirection: 'row', alignItems: 'center', gap: 4, width: 52 },
-  backArrow:     { fontSize: 28, color: T.indigo, lineHeight: 32 },
-  backText:      { fontSize: 14, color: T.indigo },
+  backBtn:       {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center',
+  },
   headerTitle:   { fontSize: 13, fontWeight: '600', color: T.ink, flex: 1, textAlign: 'center' },
   toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 14, paddingVertical: 7, borderRadius: R.pill, borderWidth: 1, borderColor: T.indigo },
   toggleText:    { fontSize: 13, color: T.indigo, fontWeight: '600' },
