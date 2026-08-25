@@ -20,8 +20,8 @@ export default function TabLayout() {
           paddingTop: 6,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
+          fontSize: 10,
+          fontWeight: '700',
         },
       }}
     >

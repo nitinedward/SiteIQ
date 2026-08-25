@@ -92,6 +92,7 @@ export const theme = {
     marigoldDeep:'#E08D0B',
     sage:        '#5B9279',
     sageSoft:    '#E7F0EB',
+    goldSoft:    '#FBEED3',
     paper:       '#FAF8F4',
     surface:     '#FFFFFF',
     ink:         '#2A2E37',

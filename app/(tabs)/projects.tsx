@@ -21,10 +21,11 @@ type ProjectStats = { reports: number; photos: number; drawings: number }
 
 function statusPill(status: string): { bg: string; text: string; label: string } {
   switch ((status ?? '').toUpperCase()) {
-    case 'ACTIVE':    return { bg: T.sageSoft,   text: T.sage,         label: 'Active'    }
-    case 'ON_HOLD':   return { bg: '#FEF3C7',    text: '#92400E',      label: 'On Hold'   }
-    case 'COMPLETED': return { bg: T.indigoSoft, text: T.indigo,       label: 'Completed' }
-    default:          return { bg: T.indigoSoft, text: T.indigo,       label: status ?? '' }
+    case 'ACTIVE':    return { bg: T.sageSoft, text: T.sage,         label: 'Active'    }
+    case 'DRAFT':     return { bg: T.goldSoft, text: T.marigoldDeep, label: 'Draft'     }
+    case 'ON_HOLD':   return { bg: '#EEF0F2',  text: T.mid,          label: 'On Hold'   }
+    case 'COMPLETED': return { bg: '#EEF0F2',  text: T.mid,          label: 'Completed' }
+    default:          return { bg: '#EEF0F2',  text: T.mid,          label: status ?? '' }
   }
 }
 
@@ -259,15 +260,15 @@ const S = StyleSheet.create({
     paddingBottom: 20,
   },
   greeting: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     color: T.mid,
     marginBottom: 6,
   },
   title: {
     fontSize: 30,
     fontWeight: '800',
-    color: T.indigo,
+    color: T.indigoDeep,
     letterSpacing: -0.4,
     lineHeight: 36,
   },
@@ -308,22 +309,20 @@ const S = StyleSheet.create({
   list: {
     paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 100,
-    gap: 12,
+    paddingBottom: 120,
   },
 
   // ── Card ────────────────────────────────────────────────────────────────
   card: {
     backgroundColor: T.surface,
-    borderRadius: R.md,       // 18
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 14,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 16,
     // soft indigo shadow
     shadowColor: '#2C3950',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
+    shadowOpacity: 0.07,
+    shadowRadius: 20,
     elevation: 3,
   },
   cardTopRow: {
@@ -336,47 +335,48 @@ const S = StyleSheet.create({
   cardName: {
     flex: 1,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
     color: T.ink,
     lineHeight: 22,
   },
   pill: {
-    borderRadius: R.pill,
-    paddingHorizontal: 10,
+    borderRadius: 20,
+    paddingHorizontal: 11,
     paddingVertical: 4,
     alignSelf: 'flex-start',
     flexShrink: 0,
   },
   pillText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   cardNumber: {
-    fontSize: 13,
+    fontSize: 12,
     color: T.mid,
-    marginBottom: 4,
+    marginTop: 3,
+    fontVariant: ['tabular-nums'],
   },
   cardAddress: {
     fontSize: 12,
     color: T.mid,
-    marginBottom: 4,
+    marginTop: 2,
   },
   cardDivider: {
     height: 1,
     backgroundColor: T.line,
-    marginTop: 12,
-    marginBottom: 10,
+    marginTop: 14,
+    marginBottom: 12,
   },
   cardStatsRow: {
     flexDirection: 'row',
-    gap: 18,
+    justifyContent: 'space-between',
   },
   cardStat: {
     fontSize: 12,
     color: T.mid,
   },
   cardStatNum: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '800',
     color: T.ink,
   },
@@ -409,17 +409,17 @@ const S = StyleSheet.create({
   // ── FAB ─────────────────────────────────────────────────────────────────
   fab: {
     position: 'absolute',
-    bottom: 24,
-    right: 20,
+    bottom: 78,
+    right: 18,
     backgroundColor: T.marigold,
-    borderRadius: R.pill,
-    paddingHorizontal: 22,
+    borderRadius: 28,
+    paddingHorizontal: 20,
     paddingVertical: 14,
     // warm marigold glow
     shadowColor: '#E08D0B',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.42,
-    shadowRadius: 26,
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
     elevation: 8,
   },
   fabText: {
