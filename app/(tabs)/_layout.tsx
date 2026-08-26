@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router'
-import { View, Text } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { theme } from '../../lib/theme'
 
 const T = theme.colors
@@ -29,8 +29,8 @@ export default function TabLayout() {
         name="projects"
         options={{
           title: 'Projects',
-          tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 14, fontWeight: '700' }}>Proj</Text>
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'folder' : 'folder-outline'} size={22} color={color} />
           ),
         }}
       />
@@ -38,8 +38,8 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 14, fontWeight: '700' }}>Me</Text>
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
           ),
         }}
       />
