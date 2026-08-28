@@ -491,7 +491,7 @@ export default function DrawingViewerScreen() {
 
 const S = StyleSheet.create({
   container:     { flex: 1, backgroundColor: T.paper },
-  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, gap: 12, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: T.surface, zIndex: 10 },
+  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, gap: 12, backgroundColor: T.line, zIndex: 10 },
   backBtn:       {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.line,
