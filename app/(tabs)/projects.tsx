@@ -240,7 +240,7 @@ export default function ProjectsScreen() {
       {/* FAB — single marigold accent on this screen */}
       <TouchableOpacity
         style={S.fab}
-        onPress={() => router.push('/(tabs)/capture')}
+        onPress={() => router.push('/project/create')}
         activeOpacity={0.85}
       >
         <Ionicons name="add" size={28} color={T.indigoDeep} />
