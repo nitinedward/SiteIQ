@@ -243,8 +243,7 @@ export default function ProjectsScreen() {
         onPress={() => router.push('/(tabs)/capture')}
         activeOpacity={0.85}
       >
-        <Ionicons name="add" size={18} color={T.indigoDeep} />
-        <Text style={S.fabText}>New inspection</Text>
+        <Ionicons name="add" size={28} color={T.indigoDeep} />
       </TouchableOpacity>
 
     </View>
@@ -408,23 +407,17 @@ const S = StyleSheet.create({
     position: 'absolute',
     bottom: 78,
     right: 18,
-    flexDirection: 'row',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
     backgroundColor: T.marigold,
-    borderRadius: 28,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
     // warm marigold glow
     shadowColor: '#E08D0B',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 8,
-  },
-  fabText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: T.indigoDeep,
   },
 })
