@@ -9,6 +9,7 @@ export default function RootLayout() {
       <Stack.Screen name="drawing/[id]" />
       <Stack.Screen name="drawings" options={{ presentation: 'modal' }} />
       <Stack.Screen name="reports" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="select-drawings" options={{ presentation: 'modal' }} />
       <Stack.Screen name="camera" />
       <Stack.Screen name="recorder" />
       <Stack.Screen name="observation" />

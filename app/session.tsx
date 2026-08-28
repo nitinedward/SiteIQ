@@ -3,13 +3,14 @@ import {
   TextInput, KeyboardAvoidingView, Platform, Alert,
   ActivityIndicator, Animated,
 } from 'react-native';
-import { useState, useEffect, useRef } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as SecureStore from 'expo-secure-store';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../lib/theme';
+import { consumePendingDrawingSelection } from '../lib/pendingSelection';
 
 const T = theme.colors;
 const R = theme.radius;
@@ -120,11 +121,17 @@ export default function SessionScreen() {
   };
 
   const fetchDrawings = async () => {
-    const { data } = await supabase.from('drawings').select('id,title,number,revision,file_url,preview_url').eq('project_id', String(project_id)).order('number', { ascending: true });
+    const { data, error } = await supabase.from('drawings').select('id,title,number,revision,file_url,preview_url').eq('project_id', String(project_id)).order('number', { ascending: true });
+    console.log('[fetchDrawings] project_id:', project_id, 'rows:', data?.length ?? 0, 'error:', error);
     setAllDrawings(data as Drawing[] ?? []);
   };
 
   const toggleDrawing = (id: string) => setSelectedDrawings(curr => curr.includes(id) ? curr.filter(d => d !== id) : [...curr, id]);
+
+  useFocusEffect(useCallback(() => {
+    const pending = consumePendingDrawingSelection();
+    if (pending) setSelectedDrawings(pending);
+  }, []));
 
   const startRecording = async () => {
     try {
@@ -355,24 +362,25 @@ export default function SessionScreen() {
 
           {/* Drawings */}
           <View style={S.section}>
-            <Text style={S.sectionTitle}>Select Drawings ({selectedDrawings.length} selected)</Text>
-            <Text style={S.hint}>Tick the drawings relevant to today's inspection</Text>
+            <Text style={S.sectionTitle}>Drawings</Text>
             {allDrawings.length === 0 ? (
               <View style={S.emptyBox}><Text style={S.emptyText}>No drawings uploaded yet</Text></View>
-            ) : allDrawings.map(drawing => {
-              const sel = selectedDrawings.includes(drawing.id);
-              return (
-                <TouchableOpacity key={drawing.id} style={[S.checkRow, sel && S.checkRowActive]} onPress={() => toggleDrawing(drawing.id)} activeOpacity={0.7}>
-                  <View style={[S.checkbox, sel && S.checkboxActive]}>
-                    {sel && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
-                  </View>
-                  <View style={S.checkInfo}>
-                    <Text style={S.checkTitle}>{drawing.title}</Text>
-                    <Text style={S.checkMeta}>{drawing.number ? `${drawing.number} - ` : ''}Rev {drawing.revision}</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+            ) : (
+              <TouchableOpacity style={S.checkRow}
+                onPress={() => router.push({ pathname: '/select-drawings', params: { project_id: String(project_id), selected: selectedDrawings.join(',') } })}
+                activeOpacity={0.7}>
+                <View style={S.pickerBadge}>
+                  <Text style={S.pickerBadgeText}>{selectedDrawings.length}</Text>
+                </View>
+                <View style={S.checkInfo}>
+                  <Text style={S.checkTitle}>
+                    {selectedDrawings.length === 0 ? 'Select drawings' : `${selectedDrawings.length} of ${allDrawings.length} selected`}
+                  </Text>
+                  <Text style={S.checkMeta}>Tap to choose the drawings relevant to today's inspection</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={T.mid} />
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Purpose */}
@@ -534,6 +542,8 @@ const S = StyleSheet.create({
   checkRowActive:{ borderColor: T.indigo, backgroundColor: T.indigoSoft },
   checkbox:     { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: T.line, alignItems: 'center', justifyContent: 'center' },
   checkboxActive:{ backgroundColor: T.indigo, borderColor: T.indigo },
+  pickerBadge:     { backgroundColor: T.indigoSoft, borderRadius: R.sm, paddingHorizontal: 12, paddingVertical: 8, minWidth: 40, alignItems: 'center' },
+  pickerBadgeText: { fontSize: 15, color: T.indigo, fontWeight: '800' },
   checkmark:    { fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
   checkInfo:    { flex: 1 },
   checkTitle:   { fontSize: 14, color: T.ink, fontWeight: '500', marginBottom: 2 },
