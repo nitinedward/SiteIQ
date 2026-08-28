@@ -510,7 +510,7 @@ const S = StyleSheet.create({
   toolLabelOn:   { color: T.indigoDeep },
   hintBar:       { backgroundColor: T.paper, paddingVertical: 7, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
   hintText:      { fontSize: 12, color: T.mid, textAlign: 'center' },
-  pdfWrap:       { flex: 1, overflow: 'hidden', backgroundColor: '#E3E7F1' },
+  pdfWrap:       { flex: 1, overflow: 'hidden', backgroundColor: T.indigoSoft },
   overlay:       { ...StyleSheet.absoluteFillObject, backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingTxt:    { color: T.mid, fontSize: 14 },
   errTxt:        { color: T.clay, fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
