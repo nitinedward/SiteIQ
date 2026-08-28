@@ -185,7 +185,6 @@ export default function ProjectsScreen() {
           {userName ? `Kia ora, ${userName} 👋` : 'Kia ora 👋'}
         </Text>
         <Text style={S.title}>Your Projects</Text>
-        {!!firmName && <Text style={S.firmLabel}>{firmName}</Text>}
       </View>
 
       {/* Search */}
@@ -262,21 +261,16 @@ const S = StyleSheet.create({
     paddingBottom: 16,
   },
   greeting: {
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: '400',
     color: T.mid,
   },
   title: {
-    fontSize: 24,
+    fontSize: 30,
     fontWeight: '800',
     color: T.indigo,
-    marginTop: 2,
-    lineHeight: 29,
-  },
-  firmLabel: {
-    marginTop: 6,
-    fontSize: 13,
-    color: T.mid,
+    marginTop: 3,
+    lineHeight: 36,
   },
 
   // ── Search ──────────────────────────────────────────────────────────────
