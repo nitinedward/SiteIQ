@@ -22,7 +22,7 @@ type Pt = { x: number; y: number };
 type PdfRect = { x: number; y: number; width: number; height: number };
 
 function zoneIcon(markupType?: MarkupType): keyof typeof Ionicons.glyphMap {
-  if (markupType === 'rectangle') return 'square';
+  if (markupType === 'rectangle') return 'scan';
   if (markupType === 'freehand') return 'pencil';
   return 'location';
 }
@@ -401,7 +401,7 @@ export default function DrawingViewerScreen() {
           {!viewOnly && (
             <View style={S.toolbar}>
               <ToolBtn icon="location-outline" label="Pin"  active={tool==='pin'}       onPress={() => updateTool('pin')} />
-              <ToolBtn icon="square-outline"   label="Area" active={tool==='rectangle'} onPress={() => updateTool('rectangle')} />
+              <ToolBtn icon="scan-outline"     label="Area" active={tool==='rectangle'} onPress={() => updateTool('rectangle')} />
               <ToolBtn icon="pencil-outline"   label="Draw" active={tool==='freehand'}  onPress={() => updateTool('freehand')} />
             </View>
           )}
@@ -492,7 +492,7 @@ export default function DrawingViewerScreen() {
 
 const S = StyleSheet.create({
   container:     { flex: 1, backgroundColor: T.paper },
-  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: T.surface, zIndex: 10 },
+  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: T.surface, zIndex: 10 },
   backBtn:       {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center',
@@ -500,7 +500,7 @@ const S = StyleSheet.create({
   headerMid:     { flex: 1 },
   headerTitle:   { fontSize: 17, fontWeight: '800', color: T.ink },
   headerSub:     { fontSize: 12, color: T.mid, marginTop: 1 },
-  toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.pill },
+  toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 16, paddingVertical: 11, borderRadius: R.pill },
   toggleText:    { fontSize: 13, color: T.indigoDeep, fontWeight: '700' },
   pdfScreen:     { flex: 1 },
   toolbar:       { flexDirection: 'row', backgroundColor: T.surface, paddingVertical: 14, paddingHorizontal: 14, gap: 10, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
@@ -510,15 +510,15 @@ const S = StyleSheet.create({
   toolLabelOn:   { color: T.indigoDeep },
   hintBar:       { backgroundColor: T.paper, paddingVertical: 7, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
   hintText:      { fontSize: 12, color: T.mid, textAlign: 'center' },
-  pdfWrap:       { flex: 1, overflow: 'hidden', backgroundColor: T.indigoSoft },
+  pdfWrap:       { flex: 1, overflow: 'hidden', backgroundColor: '#E3E7F1' },
   overlay:       { ...StyleSheet.absoluteFillObject, backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingTxt:    { color: T.mid, fontSize: 14 },
   errTxt:        { color: T.clay, fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
   retryTxt:      { color: T.indigo, fontSize: 14, fontWeight: '500' },
-  labelBubble:   { backgroundColor: T.indigo, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, alignSelf: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 6 },
+  labelBubble:   { backgroundColor: T.indigoDeep, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, alignSelf: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 6 },
   labelText:     { fontSize: 12, color: '#FFFFFF', fontWeight: '700' },
   labelFree:     { backgroundColor: '#F59E0B' },
-  labelStem:     { width: 1.5, height: 8, backgroundColor: T.indigo },
+  labelStem:     { width: 1.5, height: 8, backgroundColor: T.indigoDeep },
   strip:         { backgroundColor: T.surface, borderTopWidth: 1, borderTopColor: T.line, maxHeight: 76 },
   stripContent:  { paddingHorizontal: 16, gap: 10, alignItems: 'center', paddingVertical: 16 },
   chip:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.indigoSoft, borderRadius: 24, paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, borderColor: T.indigo },
