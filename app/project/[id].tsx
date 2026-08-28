@@ -112,7 +112,7 @@ export default function ProjectDetailScreen() {
       {/* Header */}
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color={T.indigo} />
+          <Ionicons name="arrow-back" size={18} color={T.indigo} />
         </TouchableOpacity>
         <View style={S.headerMid}>
           <Text style={S.headerTitle} numberOfLines={1}>{project.name}</Text>
@@ -137,7 +137,7 @@ export default function ProjectDetailScreen() {
                   {inspections.length > 0 ? `Last visit ${inspections[0].date}` : 'No inspections yet'}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={26} color={T.indigoDeep} />
+              <Ionicons name="chevron-forward" size={20} color={T.indigoDeep} />
             </TouchableOpacity>
           </View>
         )}
@@ -176,7 +176,7 @@ export default function ProjectDetailScreen() {
                 <Text style={S.rowTitle}>{drawings.length === 1 ? '1 Drawing' : `${drawings.length} Drawings`}</Text>
                 <Text style={S.rowMeta}>Tap to view all</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={T.mid} />
+              <Ionicons name="chevron-forward" size={16} color={T.mid} />
             </TouchableOpacity>
           )}
         </View>
@@ -199,7 +199,7 @@ export default function ProjectDetailScreen() {
                 <Text style={S.rowTitle}>{inspections.length === 1 ? '1 Report' : `${inspections.length} Reports`}</Text>
                 <Text style={S.rowMeta}>Tap to view all</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={T.mid} />
+              <Ionicons name="chevron-forward" size={16} color={T.mid} />
             </TouchableOpacity>
           )}
         </View>
@@ -218,23 +218,25 @@ const S = StyleSheet.create({
   scroll:      { flex: 1 },
 
   // Header
-  header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 14, backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line, gap: 12 },
+  header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line, gap: 12 },
   backBtn:     {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center',
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: T.surface, borderWidth: 1, borderColor: T.line,
+    alignItems: 'center', justifyContent: 'center',
   },
   headerMid:   { flex: 1 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: T.ink },
-  headerSub:   { fontSize: 12, color: T.mid, marginTop: 1 },
-  statusPill:  { paddingHorizontal: 10, paddingVertical: 4, borderRadius: R.pill },
-  statusText:  { fontSize: 12, fontWeight: '600' },
+  headerTitle: { fontSize: 15, fontWeight: '800', color: T.indigo },
+  headerSub:   { fontSize: 11, color: T.mid, marginTop: 1 },
+  statusPill:  { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  statusText:  { fontSize: 10, fontWeight: '700' },
 
   // Hero start button
   heroSection: { padding: 16 },
   startBtn:    {
     backgroundColor: T.marigold,
-    borderRadius: R.md,
-    padding: 20,
+    borderRadius: 22,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -245,24 +247,23 @@ const S = StyleSheet.create({
     elevation: 6,
   },
   startLeft:   { gap: 4 },
-  startTitle:  { fontSize: 20, fontWeight: '800', color: T.indigoDeep },
-  startSub:    { fontSize: 13, color: 'rgba(44,57,80,0.72)' },
+  startTitle:  { fontSize: 16, fontWeight: '800', color: T.indigoDeep },
+  startSub:    { fontSize: 12, color: 'rgba(44,57,80,0.72)' },
   startArrow:  { fontSize: 32, color: T.indigoDeep, lineHeight: 36 },
 
   // Stats
-  statsRow:  { flexDirection: 'row', gap: 10, paddingHorizontal: 16, marginTop: 8, marginBottom: 20 },
+  statsRow:  { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginTop: 16, marginBottom: 20 },
   statTile:  {
-    flex: 1, backgroundColor: T.surface, borderRadius: R.lg,
-    paddingVertical: 18, paddingHorizontal: 8, alignItems: 'center',
-    shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
+    flex: 1, backgroundColor: T.surface, borderRadius: 18,
+    paddingVertical: 12, paddingHorizontal: 12, alignItems: 'center',
+    borderWidth: 1, borderColor: T.line,
   },
-  statNum:   { fontSize: 22, fontWeight: '800', color: T.ink },
-  statLabel: { fontSize: 12, color: T.mid, marginTop: 4 },
+  statNum:   { fontSize: 18, fontWeight: '800', color: T.indigo },
+  statLabel: { fontSize: 11, color: T.mid, marginTop: 4 },
 
   // Sections
   section:      { paddingHorizontal: 16, paddingBottom: 8 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginTop: 8 },
+  sectionTitle: { fontSize: 11, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginTop: 24 },
 
   // Rows
   row: {
@@ -270,20 +271,17 @@ const S = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: T.surface,
     borderRadius: R.md,
-    padding: 14,
+    padding: 12,
     marginBottom: 8,
     gap: 12,
-    shadowColor: '#2C3950',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: T.line,
   },
   rowBadge:    { backgroundColor: T.indigoSoft, borderRadius: R.sm, paddingHorizontal: 10, paddingVertical: 6, minWidth: 48, alignItems: 'center' },
-  rowBadgeText:{ fontSize: 11, color: T.indigo, fontWeight: '700' },
+  rowBadgeText:{ fontSize: 10, color: T.indigo, fontWeight: '700' },
   rowInfo:     { flex: 1 },
-  rowTitle:    { fontSize: 14, fontWeight: '600', color: T.ink, marginBottom: 2 },
-  rowMeta:     { fontSize: 12, color: T.mid },
+  rowTitle:    { fontSize: 13, fontWeight: '700', color: T.ink, marginBottom: 2 },
+  rowMeta:     { fontSize: 11, color: T.mid },
   rowArrow:    { fontSize: 22, color: T.mid },
 
   // Empty
