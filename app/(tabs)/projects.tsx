@@ -167,9 +167,9 @@ export default function ProjectsScreen() {
         {/* Divider + stats */}
         <View style={S.cardDivider} />
         <View style={S.cardStatsRow}>
-          <Text style={S.cardStat}><Text style={S.cardStatNum}>{stats.reports}</Text> Reports</Text>
-          <Text style={S.cardStat}><Text style={S.cardStatNum}>{stats.photos}</Text> Photos</Text>
-          <Text style={S.cardStat}><Text style={S.cardStatNum}>{stats.drawings}</Text> Drawings</Text>
+          <Text style={S.cardStat}><Text style={S.cardStatNum}>{stats.reports}</Text>{'  '}Reports</Text>
+          <Text style={S.cardStat}><Text style={S.cardStatNum}>{stats.photos}</Text>{'  '}Photos</Text>
+          <Text style={S.cardStat}><Text style={S.cardStatNum}>{stats.drawings}</Text>{'  '}Drawings</Text>
         </View>
       </TouchableOpacity>
     )
