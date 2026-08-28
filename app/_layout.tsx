@@ -7,7 +7,8 @@ export default function RootLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="project/[id]" />
       <Stack.Screen name="drawing/[id]" />
-      <Stack.Screen name="drawings" />
+      <Stack.Screen name="drawings" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="reports" options={{ presentation: 'modal' }} />
       <Stack.Screen name="camera" />
       <Stack.Screen name="recorder" />
       <Stack.Screen name="observation" />

@@ -10,28 +10,29 @@ import { theme } from '../lib/theme';
 const T = theme.colors;
 const R = theme.radius;
 
-type Drawing = {
-  id: string; title: string; number: string; revision: string;
-  file_url: string; preview_url: string | null; created_at: string;
+type Inspection = {
+  id: string; date: string; report_no: string; weather: string;
+  site_contact: string; status: string; created_at: string;
 };
 
-export default function DrawingsListScreen() {
+export default function ReportsListScreen() {
   const { project_id, project_name } = useLocalSearchParams();
-  const [drawings, setDrawings] = useState<Drawing[]>([]);
-  const [loading, setLoading]   = useState(true);
+  const [inspections, setInspections] = useState<Inspection[]>([]);
+  const [loading, setLoading]         = useState(true);
 
-  const fetchDrawings = async () => {
+  const fetchInspections = async () => {
     setLoading(true);
     const { data } = await supabase
-      .from('drawings')
+      .from('inspections')
       .select('*')
       .eq('project_id', project_id)
+      .eq('status', 'COMPLETED')
       .order('created_at', { ascending: false });
-    setDrawings((data as Drawing[]) ?? []);
+    setInspections((data as Inspection[]) ?? []);
     setLoading(false);
   };
 
-  useFocusEffect(useCallback(() => { fetchDrawings(); }, [project_id]));
+  useFocusEffect(useCallback(() => { fetchInspections(); }, [project_id]));
 
   return (
     <View style={S.container}>
@@ -40,7 +41,7 @@ export default function DrawingsListScreen() {
           <Ionicons name="close" size={22} color={T.indigo} />
         </TouchableOpacity>
         <View style={S.headerMid}>
-          <Text style={S.headerTitle} numberOfLines={1}>Drawings</Text>
+          <Text style={S.headerTitle} numberOfLines={1}>Site Reports</Text>
           {!!project_name && <Text style={S.headerSub} numberOfLines={1}>{project_name}</Text>}
         </View>
         <View style={{ width: 36 }} />
@@ -50,20 +51,19 @@ export default function DrawingsListScreen() {
         <View style={S.centred}><ActivityIndicator size="large" color={T.indigo} /></View>
       ) : (
         <ScrollView style={S.scroll} contentContainerStyle={S.list} showsVerticalScrollIndicator={false}>
-          {drawings.length === 0 ? (
+          {inspections.length === 0 ? (
             <View style={S.emptyCard}>
-              <Text style={S.emptyText}>No drawings — admin uploads via web portal</Text>
+              <Text style={S.emptyText}>No reports yet</Text>
             </View>
-          ) : drawings.map(d => (
-            <TouchableOpacity key={d.id} style={S.row}
-              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, file_url: d.file_url, preview_url: d.preview_url ?? '', project_id: String(project_id), view_only: 'true' } })}
-              activeOpacity={0.7}>
+          ) : inspections.map(ins => (
+            <TouchableOpacity key={ins.id} style={S.row} activeOpacity={0.7}
+              onPress={() => router.push({ pathname: '/report/[id]', params: { id: ins.id, project_name: String(project_name ?? '') } })}>
               <View style={S.rowBadge}>
-                <Text style={S.rowBadgeText}>{d.number || '-'}</Text>
+                <Text style={S.rowBadgeText}>#{ins.report_no}</Text>
               </View>
               <View style={S.rowInfo}>
-                <Text style={S.rowTitle} numberOfLines={1}>{d.title}</Text>
-                <Text style={S.rowMeta}>Rev {d.revision}</Text>
+                <Text style={S.rowTitle} numberOfLines={1}>{ins.date}</Text>
+                <Text style={S.rowMeta}>{ins.site_contact || 'No contact'} · {ins.weather}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={T.mid} />
             </TouchableOpacity>

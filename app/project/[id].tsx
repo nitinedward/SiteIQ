@@ -165,20 +165,20 @@ export default function ProjectDetailScreen() {
             <View style={S.emptyCard}>
               <Text style={S.emptyText}>No drawings — admin uploads via web portal</Text>
             </View>
-          ) : drawings.map(d => (
-            <TouchableOpacity key={d.id} style={S.row}
-              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, file_url: d.file_url, preview_url: d.preview_url ?? '', project_id: project.id, view_only: 'true' } })}
+          ) : (
+            <TouchableOpacity style={S.row}
+              onPress={() => router.push({ pathname: '/drawings', params: { project_id: project.id, project_name: project.name } })}
               activeOpacity={0.7}>
               <View style={S.rowBadge}>
-                <Text style={S.rowBadgeText}>{d.number || '-'}</Text>
+                <Text style={S.rowBadgeText}>{drawings.length}</Text>
               </View>
               <View style={S.rowInfo}>
-                <Text style={S.rowTitle} numberOfLines={1}>{d.title}</Text>
-                <Text style={S.rowMeta}>Rev {d.revision}</Text>
+                <Text style={S.rowTitle}>{drawings.length === 1 ? '1 Drawing' : `${drawings.length} Drawings`}</Text>
+                <Text style={S.rowMeta}>Tap to view all</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={T.mid} />
             </TouchableOpacity>
-          ))}
+          )}
         </View>
 
         {/* PAST REPORTS */}
@@ -188,19 +188,20 @@ export default function ProjectDetailScreen() {
             <View style={S.emptyCard}>
               <Text style={S.emptyText}>No reports yet — start an inspection above</Text>
             </View>
-          ) : inspections.map(ins => (
-            <TouchableOpacity key={ins.id} style={S.row} activeOpacity={0.7}
-              onPress={() => router.push({ pathname: '/report/[id]', params: { id: ins.id, project_name: project.name } })}>
+          ) : (
+            <TouchableOpacity style={S.row}
+              onPress={() => router.push({ pathname: '/reports', params: { project_id: project.id, project_name: project.name } })}
+              activeOpacity={0.7}>
               <View style={S.rowBadge}>
-                <Text style={S.rowBadgeText}>#{ins.report_no}</Text>
+                <Text style={S.rowBadgeText}>{inspections.length}</Text>
               </View>
               <View style={S.rowInfo}>
-                <Text style={S.rowTitle} numberOfLines={1}>{ins.date}</Text>
-                <Text style={S.rowMeta}>{ins.site_contact || 'No contact'} · {ins.weather}</Text>
+                <Text style={S.rowTitle}>{inspections.length === 1 ? '1 Report' : `${inspections.length} Reports`}</Text>
+                <Text style={S.rowMeta}>Tap to view all</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={T.mid} />
             </TouchableOpacity>
-          ))}
+          )}
         </View>
 
         <View style={{ height: 48 }} />
