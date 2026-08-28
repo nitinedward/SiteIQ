@@ -428,7 +428,7 @@ export default function DrawingViewerScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>
               {zones.map(zone => (
                 <TouchableOpacity key={zone.id} style={[S.chip, zone.markup_type === 'freehand' && S.chipFree]} onPress={() => handleTapZone(zone)} activeOpacity={0.75}>
-                  <Ionicons name={zoneIcon(zone.markup_type)} size={16} color={zone.markup_type === 'freehand' ? '#F59E0B' : T.indigo} />
+                  <Ionicons name={zoneIcon(zone.markup_type)} size={19} color={zone.markup_type === 'freehand' ? '#F59E0B' : T.indigo} />
                   <Text style={S.chipText}>{zone.label}</Text>
                 </TouchableOpacity>
               ))}
@@ -523,11 +523,11 @@ const S = StyleSheet.create({
   labelBubble:   { backgroundColor: T.indigo, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, alignSelf: 'center', marginBottom: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 6 },
   labelText:     { fontSize: 10, color: '#FFFFFF', fontWeight: '700' },
   labelFree:     { backgroundColor: '#F59E0B' },
-  strip:         { backgroundColor: T.line, maxHeight: 76 },
-  stripContent:  { paddingHorizontal: 16, gap: 10, alignItems: 'center', paddingVertical: 16 },
-  chip:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.indigoSoft, borderRadius: 24, paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, borderColor: T.indigo },
+  strip:         { backgroundColor: T.line, maxHeight: 84 },
+  stripContent:  { paddingLeft: 28, paddingRight: 16, gap: 12, alignItems: 'center', paddingVertical: 16 },
+  chip:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.indigoSoft, borderRadius: 26, paddingHorizontal: 20, paddingVertical: 15, borderWidth: 1, borderColor: T.indigo },
   chipFree:      { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
-  chipText:      { fontSize: 14, color: T.indigo, fontWeight: '600' },
+  chipText:      { fontSize: 16, color: T.indigo, fontWeight: '600' },
   scroll:        { flex: 1, backgroundColor: T.paper },
   section:       { padding: 20, paddingBottom: 8 },
   sectionTitle:  { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
