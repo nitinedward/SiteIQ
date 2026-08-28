@@ -30,7 +30,7 @@ function zoneIcon(markupType?: MarkupType): keyof typeof Ionicons.glyphMap {
 function ToolBtn({ icon, label, active, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; active: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity style={[S.toolBtn, active && S.toolBtnOn]} onPress={onPress} activeOpacity={0.75}>
-      <Ionicons name={icon} size={22} color={active ? T.indigo : T.mid} />
+      <Ionicons name={icon} size={24} color={active ? T.indigo : T.mid} />
       <Text style={[S.toolLabel, active && S.toolLabelOn]}>{label}</Text>
     </TouchableOpacity>
   );
@@ -509,9 +509,9 @@ const S = StyleSheet.create({
   toggleText:    { fontSize: 12, color: T.indigo, fontWeight: '700' },
   pdfScreen:     { flex: 1 },
   toolbar:       { flexDirection: 'row', backgroundColor: T.line, paddingVertical: 12, paddingHorizontal: 28, gap: 14, zIndex: 10 },
-  toolBtn:       { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, paddingHorizontal: 4, borderRadius: 14, backgroundColor: T.surface, borderWidth: 1, borderColor: T.line, gap: 4 },
+  toolBtn:       { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 3, borderRadius: 13, backgroundColor: T.surface, borderWidth: 1, borderColor: T.line, gap: 3 },
   toolBtnOn:     { backgroundColor: T.indigoSoft, borderColor: T.indigo },
-  toolLabel:     { fontSize: 13, color: T.mid, fontWeight: '700' },
+  toolLabel:     { fontSize: 14, color: T.mid, fontWeight: '700' },
   toolLabelOn:   { color: T.indigo },
   hintBar:       { backgroundColor: T.paper, paddingVertical: 7, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
   hintText:      { fontSize: 12, color: T.mid, textAlign: 'center' },
