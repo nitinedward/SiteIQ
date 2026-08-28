@@ -525,7 +525,7 @@ const S = StyleSheet.create({
   labelFree:     { backgroundColor: '#F59E0B' },
   strip:         { backgroundColor: T.line, maxHeight: 72 },
   stripContent:  { paddingLeft: 28, paddingRight: 16, gap: 12, alignItems: 'center', paddingTop: 6, paddingBottom: 14 },
-  chip:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.indigoSoft, borderRadius: 26, paddingHorizontal: 20, paddingVertical: 15, borderWidth: 1, borderColor: T.indigo },
+  chip:          { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: T.indigoSoft, borderRadius: 22, paddingHorizontal: 15, paddingVertical: 11, borderWidth: 1, borderColor: T.indigo },
   chipFree:      { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
   chipText:      { fontSize: 16, color: T.indigo, fontWeight: '600' },
   scroll:        { flex: 1, backgroundColor: T.paper },
