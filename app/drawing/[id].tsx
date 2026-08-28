@@ -384,7 +384,7 @@ export default function DrawingViewerScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color={T.indigo} />
+          <Ionicons name="arrow-back" size={18} color={T.indigo} />
         </TouchableOpacity>
         <View style={S.headerMid}>
           <Text style={S.headerTitle} numberOfLines={1}>{viewOnly ? 'View Drawing' : 'Mark up drawing'}</Text>
@@ -491,14 +491,15 @@ export default function DrawingViewerScreen() {
 
 const S = StyleSheet.create({
   container:     { flex: 1, backgroundColor: T.paper },
-  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: T.surface, zIndex: 10 },
+  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, gap: 12, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: T.surface, zIndex: 10 },
   backBtn:       {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center',
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: T.surface, borderWidth: 1, borderColor: T.line,
+    alignItems: 'center', justifyContent: 'center',
   },
   headerMid:     { flex: 1 },
-  headerTitle:   { fontSize: 17, fontWeight: '800', color: T.ink },
-  headerSub:     { fontSize: 12, color: T.mid, marginTop: 1 },
+  headerTitle:   { fontSize: 15, fontWeight: '800', color: T.indigo },
+  headerSub:     { fontSize: 11, color: T.mid, marginTop: 1 },
   toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   toggleText:    { fontSize: 10, color: T.indigo, fontWeight: '700' },
   pdfScreen:     { flex: 1 },
