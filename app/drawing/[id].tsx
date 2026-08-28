@@ -389,7 +389,7 @@ export default function DrawingViewerScreen() {
           else if (returnToCanvas) { setReturnToCanvas(false); setShowPdf(true); }
           else { router.back(); }
         }}>
-          <Ionicons name="arrow-back" size={20} color={T.indigo} />
+          <Ionicons name="arrow-back" size={22} color={T.indigo} />
         </TouchableOpacity>
         <View style={S.headerMid}>
           <Text style={S.headerTitle} numberOfLines={1}>{viewOnly ? 'View Drawing' : 'PDF Mark-up'}</Text>
@@ -498,15 +498,15 @@ const S = StyleSheet.create({
   container:     { flex: 1, backgroundColor: T.paper },
   header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 22, paddingRight: 22, paddingTop: 60, paddingBottom: 12, gap: 12, backgroundColor: T.line, zIndex: 10 },
   backBtn:       {
-    width: 46, height: 46, borderRadius: 23,
+    width: 50, height: 50, borderRadius: 25,
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.line,
     alignItems: 'center', justifyContent: 'center',
   },
   headerMid:     { flex: 1 },
   headerTitle:   { fontSize: 21, fontWeight: '800', color: T.indigo },
   headerSub:     { fontSize: 11, color: T.mid, marginTop: 1 },
-  toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 13, paddingVertical: 7, borderRadius: 20 },
-  toggleText:    { fontSize: 12, color: T.indigo, fontWeight: '700' },
+  toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20 },
+  toggleText:    { fontSize: 13, color: T.indigo, fontWeight: '700' },
   pdfScreen:     { flex: 1 },
   toolbar:       { flexDirection: 'row', backgroundColor: T.line, paddingVertical: 12, paddingHorizontal: 40, gap: 22, zIndex: 10 },
   toolBtn:       { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 3, borderRadius: 20, backgroundColor: T.surface, borderWidth: 1, borderColor: T.line, gap: 4 },
