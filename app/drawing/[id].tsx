@@ -30,7 +30,7 @@ function zoneIcon(markupType?: MarkupType): keyof typeof Ionicons.glyphMap {
 function ToolBtn({ icon, label, active, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; active: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity style={[S.toolBtn, active && S.toolBtnOn]} onPress={onPress} activeOpacity={0.75}>
-      <Ionicons name={icon} size={22} color={active ? T.indigo : T.mid} />
+      <Ionicons name={icon} size={16} color={active ? T.indigo : T.mid} />
       <Text style={[S.toolLabel, active && S.toolLabelOn]}>{label}</Text>
     </TouchableOpacity>
   );
@@ -341,8 +341,8 @@ export default function DrawingViewerScreen() {
         if (!zone.markup_type || zone.markup_type === 'pin') {
           return (
             <G key={zone.id}>
-              <Ellipse cx={sc.x} cy={sc.y + 2} rx={6} ry={2} fill="rgba(0,0,0,0.14)" />
-              <Circle cx={sc.x} cy={sc.y} r={10} fill="#FFFFFF" stroke={T.indigoDeep} strokeWidth={2.5} />
+              <Ellipse cx={sc.x} cy={sc.y + 2} rx={7} ry={2} fill="rgba(0,0,0,0.14)" />
+              <Circle cx={sc.x} cy={sc.y} r={12} fill="#FFFFFF" stroke={T.indigo} strokeWidth={3} />
               <Circle cx={sc.x} cy={sc.y} r={4}  fill={T.marigold} />
             </G>
           );
@@ -372,11 +372,10 @@ export default function DrawingViewerScreen() {
     const isFree = zone.markup_type === 'freehand';
     const isPin  = !zone.markup_type || zone.markup_type === 'pin';
     return (
-      <TouchableOpacity key={zone.id} style={{ position: 'absolute', left: sc.x - 80, top: sc.y - 46, zIndex: 10, width: 160, alignItems: 'center' }} onPress={() => handleTapZone(zone)} disabled={tool === 'rectangle' || tool === 'freehand'}>
+      <TouchableOpacity key={zone.id} style={{ position: 'absolute', left: sc.x - 80, top: sc.y - (isPin ? 37 : 46), zIndex: 10, width: 160, alignItems: 'center' }} onPress={() => handleTapZone(zone)} disabled={tool === 'rectangle' || tool === 'freehand'}>
         <View style={[S.labelBubble, isFree && S.labelFree]}>
           <Text style={S.labelText} numberOfLines={1}>{zone.label}</Text>
         </View>
-        {isPin && <View style={S.labelStem} />}
       </TouchableOpacity>
     );
   });
@@ -500,14 +499,14 @@ const S = StyleSheet.create({
   headerMid:     { flex: 1 },
   headerTitle:   { fontSize: 17, fontWeight: '800', color: T.ink },
   headerSub:     { fontSize: 12, color: T.mid, marginTop: 1 },
-  toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 16, paddingVertical: 11, borderRadius: R.pill },
-  toggleText:    { fontSize: 13, color: T.indigoDeep, fontWeight: '700' },
+  toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  toggleText:    { fontSize: 10, color: T.indigo, fontWeight: '700' },
   pdfScreen:     { flex: 1 },
-  toolbar:       { flexDirection: 'row', backgroundColor: T.surface, paddingVertical: 14, paddingHorizontal: 14, gap: 10, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
-  toolBtn:       { flex: 1, alignItems: 'center', paddingVertical: 16, borderRadius: 16, backgroundColor: T.surface, borderWidth: 1.5, borderColor: T.line, gap: 6 },
+  toolbar:       { flexDirection: 'row', backgroundColor: T.surface, paddingVertical: 12, paddingHorizontal: 16, gap: 8, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
+  toolBtn:       { flex: 1, alignItems: 'center', paddingVertical: 10, paddingHorizontal: 8, borderRadius: 16, backgroundColor: T.surface, borderWidth: 1, borderColor: T.line, gap: 4 },
   toolBtnOn:     { backgroundColor: T.indigoSoft, borderColor: T.indigo },
-  toolLabel:     { fontSize: 13, color: T.mid, fontWeight: '600' },
-  toolLabelOn:   { color: T.indigoDeep },
+  toolLabel:     { fontSize: 11, color: T.mid, fontWeight: '700' },
+  toolLabelOn:   { color: T.indigo },
   hintBar:       { backgroundColor: T.paper, paddingVertical: 7, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
   hintText:      { fontSize: 12, color: T.mid, textAlign: 'center' },
   pdfWrap:       { flex: 1, overflow: 'hidden', backgroundColor: T.indigoSoft },
@@ -515,10 +514,9 @@ const S = StyleSheet.create({
   loadingTxt:    { color: T.mid, fontSize: 14 },
   errTxt:        { color: T.clay, fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
   retryTxt:      { color: T.indigo, fontSize: 14, fontWeight: '500' },
-  labelBubble:   { backgroundColor: T.indigoDeep, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, alignSelf: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 6 },
-  labelText:     { fontSize: 12, color: '#FFFFFF', fontWeight: '700' },
+  labelBubble:   { backgroundColor: T.indigo, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, alignSelf: 'center', marginBottom: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 6 },
+  labelText:     { fontSize: 10, color: '#FFFFFF', fontWeight: '700' },
   labelFree:     { backgroundColor: '#F59E0B' },
-  labelStem:     { width: 1.5, height: 8, backgroundColor: T.indigoDeep },
   strip:         { backgroundColor: T.surface, borderTopWidth: 1, borderTopColor: T.line, maxHeight: 76 },
   stripContent:  { paddingHorizontal: 16, gap: 10, alignItems: 'center', paddingVertical: 16 },
   chip:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.indigoSoft, borderRadius: 24, paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, borderColor: T.indigo },
