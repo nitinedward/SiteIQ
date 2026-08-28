@@ -63,6 +63,7 @@ export default function DrawingViewerScreen() {
   const pdfDims  = useRef({ pdfWidth: 1, pdfHeight: 1 });
   const naturalH = useRef(SH);
   const [pdfH, setPdfH] = useState(SH);
+  const [pdfW, setPdfW] = useState(SW);
   const pageLeft = useRef(0);
   const pageTop  = useRef(0);
   const scale    = useRef(1);
@@ -73,7 +74,8 @@ export default function DrawingViewerScreen() {
   const applyTransform = (left: number, top: number, s: number) => {
     pageLeft.current = left; pageTop.current = top; scale.current = s;
     const h = naturalH.current;
-    animTx.setValue(left + (SW * (s - 1)) / 2);
+    const w = pdfWrapW.current;
+    animTx.setValue(left + (w * (s - 1)) / 2);
     animTy.setValue(top  + (h  * (s - 1)) / 2);
     animScale.setValue(s);
   };
@@ -82,6 +84,7 @@ export default function DrawingViewerScreen() {
   const wrapTop    = useRef(0);
   const wrapLeft   = useRef(0);
   const pdfWrapH   = useRef(SH - 220); // available height for the drawing (updated by onLayout)
+  const pdfWrapW   = useRef(SW); // available width for the drawing card (updated by onLayout)
   const measureWrap = () => { pdfWrapRef.current?.measure((_x, _y, _w, _h, px, py) => { wrapLeft.current = px; wrapTop.current = py; }); };
 
   const touchToPage = (absX: number, absY: number): Pt => ({
@@ -90,12 +93,12 @@ export default function DrawingViewerScreen() {
   });
   const touchToPdf = (absX: number, absY: number): Pt => {
     const p = touchToPage(absX, absY);
-    return { x: (p.x / SW) * pdfDims.current.pdfWidth, y: (p.y / naturalH.current) * pdfDims.current.pdfHeight };
+    return { x: (p.x / pdfWrapW.current) * pdfDims.current.pdfWidth, y: (p.y / naturalH.current) * pdfDims.current.pdfHeight };
   };
-  const pctToPage = (xPct: number, yPct: number): Pt => ({ x: (xPct / 100) * SW, y: (yPct / 100) * naturalH.current });
+  const pctToPage = (xPct: number, yPct: number): Pt => ({ x: (xPct / 100) * pdfWrapW.current, y: (yPct / 100) * naturalH.current });
   const pdfRectToPage = (r: PdfRect): PdfRect => {
-    const { pdfWidth, pdfHeight } = pdfDims.current; const h = naturalH.current;
-    return { x: (r.x / pdfWidth) * SW, y: (r.y / pdfHeight) * h, width: (r.width / pdfWidth) * SW, height: (r.height / pdfHeight) * h };
+    const { pdfWidth, pdfHeight } = pdfDims.current; const h = naturalH.current; const w = pdfWrapW.current;
+    return { x: (r.x / pdfWidth) * w, y: (r.y / pdfHeight) * h, width: (r.width / pdfWidth) * w, height: (r.height / pdfHeight) * h };
   };
 
   const lastDist   = useRef(0);
@@ -117,8 +120,10 @@ export default function DrawingViewerScreen() {
     Image.getSize(
       previewUrl,
       (imgW, imgH) => {
+        const w = pdfWrapW.current > 50 ? pdfWrapW.current : SW;
+        setPdfW(w);
         // Full-width display height (maintains aspect ratio)
-        const fullH = SW * (imgH / imgW);
+        const fullH = w * (imgH / imgW);
         naturalH.current = fullH;
         pdfDims.current  = { pdfWidth: imgW, pdfHeight: imgH };
         setPdfH(fullH);
@@ -128,7 +133,7 @@ export default function DrawingViewerScreen() {
           // Portrait drawing taller than container (e.g. A3 portrait on a small
           // phone): scale down uniformly and centre horizontally.
           const s = containerH / fullH;
-          const offsetX = (SW * (1 - s)) / 2;
+          const offsetX = (w * (1 - s)) / 2;
           applyTransform(offsetX, 0, s);
         } else {
           // Drawing fits (landscape or short portrait). Centre it vertically so
@@ -213,7 +218,7 @@ export default function DrawingViewerScreen() {
       if (t === 'rectangle' || t === 'freehand') {
         const pdfPt  = touchToPdf(pageX, pageY);
         const pagePt = touchToPage(pageX, pageY);
-        const startPage = { x: (drawStart.current.x / pdfDims.current.pdfWidth) * SW, y: (drawStart.current.y / pdfDims.current.pdfHeight) * naturalH.current };
+        const startPage = { x: (drawStart.current.x / pdfDims.current.pdfWidth) * pdfWrapW.current, y: (drawStart.current.y / pdfDims.current.pdfHeight) * naturalH.current };
         const moveDist = Math.sqrt(Math.pow(pagePt.x - startPage.x, 2) + Math.pow(pagePt.y - startPage.y, 2));
         if (!isDrawing.current && moveDist < 20) return;
         isDrawing.current = true;
@@ -239,7 +244,7 @@ export default function DrawingViewerScreen() {
         const tapLy = (ly - pageTop.current)  / scale.current;
         if (dt < 500) {
           const hitZone = zonesRef.current?.find(zone => {
-            const sc = { x: (zone.x_percent / 100) * SW, y: (zone.y_percent / 100) * naturalH.current };
+            const sc = { x: (zone.x_percent / 100) * pdfWrapW.current, y: (zone.y_percent / 100) * naturalH.current };
             if (!zone.markup_type || zone.markup_type === 'pin') {
               return Math.sqrt(Math.pow(tapLx - sc.x, 2) + Math.pow(tapLy - sc.y, 2)) < 28;
             }
@@ -335,7 +340,7 @@ export default function DrawingViewerScreen() {
   };
 
   const renderSvg = (h: number) => (
-    <Svg width={SW} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
+    <Svg width={pdfW} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
       {zones.map(zone => {
         const sc = pctToPage(zone.x_percent, zone.y_percent);
         if (!zone.markup_type || zone.markup_type === 'pin') {
@@ -356,7 +361,7 @@ export default function DrawingViewerScreen() {
         if (zone.markup_type === 'freehand' && zone.shape_data) {
           try {
             const pts: Pt[] = JSON.parse(zone.shape_data);
-            const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${(p.x / pdfDims.current.pdfWidth) * SW} ${(p.y / pdfDims.current.pdfHeight) * h}`).join(' ');
+            const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${(p.x / pdfDims.current.pdfWidth) * pdfW} ${(p.y / pdfDims.current.pdfHeight) * h}`).join(' ');
             return <Path key={zone.id} d={d} stroke="#F59E0B" strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
           } catch { return null; }
         }
@@ -405,12 +410,12 @@ export default function DrawingViewerScreen() {
               <ToolBtn icon="pencil-outline"   label="Draw" active={tool==='freehand'}  onPress={() => updateTool('freehand')} />
             </View>
           )}
-          <View ref={pdfWrapRef} style={S.pdfWrap} onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h > 0) pdfWrapH.current = h; measureWrap(); setTimeout(measureWrap, 50); }} {...panResponder.panHandlers}>
-            <Animated.View style={{ position: 'absolute', top: 0, left: 0, width: SW, height: pdfH, transform: [{ translateX: animTx }, { translateY: animTy }, { scale: animScale }] }}>
+          <View ref={pdfWrapRef} style={S.pdfWrap} onLayout={(e) => { const { height: h, width: w } = e.nativeEvent.layout; if (h > 0) pdfWrapH.current = h; if (w > 0) pdfWrapW.current = w; measureWrap(); setTimeout(measureWrap, 50); }} {...panResponder.panHandlers}>
+            <Animated.View style={{ position: 'absolute', top: 0, left: 0, width: pdfW, height: pdfH, transform: [{ translateX: animTx }, { translateY: animTy }, { scale: animScale }] }}>
               {!isLoading && !pdfError && previewUrl && (
                 <Image
                   source={{ uri: previewUrl }}
-                  style={{ width: SW, height: pdfH, backgroundColor: '#F1F5F9' }}
+                  style={{ width: pdfW, height: pdfH, backgroundColor: '#FFFFFF' }}
                   resizeMode="contain"
                 />
               )}
@@ -502,7 +507,7 @@ const S = StyleSheet.create({
   headerSub:     { fontSize: 12, color: T.mid, marginTop: 1 },
   toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 16, paddingVertical: 11, borderRadius: R.pill },
   toggleText:    { fontSize: 13, color: T.indigoDeep, fontWeight: '700' },
-  pdfScreen:     { flex: 1 },
+  pdfScreen:     { flex: 1, backgroundColor: '#E7EAF3' },
   toolbar:       { flexDirection: 'row', backgroundColor: T.surface, paddingVertical: 14, paddingHorizontal: 14, gap: 10, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
   toolBtn:       { flex: 1, alignItems: 'center', paddingVertical: 16, borderRadius: 16, backgroundColor: T.surface, borderWidth: 1.5, borderColor: T.line, gap: 6 },
   toolBtnOn:     { backgroundColor: T.indigoSoft, borderColor: T.indigo },
@@ -510,7 +515,11 @@ const S = StyleSheet.create({
   toolLabelOn:   { color: T.indigoDeep },
   hintBar:       { backgroundColor: T.paper, paddingVertical: 7, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
   hintText:      { fontSize: 12, color: T.mid, textAlign: 'center' },
-  pdfWrap:       { flex: 1, overflow: 'hidden', backgroundColor: '#E3E7F1' },
+  pdfWrap:       {
+    flex: 1, overflow: 'hidden', backgroundColor: T.surface,
+    marginHorizontal: 16, marginTop: 16, marginBottom: 16, borderRadius: R.lg,
+    ...theme.shadow.card,
+  },
   overlay:       { ...StyleSheet.absoluteFillObject, backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingTxt:    { color: T.mid, fontSize: 14 },
   errTxt:        { color: T.clay, fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
