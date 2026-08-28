@@ -21,6 +21,12 @@ type Zone = { id: string; label: string; x_percent: number; y_percent: number; m
 type Pt = { x: number; y: number };
 type PdfRect = { x: number; y: number; width: number; height: number };
 
+function zoneIcon(markupType?: MarkupType): keyof typeof Ionicons.glyphMap {
+  if (markupType === 'rectangle') return 'square';
+  if (markupType === 'freehand') return 'pencil';
+  return 'location';
+}
+
 function ToolBtn({ icon, label, active, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; active: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity style={[S.toolBtn, active && S.toolBtnOn]} onPress={onPress} activeOpacity={0.75}>
@@ -53,7 +59,6 @@ export default function DrawingViewerScreen() {
   const [pendingZone, setPendingZone] = useState<Partial<Zone> | null>(null);
   const [liveRect, setLiveRect]   = useState<PdfRect | null>(null);
   const [livePath, setLivePath]   = useState<Pt[]>([]);
-  const [justPlacedZone, setJustPlacedZone] = useState<{ id: string; label: string } | null>(null);
 
   const pdfDims  = useRef({ pdfWidth: 1, pdfHeight: 1 });
   const naturalH = useRef(SH);
@@ -145,7 +150,6 @@ export default function DrawingViewerScreen() {
     toolRef.current = t; setTool(t);
     setLiveRect(null); setLivePath([]);
     isDrawing.current = false; tapStart.current = null; hasMoved.current = false;
-    setJustPlacedZone(null);
   };
 
   const fetchZones = async () => {
@@ -165,7 +169,6 @@ export default function DrawingViewerScreen() {
       const ly = pageY - wrapTop.current;
       tapStart.current = { x: lx, y: ly, t: Date.now() };
       hasMoved.current = false;
-      setJustPlacedZone(null);
       if (touches.length >= 2) {
         isPinching.current = true; tapStart.current = null;
         const dx = touches[1].pageX - touches[0].pageX;
@@ -300,21 +303,18 @@ export default function DrawingViewerScreen() {
   const handleSave = async () => {
     if (!newLabel.trim()) { Alert.alert('Missing Label', 'Enter a zone name.'); return; }
     if (!pendingZone) return;
-    const label = newLabel.trim();
-    const markupType = pendingZone.markup_type ?? 'pin';
-    const { data, error } = await supabase.from('zones').insert({
+    const { error } = await supabase.from('zones').insert({
       drawing_id: drawingId, project_id: projectId,
       inspection_id: inspectionId || null,
-      label,
+      label: newLabel.trim(),
       x_percent: pendingZone.x_percent ?? 0,
       y_percent: pendingZone.y_percent ?? 0,
-      markup_type: markupType,
+      markup_type: pendingZone.markup_type ?? 'pin',
       shape_data: pendingZone.shape_data ?? null,
-    }).select().single();
-    if (error || !data) { Alert.alert('Error', 'Could not save zone.'); return; }
+    });
+    if (error) { Alert.alert('Error', 'Could not save zone.'); return; }
     setNewLabel(''); setShowModal(false); setPendingZone(null); setLiveRect(null); setLivePath([]);
     fetchZones();
-    setJustPlacedZone(!viewOnly && inspectionId && markupType === 'pin' ? { id: data.id, label } : null);
   };
 
   const handleTapZone = async (zone: Zone) => {
@@ -391,7 +391,7 @@ export default function DrawingViewerScreen() {
           <Text style={S.headerTitle} numberOfLines={1}>{viewOnly ? 'View Drawing' : 'Mark up drawing'}</Text>
           <Text style={S.headerSub} numberOfLines={1}>{title}</Text>
         </View>
-        <TouchableOpacity style={S.toggleBtn} onPress={() => { setIsLoading(true); setPdfError(''); setShowPdf(v => !v); setJustPlacedZone(null); }}>
+        <TouchableOpacity style={S.toggleBtn} onPress={() => { setIsLoading(true); setPdfError(''); setShowPdf(v => !v); }}>
           <Text style={S.toggleText}>{showPdf ? 'Zones' : 'Drawing'}</Text>
         </TouchableOpacity>
       </View>
@@ -420,21 +420,11 @@ export default function DrawingViewerScreen() {
             {isLoading && <View style={S.overlay}><ActivityIndicator size="large" color={T.indigo} /><Text style={S.loadingTxt}>Loading drawing...</Text></View>}
             {!!pdfError && <View style={S.overlay}><Text style={S.errTxt}>{pdfError}</Text><TouchableOpacity onPress={loadPreviewDimensions}><Text style={S.retryTxt}>Tap to retry</Text></TouchableOpacity></View>}
           </View>
-          {justPlacedZone && (
-            <TouchableOpacity style={S.addObsBar} activeOpacity={0.85} onPress={() => {
-              const z = justPlacedZone;
-              setJustPlacedZone(null);
-              router.push({ pathname: '/observation', params: { zone_id: z.id, zone_label: z.label, project_id: projectId, inspection_id: inspectionId } });
-            }}>
-              <Text style={S.addObsBarText}>Add observation here</Text>
-              <Ionicons name="chevron-forward" size={18} color={T.indigoDeep} />
-            </TouchableOpacity>
-          )}
           {zones.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>
               {zones.map(zone => (
-                <TouchableOpacity key={zone.id} style={[S.chip, zone.markup_type === 'freehand' && S.chipFree]} onPress={() => handleTapZone(zone)}>
-                  <Text style={S.chipIcon}>{!zone.markup_type || zone.markup_type === 'pin' ? '📍' : zone.markup_type === 'rectangle' ? '🔲' : '✏️'}</Text>
+                <TouchableOpacity key={zone.id} style={[S.chip, zone.markup_type === 'freehand' && S.chipFree]} onPress={() => handleTapZone(zone)} activeOpacity={0.75}>
+                  <Ionicons name={zoneIcon(zone.markup_type)} size={16} color={zone.markup_type === 'freehand' ? '#F59E0B' : T.indigo} />
                   <Text style={S.chipText}>{zone.label}</Text>
                 </TouchableOpacity>
               ))}
@@ -464,7 +454,7 @@ export default function DrawingViewerScreen() {
             ) : zones.map(zone => (
               <TouchableOpacity key={zone.id} style={S.zoneRow} onPress={() => handleTapZone(zone)} activeOpacity={0.7}>
                 <View style={[S.zoneBadge, zone.markup_type === 'freehand' && { backgroundColor: '#FEF3C7' }]}>
-                  <Text style={S.zoneBadgeIcon}>{!zone.markup_type || zone.markup_type === 'pin' ? '📍' : zone.markup_type === 'rectangle' ? '🔲' : '✏️'}</Text>
+                  <Ionicons name={zoneIcon(zone.markup_type)} size={18} color={zone.markup_type === 'freehand' ? '#F59E0B' : T.indigo} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={S.zoneLabel}>{zone.label}</Text>
@@ -521,15 +511,6 @@ const S = StyleSheet.create({
   hintBar:       { backgroundColor: T.paper, paddingVertical: 7, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: T.line, zIndex: 10 },
   hintText:      { fontSize: 12, color: T.mid, textAlign: 'center' },
   pdfWrap:       { flex: 1, overflow: 'hidden', backgroundColor: T.indigoSoft },
-  addObsBar: {
-    position: 'absolute', bottom: 20, left: 20, right: 20,
-    backgroundColor: T.marigold, borderRadius: R.pill,
-    paddingVertical: 16, paddingHorizontal: 24,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    shadowColor: '#E08D0B', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 20, elevation: 8,
-    zIndex: 20,
-  },
-  addObsBarText: { fontSize: 16, fontWeight: '800', color: T.indigoDeep },
   overlay:       { ...StyleSheet.absoluteFillObject, backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingTxt:    { color: T.mid, fontSize: 14 },
   errTxt:        { color: T.clay, fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
@@ -538,12 +519,11 @@ const S = StyleSheet.create({
   labelText:     { fontSize: 12, color: '#FFFFFF', fontWeight: '700' },
   labelFree:     { backgroundColor: '#F59E0B' },
   labelStem:     { width: 1.5, height: 8, backgroundColor: T.indigo },
-  strip:         { backgroundColor: T.surface, borderTopWidth: 1, borderTopColor: T.line, maxHeight: 52 },
-  stripContent:  { paddingHorizontal: 16, gap: 8, alignItems: 'center', paddingVertical: 10 },
-  chip:          { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: T.indigoSoft, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: T.indigo },
+  strip:         { backgroundColor: T.surface, borderTopWidth: 1, borderTopColor: T.line, maxHeight: 76 },
+  stripContent:  { paddingHorizontal: 16, gap: 10, alignItems: 'center', paddingVertical: 16 },
+  chip:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.indigoSoft, borderRadius: 24, paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, borderColor: T.indigo },
   chipFree:      { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
-  chipIcon:      { fontSize: 13 },
-  chipText:      { fontSize: 12, color: T.indigo, fontWeight: '500' },
+  chipText:      { fontSize: 14, color: T.indigo, fontWeight: '600' },
   scroll:        { flex: 1, backgroundColor: T.paper },
   section:       { padding: 20, paddingBottom: 8 },
   sectionTitle:  { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
@@ -558,7 +538,6 @@ const S = StyleSheet.create({
   emptyBody:     { fontSize: 12, color: T.mid, textAlign: 'center', lineHeight: 18 },
   zoneRow:       { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.md, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: T.line, gap: 12, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
   zoneBadge:     { width: 36, height: 36, borderRadius: 10, backgroundColor: T.indigoSoft, alignItems: 'center', justifyContent: 'center' },
-  zoneBadgeIcon: { fontSize: 17 },
   zoneLabel:     { fontSize: 15, fontWeight: '600', color: T.ink, marginBottom: 2 },
   zoneMeta:      { fontSize: 11, color: T.mid },
   zoneArrow:     { fontSize: 20, color: T.mid },
