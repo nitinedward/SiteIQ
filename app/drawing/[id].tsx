@@ -30,7 +30,7 @@ function zoneIcon(markupType?: MarkupType): keyof typeof Ionicons.glyphMap {
 function ToolBtn({ icon, label, active, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; active: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity style={[S.toolBtn, active && S.toolBtnOn]} onPress={onPress} activeOpacity={0.75}>
-      <Ionicons name={icon} size={20} color={active ? T.indigo : T.mid} />
+      <Ionicons name={icon} size={18} color={active ? T.indigo : T.mid} />
       <Text style={[S.toolLabel, active && S.toolLabelOn]}>{label}</Text>
     </TouchableOpacity>
   );
@@ -384,7 +384,7 @@ export default function DrawingViewerScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={18} color={T.indigo} />
+          <Ionicons name="arrow-back" size={20} color={T.indigo} />
         </TouchableOpacity>
         <View style={S.headerMid}>
           <Text style={S.headerTitle} numberOfLines={1}>{viewOnly ? 'View Drawing' : 'PDF Mark-up'}</Text>
@@ -493,18 +493,18 @@ const S = StyleSheet.create({
   container:     { flex: 1, backgroundColor: T.paper },
   header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, gap: 12, backgroundColor: T.line, zIndex: 10 },
   backBtn:       {
-    width: 40, height: 40, borderRadius: 20,
+    width: 46, height: 46, borderRadius: 23,
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.line,
     alignItems: 'center', justifyContent: 'center',
   },
   headerMid:     { flex: 1 },
   headerTitle:   { fontSize: 21, fontWeight: '800', color: T.indigo },
   headerSub:     { fontSize: 11, color: T.mid, marginTop: 1 },
-  toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  toggleText:    { fontSize: 10, color: T.indigo, fontWeight: '700' },
+  toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 13, paddingVertical: 7, borderRadius: 20 },
+  toggleText:    { fontSize: 12, color: T.indigo, fontWeight: '700' },
   pdfScreen:     { flex: 1 },
   toolbar:       { flexDirection: 'row', backgroundColor: T.line, paddingVertical: 12, paddingHorizontal: 16, gap: 8, zIndex: 10 },
-  toolBtn:       { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 22, paddingHorizontal: 10, borderRadius: 18, backgroundColor: T.surface, borderWidth: 1, borderColor: T.line, gap: 6 },
+  toolBtn:       { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 14, paddingHorizontal: 8, borderRadius: 16, backgroundColor: T.surface, borderWidth: 1, borderColor: T.line, gap: 5 },
   toolBtnOn:     { backgroundColor: T.indigoSoft, borderColor: T.indigo },
   toolLabel:     { fontSize: 11, color: T.mid, fontWeight: '700' },
   toolLabelOn:   { color: T.indigo },
