@@ -387,7 +387,7 @@ export default function DrawingViewerScreen() {
           <Ionicons name="arrow-back" size={18} color={T.indigo} />
         </TouchableOpacity>
         <View style={S.headerMid}>
-          <Text style={S.headerTitle} numberOfLines={1}>{viewOnly ? 'View Drawing' : 'Mark up drawing'}</Text>
+          <Text style={S.headerTitle} numberOfLines={1}>{viewOnly ? 'View Drawing' : 'PDF Mark-up'}</Text>
           <Text style={S.headerSub} numberOfLines={1}>{title}</Text>
         </View>
         <TouchableOpacity style={S.toggleBtn} onPress={() => { setIsLoading(true); setPdfError(''); setShowPdf(v => !v); }}>
@@ -498,7 +498,7 @@ const S = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   headerMid:     { flex: 1 },
-  headerTitle:   { fontSize: 18, fontWeight: '800', color: T.indigo },
+  headerTitle:   { fontSize: 21, fontWeight: '800', color: T.indigo },
   headerSub:     { fontSize: 11, color: T.mid, marginTop: 1 },
   toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   toggleText:    { fontSize: 10, color: T.indigo, fontWeight: '700' },
@@ -518,7 +518,7 @@ const S = StyleSheet.create({
   labelBubble:   { backgroundColor: T.indigo, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, alignSelf: 'center', marginBottom: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 6 },
   labelText:     { fontSize: 10, color: '#FFFFFF', fontWeight: '700' },
   labelFree:     { backgroundColor: '#F59E0B' },
-  strip:         { backgroundColor: T.surface, borderTopWidth: 1, borderTopColor: T.line, maxHeight: 76 },
+  strip:         { backgroundColor: T.line, maxHeight: 76 },
   stripContent:  { paddingHorizontal: 16, gap: 10, alignItems: 'center', paddingVertical: 16 },
   chip:          { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: T.indigoSoft, borderRadius: 24, paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, borderColor: T.indigo },
   chipFree:      { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
