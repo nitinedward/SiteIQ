@@ -366,14 +366,14 @@ const S = StyleSheet.create({
   },
   cardStatsRow: {
     flexDirection: 'row',
-    gap: 16,
+    justifyContent: 'space-between',
   },
   cardStat: {
-    fontSize: 11,
+    fontSize: 13,
     color: T.mid,
   },
   cardStatNum: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '800',
     color: T.ink,
   },
