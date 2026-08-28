@@ -383,7 +383,7 @@ export default function DrawingViewerScreen() {
   return (
     <View style={S.container}>
       <View style={S.header}>
-        <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={S.backBtn} onPress={() => { if (showPdf) { setShowPdf(false); } else { router.back(); } }}>
           <Ionicons name="arrow-back" size={20} color={T.indigo} />
         </TouchableOpacity>
         <View style={S.headerMid}>
