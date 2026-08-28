@@ -310,8 +310,8 @@ const S = StyleSheet.create({
   // ── Card ────────────────────────────────────────────────────────────────
   card: {
     backgroundColor: T.surface,
-    borderRadius: 22,
-    padding: 20,
+    borderRadius: 26,
+    padding: 24,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: T.line,
@@ -331,10 +331,10 @@ const S = StyleSheet.create({
   },
   cardName: {
     flex: 1,
-    fontSize: 18,
+    fontSize: 21,
     fontWeight: '800',
     color: T.indigo,
-    lineHeight: 24,
+    lineHeight: 27,
   },
   pill: {
     borderRadius: 20,
