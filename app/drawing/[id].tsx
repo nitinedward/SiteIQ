@@ -50,6 +50,7 @@ export default function DrawingViewerScreen() {
   const zonesRef                  = useRef<Zone[]>([]);
   const setZonesAndRef = (z: Zone[]) => { zonesRef.current = z; setZones(z); };
   const [showPdf, setShowPdf]     = useState(false);
+  const [returnToCanvas, setReturnToCanvas] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [pdfError, setPdfError]   = useState('');
   const [tool, setTool]           = useState<Tool>('pin');
@@ -383,14 +384,18 @@ export default function DrawingViewerScreen() {
   return (
     <View style={S.container}>
       <View style={S.header}>
-        <TouchableOpacity style={S.backBtn} onPress={() => { if (showPdf) { setShowPdf(false); } else { router.back(); } }}>
+        <TouchableOpacity style={S.backBtn} onPress={() => {
+          if (showPdf) { setReturnToCanvas(false); setShowPdf(false); }
+          else if (returnToCanvas) { setReturnToCanvas(false); setShowPdf(true); }
+          else { router.back(); }
+        }}>
           <Ionicons name="arrow-back" size={20} color={T.indigo} />
         </TouchableOpacity>
         <View style={S.headerMid}>
           <Text style={S.headerTitle} numberOfLines={1}>{viewOnly ? 'View Drawing' : 'PDF Mark-up'}</Text>
           <Text style={S.headerSub} numberOfLines={1}>{title}</Text>
         </View>
-        <TouchableOpacity style={S.toggleBtn} onPress={() => { setIsLoading(true); setPdfError(''); setShowPdf(v => !v); }}>
+        <TouchableOpacity style={S.toggleBtn} onPress={() => { setIsLoading(true); setPdfError(''); if (showPdf) setReturnToCanvas(true); setShowPdf(v => !v); }}>
           <Text style={S.toggleText}>{showPdf ? 'Zones' : 'Drawing'}</Text>
         </TouchableOpacity>
       </View>
