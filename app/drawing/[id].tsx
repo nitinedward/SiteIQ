@@ -7,7 +7,7 @@ import {
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '../../lib/supabase';
-import Svg, { Circle, Rect, Path, G } from 'react-native-svg';
+import Svg, { Circle, Ellipse, Rect, Path, G } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../lib/theme';
 
@@ -333,44 +333,53 @@ export default function DrawingViewerScreen() {
       {zones.map(zone => {
         const sc = pctToPage(zone.x_percent, zone.y_percent);
         if (!zone.markup_type || zone.markup_type === 'pin') {
+          // iOS/Maps-style teardrop pin: tail tip lands exactly on (sc.x, sc.y),
+          // a solid head circle sits on top and hides the tail's flat seam.
+          const headR    = 9;
+          const tailLen  = 15;
+          const hx = sc.x, hy = sc.y - tailLen;
+          const baseHalf = headR * 0.55;
+          const baseY    = hy + headR * 0.75;
+          const tail = `M ${sc.x} ${sc.y} L ${hx - baseHalf} ${baseY} L ${hx + baseHalf} ${baseY} Z`;
           return (
             <G key={zone.id}>
-              <Circle cx={sc.x + 1} cy={sc.y + 2} r={10} fill="rgba(0,0,0,0.2)" />
-              <Circle cx={sc.x}     cy={sc.y}     r={10} fill={T.indigo} />
-              <Circle cx={sc.x}     cy={sc.y}     r={10} stroke="#FFF" strokeWidth={2} fill="none" />
-              <Circle cx={sc.x}     cy={sc.y}     r={4}  fill="#FFF" />
+              <Ellipse cx={sc.x} cy={sc.y + 1.5} rx={5} ry={2} fill="rgba(0,0,0,0.16)" />
+              <Path d={tail} fill={T.indigo} />
+              <Circle cx={hx} cy={hy} r={headR} fill={T.indigo} />
+              <Circle cx={hx} cy={hy} r={3.5} fill="#FFFFFF" />
             </G>
           );
         }
         if (zone.markup_type === 'rectangle' && zone.shape_data) {
           try {
             const pr = pdfRectToPage(JSON.parse(zone.shape_data));
-            return <Rect key={zone.id} x={pr.x} y={pr.y} width={pr.width} height={pr.height} fill={T.indigo} fillOpacity={0.18} stroke={T.indigo} strokeWidth={2} />;
+            return <Rect key={zone.id} x={pr.x} y={pr.y} width={pr.width} height={pr.height} fill={T.indigo} fillOpacity={0.16} stroke={T.indigo} strokeWidth={1.5} />;
           } catch { return null; }
         }
         if (zone.markup_type === 'freehand' && zone.shape_data) {
           try {
             const pts: Pt[] = JSON.parse(zone.shape_data);
             const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${(p.x / pdfDims.current.pdfWidth) * SW} ${(p.y / pdfDims.current.pdfHeight) * h}`).join(' ');
-            return <Path key={zone.id} d={d} stroke="#F59E0B" strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
+            return <Path key={zone.id} d={d} stroke="#F59E0B" strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
           } catch { return null; }
         }
         return null;
       })}
-      {liveRect && <Rect x={liveRect.x} y={liveRect.y} width={liveRect.width} height={liveRect.height} fill={T.indigo} fillOpacity={0.1} stroke={T.indigo} strokeWidth={2} strokeDasharray="6,4" />}
-      {livePath.length > 1 && <Path d={livePath.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')} stroke="#F59E0B" strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" />}
+      {liveRect && <Rect x={liveRect.x} y={liveRect.y} width={liveRect.width} height={liveRect.height} fill={T.indigo} fillOpacity={0.1} stroke={T.indigo} strokeWidth={1.5} strokeDasharray="6,4" />}
+      {livePath.length > 1 && <Path d={livePath.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')} stroke="#F59E0B" strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />}
     </Svg>
   );
 
   const renderLabels = () => zones.map(zone => {
     const sc = pctToPage(zone.x_percent, zone.y_percent);
     const isFree = zone.markup_type === 'freehand';
+    const isPin  = !zone.markup_type || zone.markup_type === 'pin';
     return (
-      <TouchableOpacity key={zone.id} style={{ position: 'absolute', left: sc.x - 80, top: sc.y - 46, zIndex: 10, width: 160, alignItems: 'center' }} onPress={() => handleTapZone(zone)} disabled={tool === 'rectangle' || tool === 'freehand'}>
+      <TouchableOpacity key={zone.id} style={{ position: 'absolute', left: sc.x - 80, top: sc.y - (isPin ? 58 : 46), zIndex: 10, width: 160, alignItems: 'center' }} onPress={() => handleTapZone(zone)} disabled={tool === 'rectangle' || tool === 'freehand'}>
         <View style={[S.labelBubble, isFree && S.labelFree]}>
           <Text style={S.labelText} numberOfLines={1}>{zone.label}</Text>
         </View>
-        {(!zone.markup_type || zone.markup_type === 'pin') && <View style={S.labelStem} />}
+        {isPin && <View style={S.labelStem} />}
       </TouchableOpacity>
     );
   });
@@ -508,7 +517,7 @@ const S = StyleSheet.create({
   labelBubble:   { backgroundColor: T.indigo, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, alignSelf: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 6 },
   labelText:     { fontSize: 12, color: '#FFFFFF', fontWeight: '700' },
   labelFree:     { backgroundColor: '#F59E0B' },
-  labelStem:     { width: 2, height: 8, backgroundColor: T.indigo },
+  labelStem:     { width: 1.5, height: 8, backgroundColor: T.indigo },
   strip:         { backgroundColor: T.surface, borderTopWidth: 1, borderTopColor: T.line, maxHeight: 52 },
   stripContent:  { paddingHorizontal: 16, gap: 8, alignItems: 'center', paddingVertical: 10 },
   chip:          { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: T.indigoSoft, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: T.indigo },
