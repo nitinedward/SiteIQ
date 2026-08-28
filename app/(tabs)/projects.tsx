@@ -8,6 +8,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { getUserFirm } from '../../lib/firm'
 import { theme } from '../../lib/theme'
+import { Ionicons } from '@expo/vector-icons'
 
 const T = theme.colors
 const R = theme.radius
@@ -243,7 +244,8 @@ export default function ProjectsScreen() {
         onPress={() => router.push('/(tabs)/capture')}
         activeOpacity={0.85}
       >
-        <Text style={S.fabText}>＋  New inspection</Text>
+        <Ionicons name="add" size={18} color={T.indigoDeep} />
+        <Text style={S.fabText}>New inspection</Text>
       </TouchableOpacity>
 
     </View>
@@ -255,22 +257,21 @@ const S = StyleSheet.create({
 
   // ── Header ──────────────────────────────────────────────────────────────
   header: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 64,
-    paddingBottom: 20,
+    paddingBottom: 16,
   },
   greeting: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '400',
     color: T.mid,
-    marginBottom: 6,
   },
   title: {
-    fontSize: 30,
+    fontSize: 24,
     fontWeight: '800',
-    color: T.indigoDeep,
-    letterSpacing: -0.4,
-    lineHeight: 36,
+    color: T.indigo,
+    marginTop: 2,
+    lineHeight: 29,
   },
   firmLabel: {
     marginTop: 6,
@@ -315,9 +316,11 @@ const S = StyleSheet.create({
   // ── Card ────────────────────────────────────────────────────────────────
   card: {
     backgroundColor: T.surface,
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 16,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: T.line,
     // soft indigo shadow
     shadowColor: '#2C3950',
     shadowOffset: { width: 0, height: 8 },
@@ -334,26 +337,26 @@ const S = StyleSheet.create({
   },
   cardName: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
-    color: T.ink,
-    lineHeight: 22,
+    color: T.indigo,
+    lineHeight: 21,
   },
   pill: {
     borderRadius: 20,
-    paddingHorizontal: 11,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     alignSelf: 'flex-start',
     flexShrink: 0,
   },
   pillText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   cardNumber: {
     fontSize: 12,
     color: T.mid,
-    marginTop: 3,
+    marginTop: 2,
     fontVariant: ['tabular-nums'],
   },
   cardAddress: {
@@ -364,19 +367,19 @@ const S = StyleSheet.create({
   cardDivider: {
     height: 1,
     backgroundColor: T.line,
-    marginTop: 14,
+    marginTop: 12,
     marginBottom: 12,
   },
   cardStatsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 16,
   },
   cardStat: {
-    fontSize: 12,
+    fontSize: 11,
     color: T.mid,
   },
   cardStatNum: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
     color: T.ink,
   },
@@ -411,6 +414,9 @@ const S = StyleSheet.create({
     position: 'absolute',
     bottom: 78,
     right: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: T.marigold,
     borderRadius: 28,
     paddingHorizontal: 20,
@@ -423,9 +429,8 @@ const S = StyleSheet.create({
     elevation: 8,
   },
   fabText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
+    fontSize: 14,
+    fontWeight: '800',
+    color: T.indigoDeep,
   },
 })
