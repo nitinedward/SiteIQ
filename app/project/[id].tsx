@@ -7,6 +7,7 @@ import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../../lib/theme';
 
 const T = theme.colors;
@@ -38,6 +39,7 @@ const REPORT_PREVIEW_COUNT = 3;
 
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   const [project, setProject]         = useState<Project | null>(null);
   const [drawings, setDrawings]       = useState<Drawing[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
@@ -225,7 +227,7 @@ export default function ProjectDetailScreen() {
       </ScrollView>
 
       {/* Footer nav — matches (tabs) bottom bar */}
-      <View style={S.footer}>
+      <View style={[S.footer, { paddingBottom: 8 + insets.bottom }]}>
         <TouchableOpacity style={S.footerTab} onPress={() => router.push('/(tabs)/projects')} activeOpacity={0.7}>
           <Ionicons name="folder-outline" size={22} color={T.mid} />
           <Text style={S.footerTabLabel}>Projects</Text>
@@ -337,8 +339,7 @@ const S = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: T.line,
     paddingTop: 6,
-    paddingBottom: 24,
   },
-  footerTab: { flex: 1, alignItems: 'center', gap: 2 },
+  footerTab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
   footerTabLabel: { fontSize: 10, fontWeight: '700', color: T.mid },
 });
