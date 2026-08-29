@@ -227,13 +227,13 @@ export default function ProjectDetailScreen() {
       </ScrollView>
 
       {/* Footer nav — matches (tabs) bottom bar */}
-      <View style={[S.footer, { paddingBottom: insets.bottom }]}>
+      <View style={[S.footer, { paddingBottom: 8 + insets.bottom }]}>
         <TouchableOpacity style={S.footerTab} onPress={() => router.push('/(tabs)/projects')} activeOpacity={0.7}>
-          <Ionicons name="folder-outline" size={30} color={T.mid} />
+          <Ionicons name="folder-outline" size={22} color={T.mid} />
           <Text style={S.footerTabLabel}>Projects</Text>
         </TouchableOpacity>
         <TouchableOpacity style={S.footerTab} onPress={() => router.push('/(tabs)/profile')} activeOpacity={0.7}>
-          <Ionicons name="person-outline" size={30} color={T.mid} />
+          <Ionicons name="person-outline" size={22} color={T.mid} />
           <Text style={S.footerTabLabel}>Profile</Text>
         </TouchableOpacity>
       </View>
@@ -332,16 +332,14 @@ const S = StyleSheet.create({
   },
   emptyText: { fontSize: 13, color: T.mid, textAlign: 'center' },
 
-  // Footer nav — height controls the bar's overall thickness; footerTab's
-  // justifyContent/paddingBottom controls where the icon+label sit inside
-  // that fixed height, so the two can be tuned independently.
+  // Footer nav
   footer: {
     flexDirection: 'row',
     backgroundColor: T.surface,
     borderTopWidth: 1,
     borderTopColor: T.line,
-    height: 48,
+    paddingTop: 6,
   },
-  footerTab: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 6, gap: 2 },
-  footerTabLabel: { fontSize: 13, fontWeight: '700', color: T.mid },
+  footerTab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  footerTabLabel: { fontSize: 10, fontWeight: '700', color: T.mid },
 });
