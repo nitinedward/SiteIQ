@@ -1088,7 +1088,11 @@ export default function AdminPage() {
                                   checked={checked}
                                   onClick={e => e.stopPropagation()}
                                   onChange={() => toggleDrawingSelected(d.id)}
-                                  style={{ width: 16, height: 16, cursor: 'pointer', flexShrink: 0 }}
+                                  style={{
+                                    width: 16, height: 16, cursor: 'pointer', flexShrink: 0,
+                                    opacity: checked || hoveredDrawingId === d.id ? 1 : 0,
+                                    transition: 'opacity 0.15s ease',
+                                  }}
                                 />
                                 <div style={{ background: 'var(--indigo-soft)', color: 'var(--indigo)', fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 6, fontFamily: 'var(--f-mono)', flexShrink: 0 }}>
                                   {d.number || '—'}
