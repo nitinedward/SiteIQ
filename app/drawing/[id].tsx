@@ -9,6 +9,7 @@ import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import Svg, { Circle, Ellipse, Rect, Path, G } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
+import { Swipeable } from 'react-native-gesture-handler';
 import { theme } from '../../lib/theme';
 
 const T = theme.colors;
@@ -324,6 +325,19 @@ export default function DrawingViewerScreen() {
     fetchZones();
   };
 
+  const openZone = async (zone: Zone) => {
+    let obsQuery = supabase.from('observations').select('id').eq('zone_id', zone.id).limit(1);
+    obsQuery = inspectionId ? obsQuery.eq('inspection_id', inspectionId) : obsQuery.is('inspection_id', null);
+    const { data: existingObs } = await obsQuery;
+    const obsId = existingObs && existingObs.length > 0 ? existingObs[0].id : null;
+    router.push({ pathname: '/observation', params: { zone_id: zone.id, zone_label: zone.label, project_id: projectId, inspection_id: inspectionId, ...(obsId ? { observation_id: obsId } : {}) } });
+  };
+
+  const deleteZone = async (zone: Zone) => {
+    await supabase.from('zones').delete().eq('id', zone.id);
+    setZonesAndRef(zonesRef.current.filter(z => z.id !== zone.id));
+  };
+
   const handleTapZone = async (zone: Zone) => {
     let obsQuery = supabase.from('observations').select('id').eq('zone_id', zone.id).limit(1);
     obsQuery = inspectionId ? obsQuery.eq('inspection_id', inspectionId) : obsQuery.is('inspection_id', null);
@@ -471,18 +485,38 @@ export default function DrawingViewerScreen() {
                 <Text style={S.emptyTitle}>No zones yet</Text>
                 <Text style={S.emptyBody}>{viewOnly ? 'No markup was added during this inspection' : 'Open the drawing and use the tools to mark zones'}</Text>
               </View>
-            ) : zones.map(zone => (
-              <TouchableOpacity key={zone.id} style={S.zoneRow} onPress={() => handleTapZone(zone)} activeOpacity={0.7}>
-                <View style={[S.zoneBadge, zone.markup_type === 'freehand' && { backgroundColor: '#FEF3C7' }]}>
-                  <Ionicons name={zoneIcon(zone.markup_type)} size={18} color={zone.markup_type === 'freehand' ? '#F59E0B' : T.indigo} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={S.zoneLabel}>{zone.label}</Text>
-                  <Text style={S.zoneMeta}>{!zone.markup_type || zone.markup_type === 'pin' ? 'Pin marker' : zone.markup_type === 'rectangle' ? 'Area highlight' : 'Freehand drawing'}{' · Tap to inspect'}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={T.mid} />
-              </TouchableOpacity>
-            ))}
+            ) : zones.map(zone => {
+              const row = (
+                <TouchableOpacity key={zone.id} style={S.zoneRow} onPress={() => openZone(zone)} activeOpacity={0.7}>
+                  <View style={[S.zoneBadge, zone.markup_type === 'freehand' && { backgroundColor: '#FEF3C7' }]}>
+                    <Ionicons name={zoneIcon(zone.markup_type)} size={18} color={zone.markup_type === 'freehand' ? '#F59E0B' : T.indigo} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={S.zoneLabel}>{zone.label}</Text>
+                    <Text style={S.zoneMeta}>{!zone.markup_type || zone.markup_type === 'pin' ? 'Pin marker' : zone.markup_type === 'rectangle' ? 'Area highlight' : 'Freehand drawing'}{' · Tap to inspect'}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={T.mid} />
+                </TouchableOpacity>
+              );
+              if (viewOnly) return row;
+              return (
+                <Swipeable
+                  key={zone.id}
+                  overshootRight={false}
+                  renderRightActions={() => (
+                    <TouchableOpacity
+                      style={S.swipeDeleteBtn}
+                      onPress={() => Alert.alert('Delete Zone', `Delete "${zone.label}"? This cannot be undone.`, [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Delete', style: 'destructive', onPress: () => deleteZone(zone) },
+                      ])}>
+                      <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  )}>
+                  {row}
+                </Swipeable>
+              );
+            })}
           </View>
           <View style={{ height: 40 }} />
         </ScrollView>
@@ -557,6 +591,7 @@ const S = StyleSheet.create({
   emptyTitle:    { fontSize: 15, color: T.ink, fontWeight: '500' },
   emptyBody:     { fontSize: 12, color: T.mid, textAlign: 'center', lineHeight: 18 },
   zoneRow:       { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.md, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: T.line, gap: 12, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
+  swipeDeleteBtn: { backgroundColor: T.clay, width: 72, borderRadius: R.md, marginBottom: 10, alignItems: 'center', justifyContent: 'center' },
   zoneBadge:     { width: 36, height: 36, borderRadius: 10, backgroundColor: T.indigoSoft, alignItems: 'center', justifyContent: 'center' },
   zoneLabel:     { fontSize: 15, fontWeight: '600', color: T.ink, marginBottom: 2 },
   zoneMeta:      { fontSize: 11, color: T.mid },
