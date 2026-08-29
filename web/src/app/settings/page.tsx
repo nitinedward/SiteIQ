@@ -266,8 +266,8 @@ export default function SettingsPage() {
         {/* Page heading */}
         <div>
           <h1 style={{ fontFamily: 'var(--f-heading)', fontSize: 32, fontWeight: 800, color: 'var(--indigo-deep)', lineHeight: 1 }}>Settings</h1>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--text-mid)', marginTop: 8 }}>
-            {firm?.name}
+          <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)', marginTop: 8 }}>
+            Firm details, report templates and integrations for {firm?.name}.
           </div>
         </div>
 
@@ -282,7 +282,7 @@ export default function SettingsPage() {
         {/* ── CARD 1: Firm Details ─────────────────────────── */}
         <Card className="settings-card">
           <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--border-line)' }}>
-            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 17, fontWeight: 800, color: 'var(--text-ink)' }}>Firm Details</h2>
+            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 17, fontWeight: 800, color: 'var(--text-ink)' }}>Firm details</h2>
           </div>
           <div style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div>
@@ -322,7 +322,7 @@ export default function SettingsPage() {
         {/* ── CARD 2: Report Template ──────────────────────── */}
         <Card className="settings-card">
           <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--border-line)' }}>
-            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 18, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 4 }}>Report Template</h2>
+            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 18, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 4 }}>Report template</h2>
             <p style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.6, marginBottom: 10 }}>
               Upload your firm's Word template (.docx). Use these placeholders where AI content is inserted:
             </p>
@@ -351,7 +351,7 @@ export default function SettingsPage() {
                 onClick={() => templateInputRef.current?.click()}
                 style={{
                   border: `2px dashed ${templateDragging ? 'var(--indigo)' : 'var(--border-line)'}`,
-                  borderRadius: 'var(--radius-md)', padding: 36, textAlign: 'center', cursor: 'pointer',
+                  borderRadius: 'var(--radius-lg)', padding: 36, textAlign: 'center', cursor: 'pointer',
                   background: templateDragging ? 'var(--indigo-soft)' : 'var(--paper)',
                   transition: 'all .15s',
                 }}
@@ -559,7 +559,7 @@ export default function SettingsPage() {
         {/* ── CARD 4: Danger Zone ──────────────────────────── */}
         <div style={{ border: '1px solid var(--clay)', borderRadius: 'var(--radius-md)', overflow: 'hidden', boxShadow: 'var(--shadow-card-v3)' }}>
           <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--clay)', background: 'var(--clay-soft)' }}>
-            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 17, fontWeight: 800, color: 'var(--clay-ink)' }}>Danger Zone</h2>
+            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 17, fontWeight: 800, color: 'var(--clay-ink)' }}>Danger zone</h2>
             <p style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--clay-ink)', opacity: 0.85, marginTop: 2 }}>Irreversible actions — proceed with caution</p>
           </div>
           <div style={{ padding: 28, background: 'var(--surface)' }}>
