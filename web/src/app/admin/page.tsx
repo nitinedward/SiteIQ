@@ -19,6 +19,24 @@ type Member  = { id: string; user_id: string; full_name: string; email: string; 
 const STATUS_OPTIONS = ['ACTIVE', 'ON_HOLD', 'COMPLETED'] as const
 const STATUS_LABELS: Record<string, string> = { ACTIVE: 'Active', ON_HOLD: 'On Hold', COMPLETED: 'Completed' }
 
+// Split-page uploads are named "drawing-<batchId>-p<pageNumber>...", inserted
+// one page at a time (page 1 first). Sorting purely by created_at puts the
+// LAST page of the newest batch on top. Sort newest batch first, but pages
+// within a batch in page order, using the batch id + page number embedded in
+// the file name; legacy rows that don't match just fall back to created_at.
+function sortDrawingsForDisplay(rows: Drawing[]): Drawing[] {
+  const sortKey = (d: Drawing) => {
+    const m = d.file_name?.match(/^drawing-(\d+)-p(\d+)/)
+    return m
+      ? { batch: Number(m[1]), page: Number(m[2]) }
+      : { batch: new Date(d.created_at).getTime(), page: 0 }
+  }
+  return [...rows].sort((a, b) => {
+    const ka = sortKey(a), kb = sortKey(b)
+    return ka.batch !== kb.batch ? kb.batch - ka.batch : ka.page - kb.page
+  })
+}
+
 // ── FORM PRIMITIVES ───────────────────────────────────────────────────────────
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -205,7 +223,7 @@ export default function AdminPage() {
       supabase.from('drawings').select('*').eq('project_id', project.id).order('created_at', { ascending: false }),
       supabase.from('project_members').select('user_id').eq('project_id', project.id),
     ])
-    setDrawings(d ?? [])
+    setDrawings(sortDrawingsForDisplay(d ?? []))
     setAssignedUserIds((pm ?? []).map((p: any) => p.user_id))
     loadProjectInspections(project.id)
   }
@@ -264,7 +282,7 @@ export default function AdminPage() {
       .select('*')
       .eq('project_id', selectedProject.id)
       .order('created_at', { ascending: false })
-    setDrawings(data ?? [])
+    setDrawings(sortDrawingsForDisplay(data ?? []))
   }
 
   const startRenameDrawing = (d: Drawing) => {
