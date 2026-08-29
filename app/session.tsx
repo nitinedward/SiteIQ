@@ -492,12 +492,8 @@ export default function SessionScreen() {
           {generalObservations.length === 0 ? (
             <>
               <Text style={S.sectionTitle}>General Observations</Text>
-              <TouchableOpacity style={S.addCard} onPress={() => router.push({ pathname: '/observation', params: { inspection_id: inspectionId, project_id: String(project_id), zone_id: 'general', zone_label: 'General Site Observation' } })} activeOpacity={0.7}>
-                <View style={{ flex: 1 }}>
-                  <Text style={S.addCardTitle}>General Observation</Text>
-                  <Text style={S.addCardSub}>Site-wide notes not tied to a specific drawing</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={T.mid} />
+              <TouchableOpacity style={S.addGeneralObsBtn} onPress={() => router.push({ pathname: '/observation', params: { inspection_id: inspectionId, project_id: String(project_id), zone_id: 'general', zone_label: 'General Site Observation' } })} activeOpacity={0.7}>
+                <Text style={S.addGeneralObsBtnText}>{'+ Add General Observation'}</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -660,14 +656,11 @@ const S = StyleSheet.create({
   addDrawText:  { fontSize: 13, color: T.indigo, fontWeight: '700' },
 
   // General observation card
-  addCard:      {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface,
-    borderRadius: R.md, padding: 16, marginBottom: 10, gap: 14,
-    shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
+  addGeneralObsBtn: {
+    alignItems: 'center', justifyContent: 'center', paddingVertical: 20,
+    borderRadius: R.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: T.indigo,
   },
-  addCardIcon:  { fontSize: 24 },
-  addCardTitle: { fontSize: 15, fontWeight: '600', color: T.ink, marginBottom: 3 },
-  addCardSub:   { fontSize: 12, color: T.mid, lineHeight: 18 },
+  addGeneralObsBtnText: { fontSize: 15, fontWeight: '700', color: T.indigo },
 
   // Complete
   completeBtn:  { backgroundColor: T.sage, borderRadius: R.pill, height: 54, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
