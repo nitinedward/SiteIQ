@@ -179,7 +179,7 @@ export default function ProjectDetailScreen() {
             </View>
           ) : (showAllDrawings ? drawings : drawings.slice(0, DRAWING_PREVIEW_COUNT)).map(d => (
             <TouchableOpacity key={d.id} style={S.row}
-              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, file_url: d.file_url, preview_url: d.preview_url ?? '', project_id: project.id, view_only: 'true' } })}
+              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, number: d.number, file_url: d.file_url, preview_url: d.preview_url ?? '', project_id: project.id, view_only: 'true' } })}
               activeOpacity={0.7}>
               <View style={S.rowBadge}>
                 <Text style={S.rowBadgeText}>{d.number || '-'}</Text>

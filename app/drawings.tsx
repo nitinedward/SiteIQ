@@ -56,7 +56,7 @@ export default function DrawingsListScreen() {
             </View>
           ) : drawings.map(d => (
             <TouchableOpacity key={d.id} style={S.row}
-              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, file_url: d.file_url, preview_url: d.preview_url ?? '', project_id: String(project_id), view_only: 'true' } })}
+              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, number: d.number, file_url: d.file_url, preview_url: d.preview_url ?? '', project_id: String(project_id), view_only: 'true' } })}
               activeOpacity={0.7}>
               <View style={S.rowBadge}>
                 <Text style={S.rowBadgeText}>{d.number || '-'}</Text>
