@@ -150,6 +150,7 @@ export default function AdminPage() {
   const [editingDrawingField, setEditingDrawingField] = useState<{ id: string; field: 'title' | 'number' | 'revision' } | null>(null)
   const [editingFieldValue, setEditingFieldValue]      = useState('')
   const [editModeDrawings, setEditModeDrawings]     = useState(false)
+  const [isDraggingFile, setIsDraggingFile]         = useState(false)
   const [draggedDrawingId, setDraggedDrawingId]     = useState<string | null>(null)
   const [dragOverDrawingId, setDragOverDrawingId]   = useState<string | null>(null)
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([])
@@ -1047,7 +1048,23 @@ export default function AdminPage() {
 
                 {/* ── DRAWINGS TAB ── */}
                 {!editingProject && projTab === 'drawings' && (
-                  <div style={{ padding: '24px 28px' }}>
+                  <div
+                    onDragOver={e => { e.preventDefault(); if (!isDraggingFile) setIsDraggingFile(true) }}
+                    onDragLeave={e => { if (e.currentTarget === e.target) setIsDraggingFile(false) }}
+                    onDrop={e => {
+                      e.preventDefault()
+                      setIsDraggingFile(false)
+                      const file = e.dataTransfer.files?.[0]
+                      if (file && file.type === 'application/pdf') handlePdfUpload(file)
+                    }}
+                    style={{
+                      padding: '24px 28px',
+                      outline: isDraggingFile ? '2px dashed var(--indigo)' : 'none',
+                      outlineOffset: -8,
+                      background: isDraggingFile ? 'var(--indigo-soft)' : 'transparent',
+                      transition: 'background .15s',
+                    }}
+                  >
                     {/* Inline message toast (replaces alert() to prevent nav quirks) */}
                     {uploadMsg && (
                       <div style={{
@@ -1077,27 +1094,6 @@ export default function AdminPage() {
                       </div>
                     )}
 
-                    {/* Upload zone */}
-                    <div
-                      onClick={() => drawingInputRef.current?.click()}
-                      style={{
-                        height: 120, border: '2px dashed var(--border-line)', borderRadius: 'var(--radius-md)',
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                        gap: 8, cursor: 'pointer', marginBottom: 20, transition: 'all .15s',
-                        background: 'var(--paper)',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--indigo-soft)'; e.currentTarget.style.borderColor = 'var(--indigo)' }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--paper)'; e.currentTarget.style.borderColor = 'var(--border-line)' }}
-                    >
-                      <svg width="24" height="24" fill="none" stroke="var(--text-mid)" strokeWidth="1.5" viewBox="0 0 24 24">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="17 8 12 3 7 8"/>
-                        <line x1="12" y1="3" x2="12" y2="15"/>
-                      </svg>
-                      <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>Upload Drawing (PDF)</div>
-                      <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>Multi-page PDFs will be automatically split into individual drawings</div>
-                    </div>
-
                     <input
                       ref={drawingInputRef}
                       type="file"
@@ -1112,27 +1108,64 @@ export default function AdminPage() {
 
                     {/* Drawing list */}
                     {drawings.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '24px 0', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>
-                        No drawings yet — upload a PDF above
-                      </div>
+                      <>
+                        {/* Upload zone — only shown before the first drawing exists.
+                            Drag-and-drop keeps working on the whole tab (see wrapper
+                            above) even once this is hidden. */}
+                        <div
+                          onClick={() => drawingInputRef.current?.click()}
+                          style={{
+                            height: 120, border: '2px dashed var(--border-line)', borderRadius: 'var(--radius-md)',
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                            gap: 8, cursor: 'pointer', marginBottom: 20, transition: 'all .15s',
+                            background: 'var(--paper)',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--indigo-soft)'; e.currentTarget.style.borderColor = 'var(--indigo)' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'var(--paper)'; e.currentTarget.style.borderColor = 'var(--border-line)' }}
+                        >
+                          <svg width="24" height="24" fill="none" stroke="var(--text-mid)" strokeWidth="1.5" viewBox="0 0 24 24">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                          </svg>
+                          <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>Upload Drawing (PDF)</div>
+                          <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>Drag & drop, or click to browse — multi-page PDFs are automatically split</div>
+                        </div>
+                        <div style={{ textAlign: 'center', padding: '24px 0', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>
+                          No drawings yet — upload a PDF above
+                        </div>
+                      </>
                     ) : (
                       <>
-                        {/* Count + subtle Edit toggle */}
+                        {/* Count + Upload + subtle Edit toggle */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 4px 12px' }}>
                           <span style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>
                             {drawings.length} drawing{drawings.length !== 1 ? 's' : ''}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => { setEditModeDrawings(v => !v); setSelectedDrawingIds([]) }}
-                            style={{
-                              background: 'none', border: 'none', cursor: 'pointer',
-                              fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700,
-                              color: editModeDrawings ? 'var(--indigo)' : 'var(--text-mid)',
-                            }}
-                          >
-                            {editModeDrawings ? 'Done' : 'Edit'}
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                            <button
+                              type="button"
+                              onClick={() => drawingInputRef.current?.click()}
+                              style={{
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700,
+                                color: 'var(--indigo)',
+                              }}
+                            >
+                              + Upload
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setEditModeDrawings(v => !v); setSelectedDrawingIds([]) }}
+                              style={{
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700,
+                                color: editModeDrawings ? 'var(--indigo)' : 'var(--text-mid)',
+                              }}
+                            >
+                              {editModeDrawings ? 'Done' : 'Edit'}
+                            </button>
+                          </div>
                         </div>
 
                         {/* Select-all / bulk-delete toolbar — only while editing */}
