@@ -489,11 +489,11 @@ const S = StyleSheet.create({
   scroll:       { flex: 1 },
 
   // Header
-  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line },
+  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, backgroundColor: T.paper, borderBottomWidth: 1, borderBottomColor: T.line },
   backBtn:      {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#2C3950', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 2,
+    backgroundColor: T.surface, borderWidth: 1, borderColor: T.line,
+    alignItems: 'center', justifyContent: 'center',
   },
   headerTitle:  { fontSize: 18, fontWeight: '700', color: T.ink },
 
