@@ -416,6 +416,19 @@ export default function AdminPage() {
     })
   }
 
+  // Base64 payload only (strips the "data:image/png;base64," prefix) for
+  // sending to the AI drawing-info extraction endpoint.
+  const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const result = reader.result as string
+        resolve(result.split(',')[1] ?? '')
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+
   const handlePdfUpload = async (file: File) => {
     if (!selectedProject) return
 
@@ -471,8 +484,9 @@ export default function AdminPage() {
         // Generate + upload a preview PNG. Strictly non-fatal — we use a
         // 20-second timeout so a hung worker never stalls the whole upload.
         let previewUrl: string | null = null
+        let previewBlob: Blob | null = null
         try {
-          const previewBlob = await Promise.race<Blob>([
+          previewBlob = await Promise.race<Blob>([
             renderPdfPageToPng(pdfBytes),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error('Preview render timed out')), 20000)
@@ -491,15 +505,43 @@ export default function AdminPage() {
           console.error('[split] Preview render/timeout on page', i + 1, pvErr)
         }
 
+        // Read the title block via AI to get the sheet's actual drawing
+        // number/revision instead of a guessed sequential number + fixed
+        // "A". Strictly non-fatal — falls back to the old defaults on any
+        // failure, timeout, or low-confidence (null) field.
+        setUploadProgress(`Reading drawing details for page ${i + 1} of ${pageCount}…`)
+        let extracted: { drawing_number: string | null; revision: string | null; title: string | null } | null = null
+        if (previewBlob) {
+          try {
+            const imageBase64 = await blobToBase64(previewBlob)
+            const extractRes = await Promise.race<Response>([
+              fetch('/api/drawings/extract-info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imageBase64 }),
+              }),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('Drawing info extraction timed out')), 20000)
+              ),
+            ])
+            if (extractRes.ok) extracted = await extractRes.json()
+            else console.error('[split] Drawing info extraction failed on page', i + 1, await extractRes.text())
+          } catch (exErr) {
+            console.error('[split] Drawing info extraction error on page', i + 1, exErr)
+          }
+        }
+
+        const pageTitle = pageCount > 1 ? `${baseName} — Page ${i + 1} of ${pageCount}` : baseName
+
         // Step 1 — insert core drawing record (no preview_url so a missing
         // column can't abort the upload).
         const { data: newRow, error: insErr } = await supabase
           .from('drawings')
           .insert({
             project_id: selectedProject.id,
-            title: pageCount > 1 ? `${baseName} — Page ${i + 1} of ${pageCount}` : baseName,
-            number: `DWG-${String(i + 1).padStart(3, '0')}`,
-            revision: 'A',
+            title: extracted?.title || pageTitle,
+            number: extracted?.drawing_number || `DWG-${String(i + 1).padStart(3, '0')}`,
+            revision: extracted?.revision || 'A',
             file_url: publicUrl,
             file_name: fileName,
           })
