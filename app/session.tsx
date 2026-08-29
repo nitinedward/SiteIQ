@@ -372,11 +372,14 @@ export default function SessionScreen() {
                 onPress={() => router.push({ pathname: '/select-drawings', params: { project_id: String(project_id), selected: selectedDrawings.join(',') } })}
                 activeOpacity={0.7}>
                 <View style={S.pickerBadge}>
-                  <Ionicons name="documents-outline" size={20} color={T.indigo} />
+                  <Text style={S.pickerBadgeText}>{selectedDrawings.length}</Text>
                 </View>
-                <Text style={S.checkTitle}>
-                  {selectedDrawings.length === 0 ? 'Select drawings' : `${selectedDrawings.length} of ${allDrawings.length} drawings selected`}
-                </Text>
+                <View style={S.checkInfo}>
+                  <Text style={S.checkTitle}>
+                    {selectedDrawings.length === 0 ? 'Select drawings' : `${selectedDrawings.length} of ${allDrawings.length} selected`}
+                  </Text>
+                  <Text style={S.checkMeta}>Tap to choose the drawings relevant to today's inspection</Text>
+                </View>
                 <Ionicons name="chevron-forward" size={18} color={T.mid} />
               </TouchableOpacity>
             )}
@@ -541,9 +544,12 @@ const S = StyleSheet.create({
   checkRowActive:{ borderColor: T.indigo, backgroundColor: T.indigoSoft },
   checkbox:     { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: T.line, alignItems: 'center', justifyContent: 'center' },
   checkboxActive:{ backgroundColor: T.indigo, borderColor: T.indigo },
-  pickerBadge:  { width: 40, height: 40, borderRadius: R.sm, backgroundColor: T.indigoSoft, alignItems: 'center', justifyContent: 'center' },
+  pickerBadge:     { backgroundColor: T.indigoSoft, borderRadius: R.sm, paddingHorizontal: 12, paddingVertical: 8, minWidth: 40, alignItems: 'center' },
+  pickerBadgeText: { fontSize: 15, color: T.indigo, fontWeight: '800' },
   checkmark:    { fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
-  checkTitle:   { flex: 1, fontSize: 14, color: T.ink, fontWeight: '600' },
+  checkInfo:    { flex: 1 },
+  checkTitle:   { fontSize: 14, color: T.ink, fontWeight: '500', marginBottom: 2 },
+  checkMeta:    { fontSize: 12, color: T.mid },
   emptyBox:     { backgroundColor: T.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: T.line, alignItems: 'center' },
   emptyText:    { fontSize: 13, color: T.mid, textAlign: 'center' },
 
