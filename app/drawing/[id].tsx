@@ -63,6 +63,21 @@ export default function DrawingViewerScreen() {
   const [pendingZone, setPendingZone] = useState<Partial<Zone> | null>(null);
   const [liveRect, setLiveRect]   = useState<PdfRect | null>(null);
   const [livePath, setLivePath]   = useState<Pt[]>([]);
+  const [editingZones, setEditingZones] = useState(false);
+  const jiggleAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!editingZones) { jiggleAnim.setValue(0); return; }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(jiggleAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+        Animated.timing(jiggleAnim, { toValue: -1, duration: 200, useNativeDriver: true }),
+        Animated.timing(jiggleAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [editingZones]);
 
   const pdfDims  = useRef({ pdfWidth: 1, pdfHeight: 1 });
   const naturalH = useRef(SH);
@@ -261,7 +276,7 @@ export default function DrawingViewerScreen() {
             if (zone.markup_type === 'freehand') return Math.sqrt(Math.pow(tapLx - sc.x, 2) + Math.pow(tapLy - sc.y, 2)) < 36;
             return false;
           });
-          if (hitZone) { tapStart.current = null; hasMoved.current = false; handleTapZone(hitZone); return; }
+          if (hitZone) { tapStart.current = null; hasMoved.current = false; openZone(hitZone); return; }
         }
       }
 
@@ -311,18 +326,20 @@ export default function DrawingViewerScreen() {
   const handleSave = async () => {
     if (!newLabel.trim()) { Alert.alert('Missing Label', 'Enter a zone name.'); return; }
     if (!pendingZone) return;
-    const { error } = await supabase.from('zones').insert({
+    const label = newLabel.trim();
+    const { data, error } = await supabase.from('zones').insert({
       drawing_id: drawingId, project_id: projectId,
       inspection_id: inspectionId || null,
-      label: newLabel.trim(),
+      label,
       x_percent: pendingZone.x_percent ?? 0,
       y_percent: pendingZone.y_percent ?? 0,
       markup_type: pendingZone.markup_type ?? 'pin',
       shape_data: pendingZone.shape_data ?? null,
-    });
-    if (error) { Alert.alert('Error', 'Could not save zone.'); return; }
+    }).select('id').single();
+    if (error || !data) { Alert.alert('Error', 'Could not save zone.'); return; }
     setNewLabel(''); setShowModal(false); setPendingZone(null); setLiveRect(null); setLivePath([]);
     fetchZones();
+    router.push({ pathname: '/observation', params: { zone_id: data.id, zone_label: label, project_id: projectId, inspection_id: inspectionId } });
   };
 
   const openZone = async (zone: Zone) => {
@@ -336,21 +353,6 @@ export default function DrawingViewerScreen() {
   const deleteZone = async (zone: Zone) => {
     await supabase.from('zones').delete().eq('id', zone.id);
     setZonesAndRef(zonesRef.current.filter(z => z.id !== zone.id));
-  };
-
-  const handleTapZone = async (zone: Zone) => {
-    let obsQuery = supabase.from('observations').select('id').eq('zone_id', zone.id).limit(1);
-    obsQuery = inspectionId ? obsQuery.eq('inspection_id', inspectionId) : obsQuery.is('inspection_id', null);
-    const { data: existingObs } = await obsQuery;
-    const hasObs = !!(existingObs && existingObs.length > 0);
-    const obsId  = hasObs ? existingObs![0].id : null;
-
-    const buttons: any[] = [];
-    buttons.push({ text: hasObs ? 'Edit Observation' : 'Add Observation', onPress: () => router.push({ pathname: '/observation', params: { zone_id: zone.id, zone_label: zone.label, project_id: projectId, inspection_id: inspectionId, ...(obsId ? { observation_id: obsId } : {}) } }) });
-    if (hasObs) buttons.push({ text: 'Add Another Observation', onPress: () => router.push({ pathname: '/observation', params: { zone_id: zone.id, zone_label: zone.label, project_id: projectId, inspection_id: inspectionId } }) });
-    if (!viewOnly) buttons.push({ text: 'Delete Zone', style: 'destructive' as const, onPress: async () => { await supabase.from('zones').delete().eq('id', zone.id); setZonesAndRef(zonesRef.current.filter(z => z.id !== zone.id)); } });
-    buttons.push({ text: 'Cancel', style: 'cancel' as const });
-    Alert.alert(zone.label, 'What would you like to do?', buttons);
   };
 
   const renderSvg = (h: number) => (
@@ -391,7 +393,7 @@ export default function DrawingViewerScreen() {
     const isFree = zone.markup_type === 'freehand';
     const isPin  = !zone.markup_type || zone.markup_type === 'pin';
     return (
-      <TouchableOpacity key={zone.id} style={{ position: 'absolute', left: sc.x - 80, top: sc.y - (isPin ? 37 : 46), zIndex: 10, width: 160, alignItems: 'center' }} onPress={() => handleTapZone(zone)} disabled={tool === 'rectangle' || tool === 'freehand'}>
+      <TouchableOpacity key={zone.id} style={{ position: 'absolute', left: sc.x - 80, top: sc.y - (isPin ? 37 : 46), zIndex: 10, width: 160, alignItems: 'center' }} onPress={() => openZone(zone)} disabled={tool === 'rectangle' || tool === 'freehand'}>
         <View style={[S.labelBubble, isFree && S.labelFree]}>
           <Text style={S.labelText} numberOfLines={1}>{zone.label}</Text>
         </View>
@@ -455,14 +457,43 @@ export default function DrawingViewerScreen() {
             {!!pdfError && <View style={S.overlay}><Text style={S.errTxt}>{pdfError}</Text><TouchableOpacity onPress={loadPreviewDimensions}><Text style={S.retryTxt}>Tap to retry</Text></TouchableOpacity></View>}
           </View>
           {zones.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>
-              {zones.map(zone => (
-                <TouchableOpacity key={zone.id} style={[S.chip, zone.markup_type === 'freehand' && S.chipFree]} onPress={() => handleTapZone(zone)} activeOpacity={0.75}>
-                  <Ionicons name={zoneIcon(zone.markup_type)} size={19} color={zone.markup_type === 'freehand' ? '#F59E0B' : T.indigo} />
-                  <Text style={S.chipText}>{zone.label}</Text>
+            <View>
+              {editingZones && (
+                <TouchableOpacity style={S.doneEditBar} onPress={() => setEditingZones(false)} activeOpacity={0.7}>
+                  <Text style={S.doneEditText}>Done</Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              )}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>
+                {zones.map((zone, idx) => {
+                  const rotate = jiggleAnim.interpolate({
+                    inputRange: [-1, 1],
+                    outputRange: idx % 2 === 0 ? ['-1.5deg', '1.5deg'] : ['1.5deg', '-1.5deg'],
+                  });
+                  return (
+                    <Animated.View key={zone.id} style={editingZones ? { transform: [{ rotate }] } : undefined}>
+                      <TouchableOpacity
+                        style={[S.chip, zone.markup_type === 'freehand' && S.chipFree]}
+                        onPress={() => { if (!editingZones) openZone(zone); }}
+                        onLongPress={() => !viewOnly && setEditingZones(true)}
+                        activeOpacity={0.75}>
+                        <Ionicons name={zoneIcon(zone.markup_type)} size={19} color={zone.markup_type === 'freehand' ? '#F59E0B' : T.indigo} />
+                        <Text style={S.chipText}>{zone.label}</Text>
+                      </TouchableOpacity>
+                      {editingZones && (
+                        <TouchableOpacity
+                          style={S.chipDeleteBadge}
+                          onPress={() => Alert.alert('Delete Zone', `Delete "${zone.label}"? This cannot be undone.`, [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Delete', style: 'destructive', onPress: () => deleteZone(zone) },
+                          ])}>
+                          <Ionicons name="remove" size={14} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      )}
+                    </Animated.View>
+                  );
+                })}
+              </ScrollView>
+            </View>
           )}
         </View>
       ) : (
@@ -578,6 +609,13 @@ const S = StyleSheet.create({
   chip:          { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: T.indigoSoft, borderRadius: 22, paddingHorizontal: 15, paddingVertical: 11, borderWidth: 1, borderColor: T.indigo },
   chipFree:      { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
   chipText:      { fontSize: 16, color: T.indigo, fontWeight: '600' },
+  chipDeleteBadge: {
+    position: 'absolute', top: -6, left: -6, width: 20, height: 20, borderRadius: 10,
+    backgroundColor: T.clay, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: T.paper, zIndex: 10,
+  },
+  doneEditBar:   { alignSelf: 'flex-end', paddingHorizontal: 20, paddingTop: 6 },
+  doneEditText:  { color: T.indigo, fontWeight: '700', fontSize: 14 },
   scroll:        { flex: 1, backgroundColor: T.paper },
   section:       { padding: 20, paddingBottom: 8 },
   sectionTitle:  { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
