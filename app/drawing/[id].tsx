@@ -496,7 +496,7 @@ export default function DrawingViewerScreen() {
 
 const S = StyleSheet.create({
   container:     { flex: 1, backgroundColor: T.paper },
-  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 22, paddingRight: 22, paddingTop: 60, paddingBottom: 5, gap: 12, backgroundColor: T.line, zIndex: 10 },
+  header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 22, paddingRight: 22, paddingTop: 60, paddingBottom: 5, gap: 12, backgroundColor: T.paper, zIndex: 10 },
   backBtn:       {
     width: 50, height: 50, borderRadius: 25,
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.line,
@@ -523,7 +523,7 @@ const S = StyleSheet.create({
   labelBubble:   { backgroundColor: T.indigo, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, alignSelf: 'center', marginBottom: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 6 },
   labelText:     { fontSize: 10, color: '#FFFFFF', fontWeight: '700' },
   labelFree:     { backgroundColor: '#F59E0B' },
-  strip:         { backgroundColor: T.line, maxHeight: 72 },
+  strip:         { backgroundColor: T.paper, maxHeight: 72 },
   stripContent:  { paddingLeft: 28, paddingRight: 16, gap: 12, alignItems: 'center', paddingTop: 6, paddingBottom: 14 },
   chip:          { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: T.indigoSoft, borderRadius: 22, paddingHorizontal: 15, paddingVertical: 11, borderWidth: 1, borderColor: T.indigo },
   chipFree:      { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
