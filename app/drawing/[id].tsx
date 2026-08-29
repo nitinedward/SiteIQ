@@ -385,6 +385,7 @@ export default function DrawingViewerScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => {
+          if (viewOnly) { router.back(); return; }
           if (showPdf) { setReturnToCanvas(false); setShowPdf(false); }
           else if (returnToCanvas) { setReturnToCanvas(false); setShowPdf(true); }
           else { router.back(); }
