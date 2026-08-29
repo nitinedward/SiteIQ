@@ -510,6 +510,7 @@ export default function SessionScreen() {
               </View>
               {generalObservations.map((obs, idx) => {
                 const summary = obs.zone_label?.trim() || obs.transcript?.trim() || obs.notes?.trim() || 'General observation';
+                const preview = obs.transcript?.trim() || obs.notes?.trim() || 'No notes yet';
                 return (
                   <Swipeable
                     key={obs.id}
@@ -534,7 +535,7 @@ export default function SessionScreen() {
                       <View style={S.drawBadge}><Text style={S.drawBadgeText}>{idx + 1}</Text></View>
                       <View style={{ flex: 1 }}>
                         <Text style={S.drawTitle} numberOfLines={1}>{summary}</Text>
-                        <Text style={S.drawMeta}>{(obs.severity || 'NONE')} - Tap to edit</Text>
+                        <Text style={S.drawMeta} numberOfLines={1}>{preview}</Text>
                       </View>
                       <Text style={S.arrow}>{'→'}</Text>
                     </TouchableOpacity>
