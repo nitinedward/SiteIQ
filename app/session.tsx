@@ -544,7 +544,7 @@ export default function SessionScreen() {
 
         <View style={S.section}>
           <TouchableOpacity style={S.completeBtn} onPress={completeSession} activeOpacity={0.85}>
-            <Text style={S.completeBtnText}>Complete Session & Generate Report</Text>
+            <Text style={S.completeBtnText}>Complete Session</Text>
           </TouchableOpacity>
           <Text style={S.completeHint}>Compiles all observations into a draft report</Text>
         </View>
@@ -663,7 +663,7 @@ const S = StyleSheet.create({
   addGeneralObsBtnText: { fontSize: 15, fontWeight: '700', color: T.indigo },
 
   // Complete
-  completeBtn:  { backgroundColor: T.sage, borderRadius: R.pill, height: 54, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  completeBtnText:{ color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  completeBtn:  { backgroundColor: T.sage, borderRadius: R.pill, height: 64, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  completeBtnText:{ color: '#FFFFFF', fontSize: 19, fontWeight: '700' },
   completeHint: { fontSize: 12, color: T.mid, textAlign: 'center' },
 });
