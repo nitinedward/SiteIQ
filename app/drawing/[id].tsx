@@ -49,7 +49,7 @@ export default function DrawingViewerScreen() {
   const [zones, setZones]         = useState<Zone[]>([]);
   const zonesRef                  = useRef<Zone[]>([]);
   const setZonesAndRef = (z: Zone[]) => { zonesRef.current = z; setZones(z); };
-  const [showPdf, setShowPdf]     = useState(false);
+  const [showPdf, setShowPdf]     = useState(viewOnly);
   const [returnToCanvas, setReturnToCanvas] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [pdfError, setPdfError]   = useState('');
