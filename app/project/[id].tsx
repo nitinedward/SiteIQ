@@ -227,7 +227,7 @@ export default function ProjectDetailScreen() {
       </ScrollView>
 
       {/* Footer nav — matches (tabs) bottom bar */}
-      <View style={[S.footer, { paddingBottom: 1 + insets.bottom }]}>
+      <View style={[S.footer, { paddingBottom: 0.25 + insets.bottom }]}>
         <TouchableOpacity style={S.footerTab} onPress={() => router.push('/(tabs)/projects')} activeOpacity={0.7}>
           <Ionicons name="folder-outline" size={31} color={T.mid} />
           <Text style={S.footerTabLabel}>Projects</Text>
