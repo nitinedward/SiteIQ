@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import * as SecureStore from 'expo-secure-store';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
+import { Swipeable } from 'react-native-gesture-handler';
 import { theme } from '../lib/theme';
 import { consumePendingDrawingSelection } from '../lib/pendingSelection';
 
@@ -460,24 +461,30 @@ export default function SessionScreen() {
           </View>
           <Text style={S.hint}>Tap a drawing to open the PDF and mark inspection zones</Text>
           {inspDrawings.map(drawing => (
-            <TouchableOpacity key={drawing.id} style={S.drawingRow}
-              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: drawing.id, title: drawing.title, file_url: drawing.file_url, preview_url: drawing.preview_url ?? '', project_id: String(project_id), inspection_id: inspectionId, view_only: 'false' } })}
-              activeOpacity={0.7}>
-              <View style={S.drawBadge}><Text style={S.drawBadgeText}>{drawing.number || '-'}</Text></View>
-              <View style={{ flex: 1 }}>
-                <Text style={S.drawTitle}>{drawing.title}</Text>
-                <Text style={S.drawMeta}>Rev {drawing.revision} - Tap to inspect</Text>
-              </View>
-              <TouchableOpacity
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                onPress={() => Alert.alert('Remove Drawing', `Remove "${drawing.title}" from today's inspection? Any zones already marked on it are kept.`, [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Remove', style: 'destructive', onPress: () => setSelectedDrawings(curr => curr.filter(id => id !== drawing.id)) },
-                ])}>
-                <Ionicons name="trash-outline" size={18} color={T.clay} />
+            <Swipeable
+              key={drawing.id}
+              overshootRight={false}
+              renderRightActions={() => (
+                <TouchableOpacity
+                  style={S.swipeDeleteBtn}
+                  onPress={() => Alert.alert('Remove Drawing', `Remove "${drawing.title}" from today's inspection? Any zones already marked on it are kept.`, [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Remove', style: 'destructive', onPress: () => setSelectedDrawings(curr => curr.filter(id => id !== drawing.id)) },
+                  ])}>
+                  <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}>
+              <TouchableOpacity style={S.drawingRow}
+                onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: drawing.id, title: drawing.title, file_url: drawing.file_url, preview_url: drawing.preview_url ?? '', project_id: String(project_id), inspection_id: inspectionId, view_only: 'false' } })}
+                activeOpacity={0.7}>
+                <View style={S.drawBadge}><Text style={S.drawBadgeText}>{drawing.number || '-'}</Text></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={S.drawTitle}>{drawing.title}</Text>
+                  <Text style={S.drawMeta}>Rev {drawing.revision} - Tap to inspect</Text>
+                </View>
+                <Text style={S.arrow}>{'→'}</Text>
               </TouchableOpacity>
-              <Text style={S.arrow}>{'→'}</Text>
-            </TouchableOpacity>
+            </Swipeable>
           ))}
         </View>
 
@@ -630,6 +637,7 @@ const S = StyleSheet.create({
   drawTitle:    { fontSize: 14, color: T.ink, fontWeight: '500', marginBottom: 2 },
   drawMeta:     { fontSize: 12, color: T.mid },
   arrow:        { fontSize: 20, color: T.mid },
+  swipeDeleteBtn: { backgroundColor: T.clay, width: 72, borderRadius: R.md, marginBottom: 8, alignItems: 'center', justifyContent: 'center' },
   addDrawText:  { fontSize: 13, color: T.indigo, fontWeight: '700' },
 
   // General observation card
