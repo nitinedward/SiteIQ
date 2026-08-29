@@ -405,7 +405,7 @@ export default function SessionScreen() {
           {/* Start */}
           <View style={S.section}>
             <TouchableOpacity style={[S.startBtn, isSaving && { opacity: 0.6 }]} onPress={startCapturing} disabled={isSaving} activeOpacity={0.85}>
-              {isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={S.startBtnText}>{'Start Capturing Observations →'}</Text>}
+              {isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={S.startBtnText}>{'Start Capturing →'}</Text>}
             </TouchableOpacity>
             <Text style={S.startHint}>Site contact details saved automatically for next time</Text>
           </View>
@@ -569,8 +569,8 @@ const S = StyleSheet.create({
   previewValue: { fontSize: 12, color: T.ink, flex: 1 },
 
   // Start button
-  startBtn:     { backgroundColor: T.indigo, borderRadius: R.pill, height: 54, alignItems: 'center', justifyContent: 'center' },
-  startBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  startBtn:     { backgroundColor: T.indigo, borderRadius: R.pill, height: 64, alignItems: 'center', justifyContent: 'center' },
+  startBtnText: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   startHint:    { fontSize: 12, color: T.mid, textAlign: 'center', marginTop: 8 },
 
   // Drawing rows in capture
