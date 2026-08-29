@@ -18,7 +18,7 @@ export default function TabLayout() {
           borderTopColor: T.line,
           borderTopWidth: 1,
           height: 60 + insets.bottom,
-          paddingBottom: 0.25 + insets.bottom,
+          paddingBottom: 0.1 + insets.bottom,
           paddingTop: 2,
         },
         tabBarIconStyle: {
@@ -36,7 +36,7 @@ export default function TabLayout() {
         options={{
           title: 'Projects',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'folder' : 'folder-outline'} size={34} color={color} />
+            <Ionicons name={focused ? 'folder' : 'folder-outline'} size={38} color={color} />
           ),
         }}
       />
@@ -45,7 +45,7 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={34} color={color} />
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={38} color={color} />
           ),
         }}
       />
