@@ -1333,10 +1333,12 @@ export default function AdminPage() {
         <div style={{ padding: '32px 28px', maxWidth: 860 }}>
 
           {/* Team heading */}
-          <div style={{ marginBottom: 24 }}>
-            <h1 style={{ fontFamily: 'var(--f-heading)', fontSize: 30, fontWeight: 800, color: 'var(--indigo-deep)', lineHeight: 1 }}>Team Members</h1>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--text-mid)', marginTop: 8 }}>
-              {members.length} engineers · {firmName}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 24 }}>
+            <div>
+              <h1 style={{ fontFamily: 'var(--f-heading)', fontSize: 30, fontWeight: 800, color: 'var(--indigo-deep)', lineHeight: 1 }}>Team</h1>
+              <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)', marginTop: 8 }}>
+                {members.length} {members.length === 1 ? 'person' : 'people'} · {firmName}
+              </div>
             </div>
           </div>
 
@@ -1383,71 +1385,49 @@ export default function AdminPage() {
             </div>
           </Card>
 
-          {/* Members table */}
+          {/* Members list */}
           <Card style={{ overflow: 'hidden' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border-line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontFamily: 'var(--f-heading)', fontSize: 16, fontWeight: 800, color: 'var(--text-ink)' }}>Members</span>
               <Btn variant="primary" onClick={() => setShowJoinCodePanel(v => !v)}>+ Add Engineer</Btn>
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  {['Member', 'Role', 'Email', 'Status', 'Actions'].map(h => (
-                    <th key={h} style={th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {members.map(m => (
-                  <tr
-                    key={m.id}
-                    style={{ borderBottom: '1px solid var(--border-line)' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--paper)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+            <div style={{ padding: '4px 24px' }}>
+              {members.map((m, i) => (
+                <div key={m.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 14, padding: '16px 0',
+                  borderBottom: i < members.length - 1 ? '1px solid var(--border-line)' : 'none',
+                }}>
+                  <Avatar name={m.full_name} size={40} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.full_name}</div>
+                    <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>
+                  </div>
+                  <span style={{
+                    background: m.role === 'admin' ? 'var(--indigo-soft)' : 'var(--sage-soft)',
+                    color: m.role === 'admin' ? 'var(--indigo)' : 'var(--sage-ink)',
+                    fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 999, flexShrink: 0,
+                  }}>
+                    {m.role === 'admin' ? 'Admin' : 'Engineer'}
+                  </span>
+                  <select
+                    value={m.role}
+                    onChange={e => updateMemberRole(m.id, e.target.value)}
+                    style={{ fontFamily: 'var(--f-text)', fontSize: 13, border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', color: 'var(--text-ink)', background: 'var(--surface)', outline: 'none', flexShrink: 0 }}
                   >
-                    <td style={td}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <Avatar name={m.full_name} size={36} />
-                        <span style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>{m.full_name}</span>
-                      </div>
-                    </td>
-                    <td style={td}>
-                      <span style={{
-                        background: m.role === 'admin' ? 'var(--indigo-soft)' : 'var(--sage-soft)',
-                        color: m.role === 'admin' ? 'var(--indigo)' : 'var(--sage-ink)',
-                        fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 99,
-                      }}>
-                        {m.role === 'admin' ? 'Admin' : 'Engineer'}
-                      </span>
-                    </td>
-                    <td style={{ ...td, color: 'var(--text-mid)' }}>{m.email}</td>
-                    <td style={td}>
-                      <span style={{ background: 'var(--sage-soft)', color: 'var(--sage-ink)', fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>Active</span>
-                    </td>
-                    <td style={td}>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <select
-                          value={m.role}
-                          onChange={e => updateMemberRole(m.id, e.target.value)}
-                          style={{ fontFamily: 'var(--f-text)', fontSize: 13, border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)', padding: '6px 10px', color: 'var(--text-ink)', background: 'var(--surface)', outline: 'none' }}
-                        >
-                          <option value="member">Engineer</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                        {m.user_id !== currentUserId && (
-                          <button
-                            onClick={() => removeMember(m.id, m.user_id, m.full_name)}
-                            style={{ background: 'var(--clay-soft)', color: 'var(--clay-ink)', border: '1px solid rgba(229,115,91,.3)', borderRadius: 'var(--radius-pill)', padding: '6px 12px', fontSize: 13, cursor: 'pointer' }}
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    <option value="member">Engineer</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  {m.user_id !== currentUserId && (
+                    <button
+                      onClick={() => removeMember(m.id, m.user_id, m.full_name)}
+                      style={{ background: 'var(--clay-soft)', color: 'var(--clay-ink)', border: '1px solid rgba(229,115,91,.3)', borderRadius: 'var(--radius-pill)', padding: '6px 12px', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
           </Card>
 
         </div>
