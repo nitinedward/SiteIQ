@@ -658,7 +658,7 @@ const S = StyleSheet.create({
   // General observation card
   addGeneralObsBtn: {
     alignItems: 'center', justifyContent: 'center', paddingVertical: 20,
-    borderRadius: R.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: T.indigo,
+    borderRadius: R.pill, borderWidth: 1.5, borderStyle: 'dashed', borderColor: T.indigo,
   },
   addGeneralObsBtnText: { fontSize: 15, fontWeight: '700', color: T.indigo },
 
