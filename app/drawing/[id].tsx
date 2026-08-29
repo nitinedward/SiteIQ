@@ -262,7 +262,7 @@ export default function DrawingViewerScreen() {
         }
       }
 
-      if (t === 'pin' && tapStart.current && !hasMoved.current) {
+      if (!viewOnly && t === 'pin' && tapStart.current && !hasMoved.current) {
         const dt = Date.now() - tapStart.current.t;
         tapStart.current = null; hasMoved.current = false;
         if (dt < 500) {
