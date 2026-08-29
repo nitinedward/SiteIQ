@@ -376,7 +376,7 @@ export default function SessionScreen() {
                 </View>
                 <View style={S.checkInfo}>
                   <Text style={S.checkTitle}>
-                    {selectedDrawings.length === 0 ? 'Select drawings' : `${selectedDrawings.length} drawing${selectedDrawings.length === 1 ? '' : 's'} selected`}
+                    {selectedDrawings.length === 0 ? 'Select drawings' : 'Drawings Selected'}
                   </Text>
                   <Text style={S.checkMeta}>Tap to choose the drawings relevant to today's inspection</Text>
                 </View>
