@@ -332,14 +332,16 @@ const S = StyleSheet.create({
   },
   emptyText: { fontSize: 13, color: T.mid, textAlign: 'center' },
 
-  // Footer nav
+  // Footer nav — height controls the bar's overall thickness; footerTab's
+  // justifyContent/paddingBottom controls where the icon+label sit inside
+  // that fixed height, so the two can be tuned independently.
   footer: {
     flexDirection: 'row',
     backgroundColor: T.surface,
     borderTopWidth: 1,
     borderTopColor: T.line,
-    paddingTop: 3,
+    height: 48,
   },
-  footerTab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  footerTab: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 6, gap: 2 },
   footerTabLabel: { fontSize: 13, fontWeight: '700', color: T.mid },
 });
