@@ -395,12 +395,20 @@ export default function DrawingViewerScreen() {
           <Ionicons name="arrow-back" size={22} color={T.indigo} />
         </TouchableOpacity>
         <View style={S.headerMid}>
-          <Text style={S.headerTitle} numberOfLines={1}>{viewOnly ? 'View Drawing' : 'PDF Mark-up'}</Text>
-          <Text style={S.headerSub} numberOfLines={1}>{title}</Text>
+          {viewOnly ? (
+            <Text style={S.headerTitle} numberOfLines={1}>{title}</Text>
+          ) : (
+            <>
+              <Text style={S.headerTitle} numberOfLines={1}>PDF Mark-up</Text>
+              <Text style={S.headerSub} numberOfLines={1}>{title}</Text>
+            </>
+          )}
         </View>
-        <TouchableOpacity style={S.toggleBtn} onPress={() => { setIsLoading(true); setPdfError(''); if (showPdf) setReturnToCanvas(true); setShowPdf(v => !v); }}>
-          <Text style={S.toggleText}>{showPdf ? 'Zones' : 'Drawing'}</Text>
-        </TouchableOpacity>
+        {!viewOnly && (
+          <TouchableOpacity style={S.toggleBtn} onPress={() => { setIsLoading(true); setPdfError(''); if (showPdf) setReturnToCanvas(true); setShowPdf(v => !v); }}>
+            <Text style={S.toggleText}>{showPdf ? 'Zones' : 'Drawing'}</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {showPdf ? (
