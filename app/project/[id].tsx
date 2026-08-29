@@ -43,6 +43,7 @@ export default function ProjectDetailScreen() {
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState('');
   const [photoCount, setPhotoCount]   = useState(0);
+  const [showAllDrawings, setShowAllDrawings] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -164,8 +165,8 @@ export default function ProjectDetailScreen() {
           <View style={S.sectionHeaderRow}>
             <Text style={S.sectionTitleRow}>Drawings</Text>
             {drawings.length > DRAWING_PREVIEW_COUNT && (
-              <TouchableOpacity onPress={() => router.push({ pathname: '/drawings', params: { project_id: project.id, project_name: project.name } })}>
-                <Text style={S.viewAllText}>View all</Text>
+              <TouchableOpacity onPress={() => setShowAllDrawings(v => !v)}>
+                <Text style={S.viewAllText}>{showAllDrawings ? 'Show less' : 'View all'}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -173,7 +174,7 @@ export default function ProjectDetailScreen() {
             <View style={S.emptyCard}>
               <Text style={S.emptyText}>No drawings — admin uploads via web portal</Text>
             </View>
-          ) : drawings.slice(0, DRAWING_PREVIEW_COUNT).map(d => (
+          ) : (showAllDrawings ? drawings : drawings.slice(0, DRAWING_PREVIEW_COUNT)).map(d => (
             <TouchableOpacity key={d.id} style={S.row}
               onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, file_url: d.file_url, preview_url: d.preview_url ?? '', project_id: project.id, view_only: 'true' } })}
               activeOpacity={0.7}>
