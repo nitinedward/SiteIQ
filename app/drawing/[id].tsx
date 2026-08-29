@@ -41,6 +41,7 @@ export default function DrawingViewerScreen() {
   const drawingId    = params.id as string;
   const title        = params.title as string;
   const number       = params.number as string | undefined;
+  const revision     = params.revision as string | undefined;
   const fileUrl      = params.file_url as string;
   const previewUrl   = params.preview_url as string | undefined;
   const projectId    = params.project_id as string;
@@ -398,7 +399,7 @@ export default function DrawingViewerScreen() {
         <View style={S.headerMid}>
           {viewOnly ? (
             <>
-              <Text style={S.headerTitle} numberOfLines={1}>{number || title}</Text>
+              <Text style={S.headerTitle} numberOfLines={1}>{number ? `${number}${revision ? ` · Rev ${revision}` : ''}` : title}</Text>
               {!!number && <Text style={S.headerSub} numberOfLines={1}>{title}</Text>}
             </>
           ) : (
