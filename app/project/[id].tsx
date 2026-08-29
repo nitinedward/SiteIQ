@@ -218,7 +218,7 @@ const S = StyleSheet.create({
   scroll:      { flex: 1 },
 
   // Header
-  header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, backgroundColor: T.surface, borderBottomWidth: 1, borderBottomColor: T.line, gap: 12 },
+  header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 20, backgroundColor: T.paper, borderBottomWidth: 1, borderBottomColor: T.line, gap: 12 },
   backBtn:     {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.line,
