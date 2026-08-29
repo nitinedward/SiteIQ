@@ -326,20 +326,18 @@ export default function DrawingViewerScreen() {
   const handleSave = async () => {
     if (!newLabel.trim()) { Alert.alert('Missing Label', 'Enter a zone name.'); return; }
     if (!pendingZone) return;
-    const label = newLabel.trim();
-    const { data, error } = await supabase.from('zones').insert({
+    const { error } = await supabase.from('zones').insert({
       drawing_id: drawingId, project_id: projectId,
       inspection_id: inspectionId || null,
-      label,
+      label: newLabel.trim(),
       x_percent: pendingZone.x_percent ?? 0,
       y_percent: pendingZone.y_percent ?? 0,
       markup_type: pendingZone.markup_type ?? 'pin',
       shape_data: pendingZone.shape_data ?? null,
-    }).select('id').single();
-    if (error || !data) { Alert.alert('Error', 'Could not save zone.'); return; }
+    });
+    if (error) { Alert.alert('Error', 'Could not save zone.'); return; }
     setNewLabel(''); setShowModal(false); setPendingZone(null); setLiveRect(null); setLivePath([]);
     fetchZones();
-    router.push({ pathname: '/observation', params: { zone_id: data.id, zone_label: label, project_id: projectId, inspection_id: inspectionId } });
   };
 
   const openZone = async (zone: Zone) => {
@@ -457,43 +455,36 @@ export default function DrawingViewerScreen() {
             {!!pdfError && <View style={S.overlay}><Text style={S.errTxt}>{pdfError}</Text><TouchableOpacity onPress={loadPreviewDimensions}><Text style={S.retryTxt}>Tap to retry</Text></TouchableOpacity></View>}
           </View>
           {zones.length > 0 && (
-            <View>
-              {editingZones && (
-                <TouchableOpacity style={S.doneEditBar} onPress={() => setEditingZones(false)} activeOpacity={0.7}>
-                  <Text style={S.doneEditText}>Done</Text>
-                </TouchableOpacity>
-              )}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>
-                {zones.map((zone, idx) => {
-                  const rotate = jiggleAnim.interpolate({
-                    inputRange: [-1, 1],
-                    outputRange: idx % 2 === 0 ? ['-1.5deg', '1.5deg'] : ['1.5deg', '-1.5deg'],
-                  });
-                  return (
-                    <Animated.View key={zone.id} style={editingZones ? { transform: [{ rotate }] } : undefined}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>
+              {zones.map((zone, idx) => {
+                const rotate = jiggleAnim.interpolate({
+                  inputRange: [-1, 1],
+                  outputRange: idx % 2 === 0 ? ['-1.5deg', '1.5deg'] : ['1.5deg', '-1.5deg'],
+                });
+                return (
+                  <Animated.View key={zone.id} style={editingZones ? { transform: [{ rotate }] } : undefined}>
+                    <TouchableOpacity
+                      style={[S.chip, zone.markup_type === 'freehand' && S.chipFree]}
+                      onPress={() => { editingZones ? setEditingZones(false) : openZone(zone); }}
+                      onLongPress={() => !viewOnly && setEditingZones(true)}
+                      activeOpacity={0.75}>
+                      <Ionicons name={zoneIcon(zone.markup_type)} size={19} color={zone.markup_type === 'freehand' ? '#F59E0B' : T.indigo} />
+                      <Text style={S.chipText}>{zone.label}</Text>
+                    </TouchableOpacity>
+                    {editingZones && (
                       <TouchableOpacity
-                        style={[S.chip, zone.markup_type === 'freehand' && S.chipFree]}
-                        onPress={() => { if (!editingZones) openZone(zone); }}
-                        onLongPress={() => !viewOnly && setEditingZones(true)}
-                        activeOpacity={0.75}>
-                        <Ionicons name={zoneIcon(zone.markup_type)} size={19} color={zone.markup_type === 'freehand' ? '#F59E0B' : T.indigo} />
-                        <Text style={S.chipText}>{zone.label}</Text>
+                        style={S.chipDeleteBadge}
+                        onPress={() => Alert.alert('Delete Zone', `Delete "${zone.label}"? This cannot be undone.`, [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: () => { deleteZone(zone); setEditingZones(false); } },
+                        ])}>
+                        <Ionicons name="remove" size={14} color="#FFFFFF" />
                       </TouchableOpacity>
-                      {editingZones && (
-                        <TouchableOpacity
-                          style={S.chipDeleteBadge}
-                          onPress={() => Alert.alert('Delete Zone', `Delete "${zone.label}"? This cannot be undone.`, [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Delete', style: 'destructive', onPress: () => deleteZone(zone) },
-                          ])}>
-                          <Ionicons name="remove" size={14} color="#FFFFFF" />
-                        </TouchableOpacity>
-                      )}
-                    </Animated.View>
-                  );
-                })}
-              </ScrollView>
-            </View>
+                    )}
+                  </Animated.View>
+                );
+              })}
+            </ScrollView>
           )}
         </View>
       ) : (
@@ -614,8 +605,6 @@ const S = StyleSheet.create({
     backgroundColor: T.clay, alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: T.paper, zIndex: 10,
   },
-  doneEditBar:   { alignSelf: 'flex-end', paddingHorizontal: 20, paddingTop: 6 },
-  doneEditText:  { color: T.indigo, fontWeight: '700', fontSize: 14 },
   scroll:        { flex: 1, backgroundColor: T.paper },
   section:       { padding: 20, paddingBottom: 8 },
   sectionTitle:  { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
