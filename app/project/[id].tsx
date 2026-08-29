@@ -234,9 +234,9 @@ const S = StyleSheet.create({
   heroSection: { padding: 16 },
   startBtn:    {
     backgroundColor: T.marigold,
-    borderRadius: 22,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    borderRadius: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 22,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -247,8 +247,8 @@ const S = StyleSheet.create({
     elevation: 6,
   },
   startLeft:   { gap: 4 },
-  startTitle:  { fontSize: 16, fontWeight: '800', color: T.indigoDeep },
-  startSub:    { fontSize: 12, color: 'rgba(44,57,80,0.72)' },
+  startTitle:  { fontSize: 20, fontWeight: '800', color: T.indigoDeep },
+  startSub:    { fontSize: 13, color: 'rgba(44,57,80,0.72)' },
   startArrow:  { fontSize: 32, color: T.indigoDeep, lineHeight: 36 },
 
   // Stats
