@@ -13,7 +13,7 @@ const supabase = createClient(
 )
 
 type Project = { id: string; name: string; project_number: string; address: string; client_name: string; status: string }
-type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; file_name: string; preview_url?: string | null; created_at: string }
+type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; file_name: string; preview_url?: string | null; created_at: string; sort_order?: number | null }
 type Member  = { id: string; user_id: string; full_name: string; email: string; role: string }
 
 const STATUS_OPTIONS = ['ACTIVE', 'ON_HOLD', 'COMPLETED'] as const
@@ -24,7 +24,13 @@ const STATUS_LABELS: Record<string, string> = { ACTIVE: 'Active', ON_HOLD: 'On H
 // LAST page of the newest batch on top. Sort newest batch first, but pages
 // within a batch in page order, using the batch id + page number embedded in
 // the file name; legacy rows that don't match just fall back to created_at.
+//
+// If any row has a manually-set sort_order (from drag-reordering in edit
+// mode), that takes priority over the batch/page heuristic entirely.
 function sortDrawingsForDisplay(rows: Drawing[]): Drawing[] {
+  if (rows.some(d => d.sort_order != null)) {
+    return [...rows].sort((a, b) => (a.sort_order ?? Number.MAX_SAFE_INTEGER) - (b.sort_order ?? Number.MAX_SAFE_INTEGER))
+  }
   const sortKey = (d: Drawing) => {
     const m = d.file_name?.match(/^drawing-(\d+)-p(\d+)/)
     return m
@@ -143,7 +149,9 @@ export default function AdminPage() {
   const [deletingSelected, setDeletingSelected]     = useState(false)
   const [renamingDrawingId, setRenamingDrawingId]   = useState<string | null>(null)
   const [renameTitle, setRenameTitle]               = useState('')
-  const [hoveredDrawingId, setHoveredDrawingId]     = useState<string | null>(null)
+  const [editModeDrawings, setEditModeDrawings]     = useState(false)
+  const [draggedDrawingId, setDraggedDrawingId]     = useState<string | null>(null)
+  const [dragOverDrawingId, setDragOverDrawingId]   = useState<string | null>(null)
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([])
   const [showNewProject, setShowNewProject]   = useState(false)
   const [savingAssignment, setSavingAssignment] = useState(false)
@@ -306,6 +314,38 @@ export default function AdminPage() {
       setUploadMsg({ ok: false, text: 'Rename failed: ' + error.message })
       await reloadDrawings()
     }
+  }
+
+  // Persists the current visual order as sort_order = index on every row.
+  // Non-fatal: if the column doesn't exist yet (migration not run), surfaces
+  // a message telling the user what to run, but doesn't revert the local
+  // (already-reordered) view.
+  const persistDrawingOrder = async (ordered: Drawing[]) => {
+    const results = await Promise.all(
+      ordered.map((d, i) => supabase.from('drawings').update({ sort_order: i }).eq('id', d.id))
+    )
+    const failed = results.find(r => r.error)
+    if (failed?.error) {
+      console.error('[reorder] failed to persist:', failed.error)
+      setUploadMsg({ ok: false, text: 'Order not saved — run in Supabase SQL Editor: ALTER TABLE drawings ADD COLUMN sort_order integer;' })
+    }
+  }
+
+  const handleDrawingDrop = (targetId: string) => {
+    setDragOverDrawingId(null)
+    const draggedId = draggedDrawingId
+    setDraggedDrawingId(null)
+    if (!draggedId || draggedId === targetId) return
+    setDrawings(curr => {
+      const fromIdx = curr.findIndex(d => d.id === draggedId)
+      const toIdx = curr.findIndex(d => d.id === targetId)
+      if (fromIdx === -1 || toIdx === -1) return curr
+      const next = [...curr]
+      const [moved] = next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, moved)
+      persistDrawingOrder(next)
+      return next
+    })
   }
 
   const toggleDrawingSelected = (id: string) => {
@@ -1063,32 +1103,52 @@ export default function AdminPage() {
                       </div>
                     ) : (
                       <>
-                        {/* Select-all / bulk-delete toolbar */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '4px 4px 12px' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-ink)', cursor: 'pointer', userSelect: 'none' }}>
-                            <input
-                              type="checkbox"
-                              checked={drawings.length > 0 && selectedDrawingIds.length === drawings.length}
-                              ref={el => { if (el) el.indeterminate = selectedDrawingIds.length > 0 && selectedDrawingIds.length < drawings.length }}
-                              onChange={toggleSelectAllDrawings}
-                              style={{ width: 16, height: 16, cursor: 'pointer' }}
-                            />
-                            Select all
-                          </label>
-                          {selectedDrawingIds.length > 0 && (
-                            <>
-                              <span style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>{selectedDrawingIds.length} selected</span>
-                              <button
-                                type="button"
-                                onClick={deleteSelectedDrawings}
-                                disabled={deletingSelected}
-                                style={{ background: 'var(--clay-soft)', color: 'var(--clay-ink)', border: '1px solid rgba(229,115,91,.3)', borderRadius: 'var(--radius-pill)', padding: '6px 14px', fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, cursor: deletingSelected ? 'not-allowed' : 'pointer', opacity: deletingSelected ? 0.6 : 1 }}
-                              >
-                                {deletingSelected ? 'Deleting…' : `Delete Selected (${selectedDrawingIds.length})`}
-                              </button>
-                            </>
-                          )}
+                        {/* Count + subtle Edit toggle */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 4px 12px' }}>
+                          <span style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>
+                            {drawings.length} drawing{drawings.length !== 1 ? 's' : ''}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => { setEditModeDrawings(v => !v); setSelectedDrawingIds([]) }}
+                            style={{
+                              background: 'none', border: 'none', cursor: 'pointer',
+                              fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700,
+                              color: editModeDrawings ? 'var(--indigo)' : 'var(--text-mid)',
+                            }}
+                          >
+                            {editModeDrawings ? 'Done' : 'Edit'}
+                          </button>
                         </div>
+
+                        {/* Select-all / bulk-delete toolbar — only while editing */}
+                        {editModeDrawings && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '4px 4px 12px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-ink)', cursor: 'pointer', userSelect: 'none' }}>
+                              <input
+                                type="checkbox"
+                                checked={drawings.length > 0 && selectedDrawingIds.length === drawings.length}
+                                ref={el => { if (el) el.indeterminate = selectedDrawingIds.length > 0 && selectedDrawingIds.length < drawings.length }}
+                                onChange={toggleSelectAllDrawings}
+                                style={{ width: 16, height: 16, cursor: 'pointer' }}
+                              />
+                              Select all
+                            </label>
+                            {selectedDrawingIds.length > 0 && (
+                              <>
+                                <span style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>{selectedDrawingIds.length} selected</span>
+                                <button
+                                  type="button"
+                                  onClick={deleteSelectedDrawings}
+                                  disabled={deletingSelected}
+                                  style={{ background: 'var(--clay-soft)', color: 'var(--clay-ink)', border: '1px solid rgba(229,115,91,.3)', borderRadius: 'var(--radius-pill)', padding: '6px 14px', fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, cursor: deletingSelected ? 'not-allowed' : 'pointer', opacity: deletingSelected ? 0.6 : 1 }}
+                                >
+                                  {deletingSelected ? 'Deleting…' : `Delete Selected (${selectedDrawingIds.length})`}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           {drawings.map(d => {
@@ -1096,22 +1156,34 @@ export default function AdminPage() {
                             return (
                               <div
                                 key={d.id}
-                                onClick={() => window.open(d.file_url, '_blank', 'noopener,noreferrer')}
-                                onMouseEnter={() => setHoveredDrawingId(d.id)}
-                                onMouseLeave={() => setHoveredDrawingId(curr => curr === d.id ? null : curr)}
-                                style={{ display: 'flex', alignItems: 'center', gap: 14, background: checked ? 'var(--indigo-soft)' : 'var(--paper)', border: `1px solid ${checked ? 'var(--indigo)' : 'var(--border-line)'}`, borderRadius: 'var(--radius-sm)', padding: '14px 20px', cursor: 'pointer' }}
+                                draggable={editModeDrawings}
+                                onDragStart={() => setDraggedDrawingId(d.id)}
+                                onDragOver={e => { if (editModeDrawings) { e.preventDefault(); if (dragOverDrawingId !== d.id) setDragOverDrawingId(d.id) } }}
+                                onDragLeave={() => setDragOverDrawingId(curr => curr === d.id ? null : curr)}
+                                onDrop={e => { e.preventDefault(); handleDrawingDrop(d.id) }}
+                                onDragEnd={() => { setDraggedDrawingId(null); setDragOverDrawingId(null) }}
+                                onClick={() => { if (!editModeDrawings) window.open(d.file_url, '_blank', 'noopener,noreferrer') }}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 14,
+                                  background: checked ? 'var(--indigo-soft)' : 'var(--paper)',
+                                  border: `1px solid ${dragOverDrawingId === d.id ? 'var(--indigo)' : checked ? 'var(--indigo)' : 'var(--border-line)'}`,
+                                  borderRadius: 'var(--radius-sm)', padding: '14px 20px',
+                                  cursor: editModeDrawings ? 'grab' : 'pointer',
+                                  opacity: draggedDrawingId === d.id ? 0.4 : 1,
+                                }}
                               >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onClick={e => e.stopPropagation()}
-                                  onChange={() => toggleDrawingSelected(d.id)}
-                                  style={{
-                                    width: 16, height: 16, cursor: 'pointer', flexShrink: 0,
-                                    opacity: checked || hoveredDrawingId === d.id ? 1 : 0,
-                                    transition: 'opacity 0.15s ease',
-                                  }}
-                                />
+                                {editModeDrawings && (
+                                  <span style={{ color: 'var(--text-mid)', fontSize: 15, flexShrink: 0, userSelect: 'none', cursor: 'grab' }}>⠿</span>
+                                )}
+                                {editModeDrawings && (
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onClick={e => e.stopPropagation()}
+                                    onChange={() => toggleDrawingSelected(d.id)}
+                                    style={{ width: 16, height: 16, cursor: 'pointer', flexShrink: 0 }}
+                                  />
+                                )}
                                 <div style={{ background: 'var(--indigo-soft)', color: 'var(--indigo)', fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 6, fontFamily: 'var(--f-mono)', flexShrink: 0 }}>
                                   {d.number || '—'}
                                 </div>
@@ -1132,19 +1204,16 @@ export default function AdminPage() {
                                   ) : (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                                       <div style={{ fontFamily: 'var(--f-text)', fontSize: 15, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
-                                      <button
-                                        type="button"
-                                        title="Rename"
-                                        onClick={e => { e.stopPropagation(); startRenameDrawing(d) }}
-                                        style={{
-                                          background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0,
-                                          color: 'var(--text-mid)', fontSize: 11, lineHeight: 1,
-                                          opacity: hoveredDrawingId === d.id ? 0.6 : 0,
-                                          transition: 'opacity 0.15s ease',
-                                        }}
-                                      >
-                                        ✏️
-                                      </button>
+                                      {editModeDrawings && (
+                                        <button
+                                          type="button"
+                                          title="Rename"
+                                          onClick={e => { e.stopPropagation(); startRenameDrawing(d) }}
+                                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, color: 'var(--text-mid)', fontSize: 11, lineHeight: 1, opacity: 0.6 }}
+                                        >
+                                          ✏️
+                                        </button>
+                                      )}
                                     </div>
                                   )}
                                   <div style={{ fontSize: 12, color: 'var(--text-mid)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>Rev {d.revision}</div>
