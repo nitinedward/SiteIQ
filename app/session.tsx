@@ -31,6 +31,7 @@ const WEATHER_OPTIONS = [
 
 type Step = 'details' | 'capture';
 type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; preview_url: string | null };
+type GeneralObservation = { id: string; notes: string | null; transcript: string | null; severity: string | null; created_at: string };
 
 function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; metering: number }) {
   const barAnims = useRef(Array.from({ length: BAR_COUNT }, () => new Animated.Value(0.05))).current;
@@ -90,6 +91,7 @@ export default function SessionScreen() {
   const [reportNo, setReportNo]         = useState('');
   const [allDrawings, setAllDrawings]         = useState<Drawing[]>([]);
   const [selectedDrawings, setSelectedDrawings] = useState<string[]>([]);
+  const [generalObservations, setGeneralObservations] = useState<GeneralObservation[]>([]);
   const [isRecording, setIsRecording]       = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const recordingRef                         = useRef<Audio.Recording | null>(null);
@@ -133,6 +135,14 @@ export default function SessionScreen() {
     const pending = consumePendingDrawingSelection();
     if (pending) setSelectedDrawings(pending);
   }, []));
+
+  const fetchGeneralObservations = async (id: string) => {
+    const { data } = await supabase.from('observations').select('id,notes,transcript,severity,created_at').eq('inspection_id', id).is('zone_id', null).order('created_at', { ascending: false });
+    setGeneralObservations((data as GeneralObservation[]) ?? []);
+  };
+  useFocusEffect(useCallback(() => {
+    if (inspectionId) fetchGeneralObservations(inspectionId);
+  }, [inspectionId]));
 
   const startRecording = async () => {
     try {
@@ -464,14 +474,42 @@ export default function SessionScreen() {
         </View>
 
         <View style={S.section}>
-          <Text style={S.sectionTitle}>General Observations</Text>
-          <TouchableOpacity style={S.addCard} onPress={() => router.push({ pathname: '/observation', params: { inspection_id: inspectionId, project_id: String(project_id), zone_id: 'general', zone_label: 'General Site Observation' } })} activeOpacity={0.7}>
-            <View style={{ flex: 1 }}>
-              <Text style={S.addCardTitle}>General Observation</Text>
-              <Text style={S.addCardSub}>Site-wide notes not tied to a specific drawing</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={T.mid} />
-          </TouchableOpacity>
+          {generalObservations.length === 0 ? (
+            <>
+              <Text style={S.sectionTitle}>General Observations</Text>
+              <TouchableOpacity style={S.addCard} onPress={() => router.push({ pathname: '/observation', params: { inspection_id: inspectionId, project_id: String(project_id), zone_id: 'general', zone_label: 'General Site Observation' } })} activeOpacity={0.7}>
+                <View style={{ flex: 1 }}>
+                  <Text style={S.addCardTitle}>General Observation</Text>
+                  <Text style={S.addCardSub}>Site-wide notes not tied to a specific drawing</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={T.mid} />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <View style={S.sectionRow}>
+                <Text style={[S.sectionTitle, { marginBottom: 0 }]}>General Observations ({generalObservations.length})</Text>
+                <TouchableOpacity onPress={() => router.push({ pathname: '/observation', params: { inspection_id: inspectionId, project_id: String(project_id), zone_id: 'general', zone_label: 'General Site Observation' } })}>
+                  <Text style={S.addDrawText}>+ Add</Text>
+                </TouchableOpacity>
+              </View>
+              {generalObservations.map((obs, idx) => {
+                const summary = obs.transcript?.trim() || obs.notes?.trim() || 'General observation';
+                return (
+                  <TouchableOpacity key={obs.id} style={S.drawingRow}
+                    onPress={() => router.push({ pathname: '/observation', params: { inspection_id: inspectionId, project_id: String(project_id), zone_id: 'general', zone_label: 'General Site Observation', observation_id: obs.id } })}
+                    activeOpacity={0.7}>
+                    <View style={S.drawBadge}><Text style={S.drawBadgeText}>{idx + 1}</Text></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={S.drawTitle} numberOfLines={1}>{summary}</Text>
+                      <Text style={S.drawMeta}>{(obs.severity || 'NONE')} - Tap to edit</Text>
+                    </View>
+                    <Text style={S.arrow}>{'→'}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </>
+          )}
         </View>
 
         <View style={S.section}>
