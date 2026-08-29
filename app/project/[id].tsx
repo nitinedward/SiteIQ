@@ -112,7 +112,7 @@ export default function ProjectDetailScreen() {
       {/* Header */}
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={18} color={T.indigo} />
+          <Ionicons name="arrow-back" size={22} color={T.indigo} />
         </TouchableOpacity>
         <View style={S.headerMid}>
           <Text style={S.headerTitle} numberOfLines={1}>{project.name}</Text>
@@ -220,7 +220,7 @@ const S = StyleSheet.create({
   // Header
   header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 20, backgroundColor: T.paper, borderBottomWidth: 1, borderBottomColor: T.line, gap: 12 },
   backBtn:     {
-    width: 40, height: 40, borderRadius: 20,
+    width: 50, height: 50, borderRadius: 25,
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.line,
     alignItems: 'center', justifyContent: 'center',
   },
@@ -228,7 +228,7 @@ const S = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: '800', color: T.indigo },
   headerSub:   { fontSize: 11, color: T.mid, marginTop: 1 },
   statusPill:  { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  statusText:  { fontSize: 10, fontWeight: '700' },
+  statusText:  { fontSize: 13, fontWeight: '700' },
 
   // Hero start button
   heroSection: { padding: 16 },
