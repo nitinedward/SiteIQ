@@ -147,8 +147,8 @@ export default function AdminPage() {
   const [drawings, setDrawings]               = useState<Drawing[]>([])
   const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([])
   const [deletingSelected, setDeletingSelected]     = useState(false)
-  const [renamingDrawingId, setRenamingDrawingId]   = useState<string | null>(null)
-  const [renameTitle, setRenameTitle]               = useState('')
+  const [editingDrawingField, setEditingDrawingField] = useState<{ id: string; field: 'title' | 'number' | 'revision' } | null>(null)
+  const [editingFieldValue, setEditingFieldValue]      = useState('')
   const [editModeDrawings, setEditModeDrawings]     = useState(false)
   const [draggedDrawingId, setDraggedDrawingId]     = useState<string | null>(null)
   const [dragOverDrawingId, setDragOverDrawingId]   = useState<string | null>(null)
@@ -293,25 +293,27 @@ export default function AdminPage() {
     setDrawings(sortDrawingsForDisplay(data ?? []))
   }
 
-  const startRenameDrawing = (d: Drawing) => {
-    setRenamingDrawingId(d.id)
-    setRenameTitle(d.title)
+  const startEditDrawingField = (d: Drawing, field: 'title' | 'number' | 'revision') => {
+    setEditingDrawingField({ id: d.id, field })
+    setEditingFieldValue(d[field] ?? '')
   }
 
-  const cancelRenameDrawing = () => {
-    setRenamingDrawingId(null)
-    setRenameTitle('')
+  const cancelEditDrawingField = () => {
+    setEditingDrawingField(null)
+    setEditingFieldValue('')
   }
 
-  const saveRenameDrawing = async (id: string) => {
-    const trimmed = renameTitle.trim()
-    if (!trimmed) { cancelRenameDrawing(); return }
-    setDrawings(curr => curr.map(d => d.id === id ? { ...d, title: trimmed } : d))
-    setRenamingDrawingId(null)
-    const { error } = await supabase.from('drawings').update({ title: trimmed }).eq('id', id)
+  const saveEditDrawingField = async () => {
+    if (!editingDrawingField) return
+    const { id, field } = editingDrawingField
+    const trimmed = editingFieldValue.trim()
+    if (!trimmed) { cancelEditDrawingField(); return }
+    setDrawings(curr => curr.map(d => d.id === id ? { ...d, [field]: trimmed } : d))
+    setEditingDrawingField(null)
+    const { error } = await supabase.from('drawings').update({ [field]: trimmed }).eq('id', id)
     if (error) {
-      console.error('[rename] failed:', error)
-      setUploadMsg({ ok: false, text: 'Rename failed: ' + error.message })
+      console.error(`[edit-${field}] failed:`, error)
+      setUploadMsg({ ok: false, text: 'Update failed: ' + error.message })
       await reloadDrawings()
     }
   }
@@ -331,21 +333,31 @@ export default function AdminPage() {
     }
   }
 
-  const handleDrawingDrop = (targetId: string) => {
-    setDragOverDrawingId(null)
+  // Live-reorders the list as the dragged row passes over another row, so
+  // the rest of the list visibly shifts to make room (rather than only
+  // reordering once you release).
+  const handleDrawingDragOver = (targetId: string) => {
+    if (dragOverDrawingId !== targetId) setDragOverDrawingId(targetId)
     const draggedId = draggedDrawingId
-    setDraggedDrawingId(null)
     if (!draggedId || draggedId === targetId) return
     setDrawings(curr => {
       const fromIdx = curr.findIndex(d => d.id === draggedId)
       const toIdx = curr.findIndex(d => d.id === targetId)
-      if (fromIdx === -1 || toIdx === -1) return curr
+      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return curr
       const next = [...curr]
       const [moved] = next.splice(fromIdx, 1)
       next.splice(toIdx, 0, moved)
-      persistDrawingOrder(next)
       return next
     })
+  }
+
+  // Fires once per drag gesture regardless of where it ends — the list is
+  // already in its final visual order by this point (from dragOver above),
+  // so just persist it.
+  const handleDrawingDragEnd = () => {
+    setDraggedDrawingId(null)
+    setDragOverDrawingId(null)
+    persistDrawingOrder(drawings)
   }
 
   const toggleDrawingSelected = (id: string) => {
@@ -1158,10 +1170,9 @@ export default function AdminPage() {
                                 key={d.id}
                                 draggable={editModeDrawings}
                                 onDragStart={() => setDraggedDrawingId(d.id)}
-                                onDragOver={e => { if (editModeDrawings) { e.preventDefault(); if (dragOverDrawingId !== d.id) setDragOverDrawingId(d.id) } }}
-                                onDragLeave={() => setDragOverDrawingId(curr => curr === d.id ? null : curr)}
-                                onDrop={e => { e.preventDefault(); handleDrawingDrop(d.id) }}
-                                onDragEnd={() => { setDraggedDrawingId(null); setDragOverDrawingId(null) }}
+                                onDragOver={e => { if (editModeDrawings) { e.preventDefault(); handleDrawingDragOver(d.id) } }}
+                                onDrop={e => e.preventDefault()}
+                                onDragEnd={handleDrawingDragEnd}
                                 onClick={() => { if (!editModeDrawings) window.open(d.file_url, '_blank', 'noopener,noreferrer') }}
                                 style={{
                                   display: 'flex', alignItems: 'center', gap: 14,
@@ -1184,20 +1195,42 @@ export default function AdminPage() {
                                     style={{ width: 16, height: 16, cursor: 'pointer', flexShrink: 0 }}
                                   />
                                 )}
-                                <div style={{ background: 'var(--indigo-soft)', color: 'var(--indigo)', fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 6, fontFamily: 'var(--f-mono)', flexShrink: 0 }}>
-                                  {d.number || '—'}
-                                </div>
+                                {editingDrawingField?.id === d.id && editingDrawingField.field === 'number' ? (
+                                  <input
+                                    autoFocus
+                                    value={editingFieldValue}
+                                    onClick={e => e.stopPropagation()}
+                                    onChange={e => setEditingFieldValue(e.target.value)}
+                                    onBlur={saveEditDrawingField}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') { e.preventDefault(); saveEditDrawingField() }
+                                      if (e.key === 'Escape') { e.preventDefault(); cancelEditDrawingField() }
+                                    }}
+                                    style={{ width: 70, background: 'var(--white)', color: 'var(--indigo)', fontSize: 11, fontWeight: 700, padding: '5px 8px', borderRadius: 6, fontFamily: 'var(--f-mono)', border: '1px solid var(--indigo)', flexShrink: 0 }}
+                                  />
+                                ) : (
+                                  <div
+                                    onClick={e => { if (editModeDrawings) { e.stopPropagation(); startEditDrawingField(d, 'number') } }}
+                                    style={{
+                                      background: 'var(--indigo-soft)', color: 'var(--indigo)', fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 6, fontFamily: 'var(--f-mono)', flexShrink: 0,
+                                      cursor: editModeDrawings ? 'text' : 'default',
+                                      border: editModeDrawings ? '1px dashed var(--indigo)' : '1px solid transparent',
+                                    }}
+                                  >
+                                    {d.number || '—'}
+                                  </div>
+                                )}
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  {renamingDrawingId === d.id ? (
+                                  {editingDrawingField?.id === d.id && editingDrawingField.field === 'title' ? (
                                     <input
                                       autoFocus
-                                      value={renameTitle}
+                                      value={editingFieldValue}
                                       onClick={e => e.stopPropagation()}
-                                      onChange={e => setRenameTitle(e.target.value)}
-                                      onBlur={() => saveRenameDrawing(d.id)}
+                                      onChange={e => setEditingFieldValue(e.target.value)}
+                                      onBlur={saveEditDrawingField}
                                       onKeyDown={e => {
-                                        if (e.key === 'Enter') { e.preventDefault(); saveRenameDrawing(d.id) }
-                                        if (e.key === 'Escape') { e.preventDefault(); cancelRenameDrawing() }
+                                        if (e.key === 'Enter') { e.preventDefault(); saveEditDrawingField() }
+                                        if (e.key === 'Escape') { e.preventDefault(); cancelEditDrawingField() }
                                       }}
                                       style={{ width: '100%', fontFamily: 'var(--f-text)', fontSize: 15, fontWeight: 500, color: 'var(--text-ink)', background: 'var(--white)', border: '1px solid var(--indigo)', borderRadius: 6, padding: '3px 8px' }}
                                     />
@@ -1208,7 +1241,7 @@ export default function AdminPage() {
                                         <button
                                           type="button"
                                           title="Rename"
-                                          onClick={e => { e.stopPropagation(); startRenameDrawing(d) }}
+                                          onClick={e => { e.stopPropagation(); startEditDrawingField(d, 'title') }}
                                           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, color: 'var(--text-mid)', fontSize: 11, lineHeight: 1, opacity: 0.6 }}
                                         >
                                           ✏️
@@ -1216,7 +1249,31 @@ export default function AdminPage() {
                                       )}
                                     </div>
                                   )}
-                                  <div style={{ fontSize: 12, color: 'var(--text-mid)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>Rev {d.revision}</div>
+                                  {editingDrawingField?.id === d.id && editingDrawingField.field === 'revision' ? (
+                                    <input
+                                      autoFocus
+                                      value={editingFieldValue}
+                                      onClick={e => e.stopPropagation()}
+                                      onChange={e => setEditingFieldValue(e.target.value)}
+                                      onBlur={saveEditDrawingField}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') { e.preventDefault(); saveEditDrawingField() }
+                                        if (e.key === 'Escape') { e.preventDefault(); cancelEditDrawingField() }
+                                      }}
+                                      style={{ width: 60, marginTop: 2, fontSize: 12, color: 'var(--text-ink)', fontFamily: 'var(--f-mono)', background: 'var(--white)', border: '1px solid var(--indigo)', borderRadius: 4, padding: '1px 6px' }}
+                                    />
+                                  ) : (
+                                    <div
+                                      onClick={e => { if (editModeDrawings) { e.stopPropagation(); startEditDrawingField(d, 'revision') } }}
+                                      style={{
+                                        fontSize: 12, color: 'var(--text-mid)', fontFamily: 'var(--f-mono)', marginTop: 2, width: 'fit-content',
+                                        cursor: editModeDrawings ? 'text' : 'default',
+                                        borderBottom: editModeDrawings ? '1px dashed var(--text-mid)' : 'none',
+                                      }}
+                                    >
+                                      Rev {d.revision}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )
