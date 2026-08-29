@@ -227,13 +227,13 @@ export default function ProjectDetailScreen() {
       </ScrollView>
 
       {/* Footer nav — matches (tabs) bottom bar */}
-      <View style={[S.footer, { paddingBottom: 0.25 + insets.bottom }]}>
+      <View style={[S.footer, { paddingBottom: 0 + insets.bottom }]}>
         <TouchableOpacity style={S.footerTab} onPress={() => router.push('/(tabs)/projects')} activeOpacity={0.7}>
-          <Ionicons name="briefcase-outline" size={22} color={T.mid} />
+          <Ionicons name="briefcase-outline" size={28} color={T.mid} />
           <Text style={S.footerTabLabel}>Projects</Text>
         </TouchableOpacity>
         <TouchableOpacity style={S.footerTab} onPress={() => router.push('/(tabs)/profile')} activeOpacity={0.7}>
-          <Ionicons name="person-outline" size={31} color={T.mid} />
+          <Ionicons name="person-outline" size={26} color={T.mid} style={{ marginLeft: -3 }} />
           <Text style={S.footerTabLabel}>Profile</Text>
         </TouchableOpacity>
       </View>
@@ -338,8 +338,8 @@ const S = StyleSheet.create({
     backgroundColor: T.surface,
     borderTopWidth: 1,
     borderTopColor: T.line,
-    paddingTop: 10,
+    paddingTop: 2,
   },
   footerTab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  footerTabLabel: { fontSize: 10, fontWeight: '700', color: T.mid },
+  footerTabLabel: { fontSize: 10, fontWeight: '700', color: T.mid, textAlign: 'center' },
 });
