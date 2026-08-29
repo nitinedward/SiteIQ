@@ -264,28 +264,6 @@ export default function AdminPage() {
     setDrawings(data ?? [])
   }
 
-  const deleteDrawing = async (id: string) => {
-    if (!confirm('Delete this drawing?')) return
-    const target = drawings.find(d => d.id === id)
-    const { error } = await supabase.from('drawings').delete().eq('id', id)
-    if (error) { setUploadMsg({ ok: false, text: 'Delete failed: ' + error.message }); return }
-    setSelectedDrawingIds(curr => curr.filter(i => i !== id))
-
-    // Clean up the storage object too — but only if no other remaining
-    // drawing row still points at the same file (legacy pre-split rows
-    // could share a file_name).
-    if (target?.file_name) {
-      const stillReferenced = drawings.some(d => d.id !== id && d.file_name === target.file_name)
-      if (!stillReferenced) {
-        const { error: sErr } = await supabase.storage.from('drawings').remove([target.file_name])
-        if (sErr) console.error('[delete] storage cleanup failed:', sErr)
-      }
-    }
-
-    // Stay on the Drawings tab — just refresh the list
-    await reloadDrawings()
-  }
-
   const toggleDrawingSelected = (id: string) => {
     setSelectedDrawingIds(curr => curr.includes(id) ? curr.filter(i => i !== id) : [...curr, id])
   }
@@ -1072,10 +1050,15 @@ export default function AdminPage() {
                           {drawings.map(d => {
                             const checked = selectedDrawingIds.includes(d.id)
                             return (
-                              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 14, background: checked ? 'var(--indigo-soft)' : 'var(--paper)', border: `1px solid ${checked ? 'var(--indigo)' : 'var(--border-line)'}`, borderRadius: 'var(--radius-sm)', padding: '14px 20px' }}>
+                              <div
+                                key={d.id}
+                                onClick={() => window.open(d.file_url, '_blank', 'noopener,noreferrer')}
+                                style={{ display: 'flex', alignItems: 'center', gap: 14, background: checked ? 'var(--indigo-soft)' : 'var(--paper)', border: `1px solid ${checked ? 'var(--indigo)' : 'var(--border-line)'}`, borderRadius: 'var(--radius-sm)', padding: '14px 20px', cursor: 'pointer' }}
+                              >
                                 <input
                                   type="checkbox"
                                   checked={checked}
+                                  onClick={e => e.stopPropagation()}
                                   onChange={() => toggleDrawingSelected(d.id)}
                                   style={{ width: 16, height: 16, cursor: 'pointer', flexShrink: 0 }}
                                 />
@@ -1086,8 +1069,6 @@ export default function AdminPage() {
                                   <div style={{ fontFamily: 'var(--f-text)', fontSize: 15, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
                                   <div style={{ fontSize: 12, color: 'var(--text-mid)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>Rev {d.revision}</div>
                                 </div>
-                                <a href={d.file_url} target="_blank" rel="noreferrer" style={{ fontFamily: 'var(--f-heading)', fontSize: 14, color: 'var(--indigo)', textDecoration: 'none', fontWeight: 700, flexShrink: 0 }}>View</a>
-                                <button type="button" onClick={() => deleteDrawing(d.id)} style={{ background: 'var(--clay-soft)', color: 'var(--clay-ink)', border: '1px solid rgba(229,115,91,.3)', borderRadius: 'var(--radius-pill)', padding: '5px 12px', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>Delete</button>
                               </div>
                             )
                           })}
