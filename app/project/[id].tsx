@@ -34,6 +34,7 @@ const statusConfig = {
 
 const fmt = (d: string) => new Date(d).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
 const DRAWING_PREVIEW_COUNT = 3;
+const REPORT_PREVIEW_COUNT = 3;
 
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -44,6 +45,7 @@ export default function ProjectDetailScreen() {
   const [error, setError]             = useState('');
   const [photoCount, setPhotoCount]   = useState(0);
   const [showAllDrawings, setShowAllDrawings] = useState(false);
+  const [showAllReports, setShowAllReports] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -192,29 +194,47 @@ export default function ProjectDetailScreen() {
 
         {/* PAST REPORTS */}
         <View style={S.section}>
-          <Text style={S.sectionTitle}>Site Reports</Text>
+          <View style={S.sectionHeaderRow}>
+            <Text style={S.sectionTitleRow}>Site Reports</Text>
+            {inspections.length > REPORT_PREVIEW_COUNT && (
+              <TouchableOpacity onPress={() => setShowAllReports(v => !v)}>
+                <Text style={S.viewAllText}>{showAllReports ? 'Show less' : 'View all'}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           {inspections.length === 0 ? (
             <View style={S.emptyCard}>
               <Text style={S.emptyText}>No reports yet — start an inspection above</Text>
             </View>
-          ) : (
-            <TouchableOpacity style={S.row}
-              onPress={() => router.push({ pathname: '/reports', params: { project_id: project.id, project_name: project.name } })}
-              activeOpacity={0.7}>
+          ) : (showAllReports ? inspections : inspections.slice(0, REPORT_PREVIEW_COUNT)).map(ins => (
+            <TouchableOpacity key={ins.id} style={S.row} activeOpacity={0.7}
+              onPress={() => router.push({ pathname: '/report/[id]', params: { id: ins.id, project_name: project.name } })}>
               <View style={S.rowBadge}>
-                <Text style={S.rowBadgeText}>{inspections.length}</Text>
+                <Text style={S.rowBadgeText}>#{ins.report_no}</Text>
               </View>
               <View style={S.rowInfo}>
-                <Text style={S.rowTitle}>{inspections.length === 1 ? '1 Report' : `${inspections.length} Reports`}</Text>
-                <Text style={S.rowMeta}>Tap to view all</Text>
+                <Text style={S.rowTitle} numberOfLines={1}>{ins.date}</Text>
+                <Text style={S.rowMeta}>{ins.site_contact || 'No contact'} · {ins.weather}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={T.mid} />
             </TouchableOpacity>
-          )}
+          ))}
         </View>
 
-        <View style={{ height: 48 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Footer nav — matches (tabs) bottom bar */}
+      <View style={S.footer}>
+        <TouchableOpacity style={S.footerTab} onPress={() => router.push('/(tabs)/projects')} activeOpacity={0.7}>
+          <Ionicons name="folder-outline" size={22} color={T.mid} />
+          <Text style={S.footerTabLabel}>Projects</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={S.footerTab} onPress={() => router.push('/(tabs)/profile')} activeOpacity={0.7}>
+          <Ionicons name="person-outline" size={22} color={T.mid} />
+          <Text style={S.footerTabLabel}>Profile</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -309,4 +329,16 @@ const S = StyleSheet.create({
     elevation: 1,
   },
   emptyText: { fontSize: 13, color: T.mid, textAlign: 'center' },
+
+  // Footer nav
+  footer: {
+    flexDirection: 'row',
+    backgroundColor: T.surface,
+    borderTopWidth: 1,
+    borderTopColor: T.line,
+    paddingTop: 6,
+    paddingBottom: 24,
+  },
+  footerTab: { flex: 1, alignItems: 'center', gap: 2 },
+  footerTabLabel: { fontSize: 10, fontWeight: '700', color: T.mid },
 });
