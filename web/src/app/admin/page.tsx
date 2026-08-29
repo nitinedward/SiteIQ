@@ -738,12 +738,14 @@ export default function AdminPage() {
           PROJECTS TAB
       ══════════════════════════════════════════════════════ */}
       {tab === 'projects' && (
-        <div className="admin-layout" style={{ display: 'flex', height: 'calc(100vh - 64px - 49px)', overflow: 'hidden' }}>
+        <div className="admin-layout" style={{ display: 'flex', gap: 20, height: 'calc(100vh - 64px - 49px)', overflow: 'hidden', padding: 20, background: 'var(--paper)', boxSizing: 'border-box' }}>
 
           {/* Left — project list (300px fixed) */}
           <div className="admin-sidebar" style={{
-            width: 300, flexShrink: 0,
-            borderRight: '1px solid var(--border-line)',
+            width: 320, flexShrink: 0,
+            border: '1px solid var(--border-line)',
+            borderRadius: 'var(--radius-xl)',
+            boxShadow: 'var(--shadow-card-v3)',
             background: 'var(--surface)',
             display: 'flex', flexDirection: 'column',
             overflowY: 'auto',
@@ -804,33 +806,32 @@ export default function AdminPage() {
             )}
 
             {/* Project list */}
-            <div style={{ flex: 1, overflowY: 'auto' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {filteredProjects.map(p => {
                 const active = selectedProject?.id === p.id
-                const statusColors: Record<string, string> = { ACTIVE: 'var(--sage)', ON_HOLD: 'var(--marigold-deep)', COMPLETED: 'var(--indigo)' }
                 return (
                   <button
                     key={p.id}
                     onClick={() => selectProject(p)}
                     style={{
                       width: '100%', textAlign: 'left',
-                      background: active ? 'var(--indigo-soft)' : 'none',
-                      borderLeft: active ? '3px solid var(--indigo)' : '3px solid transparent',
-                      borderTop: 'none', borderRight: 'none',
-                      borderBottom: '1px solid var(--border-line)',
-                      padding: '20px 24px',
+                      display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', alignItems: 'center', gap: 10,
+                      background: active ? 'var(--indigo-soft)' : 'var(--surface)',
+                      border: `1px solid ${active ? 'var(--indigo)' : 'var(--border-line)'}`,
+                      borderRadius: 'var(--radius-md)',
+                      padding: '16px 18px',
                       cursor: 'pointer', transition: 'all .12s',
-                      minHeight: 80,
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--paper)' }}
-                    onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'none' }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'var(--surface)' }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                      <div style={{ fontFamily: 'var(--f-heading)', fontSize: 17, fontWeight: 800, color: 'var(--text-ink)', lineHeight: 1.2, flex: 1 }}>{p.name}</div>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: statusColors[p.status] ?? 'var(--text-mid)', flexShrink: 0, marginTop: 5, display: 'inline-block' }} />
-                    </div>
-                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-mid)', marginTop: 3 }}>#{p.project_number}</div>
-                    {p.client_name && <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 2 }}>{p.client_name}</div>}
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontFamily: 'var(--f-heading)', fontSize: 16, fontWeight: 800, color: 'var(--text-ink)', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                      <span style={{ display: 'block', fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        #{p.project_number}{p.client_name ? ` · ${p.client_name}` : ''}
+                      </span>
+                    </span>
+                    <Badge status={p.status} />
                   </button>
                 )
               })}
@@ -843,7 +844,7 @@ export default function AdminPage() {
           </div>
 
           {/* Right — project detail */}
-          <div className="admin-panel" style={{ flex: 1, overflowY: 'auto', background: 'var(--paper)' }}>
+          <div className="admin-panel" style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card-v3)', background: 'var(--surface)' }}>
             {!selectedProject ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
                 <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--indigo-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
