@@ -45,7 +45,7 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={42} color={color} />
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={26} color={color} style={{ marginLeft: -3 }} />
           ),
         }}
       />
