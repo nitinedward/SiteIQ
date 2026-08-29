@@ -759,11 +759,11 @@ export default function AdminPage() {
                 <input
                   value={projectSearch}
                   onChange={e => setProjectSearch(e.target.value)}
-                  placeholder="Search projects…"
+                  placeholder="Search name, number or client"
                   style={{
-                    width: '100%', padding: '9px 12px 9px 32px',
+                    width: '100%', height: 48, padding: '0 14px 0 36px', boxSizing: 'border-box',
                     background: 'var(--paper)', border: '1px solid var(--border-line)',
-                    borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-ink)', outline: 'none',
+                    borderRadius: 'var(--radius-md)', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-ink)', outline: 'none',
                   }}
                   onFocus={e => { e.target.style.background = 'var(--surface)'; e.target.style.borderColor = 'var(--indigo)' }}
                   onBlur={e =>  { e.target.style.background = 'var(--paper)'; e.target.style.borderColor = 'var(--border-line)' }}
@@ -776,8 +776,9 @@ export default function AdminPage() {
               <button
                 onClick={() => { setShowNewProject(v => !v); setSelectedProject(null) }}
                 style={{
-                  width: '100%', padding: '11px', marginTop: 12,
-                  background: 'var(--indigo)', color: '#fff',
+                  width: '100%', height: 48, marginTop: 12,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  background: 'var(--marigold)', color: 'var(--text-ink)',
                   border: 'none', borderRadius: 'var(--radius-pill)',
                   fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, cursor: 'pointer',
                 }}
