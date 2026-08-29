@@ -7,8 +7,8 @@ import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../../lib/theme';
+import { FooterNav } from '../../components/FooterNav';
 
 const T = theme.colors;
 const R = theme.radius;
@@ -39,7 +39,6 @@ const REPORT_PREVIEW_COUNT = 3;
 
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams();
-  const insets = useSafeAreaInsets();
   const [project, setProject]         = useState<Project | null>(null);
   const [drawings, setDrawings]       = useState<Drawing[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
@@ -226,17 +225,8 @@ export default function ProjectDetailScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Footer nav — matches (tabs) bottom bar */}
-      <View style={[S.footer, { paddingBottom: 0 + insets.bottom }]}>
-        <TouchableOpacity style={S.footerTab} onPress={() => router.push('/(tabs)/projects')} activeOpacity={0.7}>
-          <Ionicons name="briefcase-outline" size={28} color={T.mid} />
-          <Text style={S.footerTabLabel}>Projects</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={S.footerTab} onPress={() => router.push('/(tabs)/profile')} activeOpacity={0.7}>
-          <Ionicons name="person-outline" size={26} color={T.mid} style={{ marginLeft: -3 }} />
-          <Text style={S.footerTabLabel}>Profile</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Footer nav — shared component, same one the real (tabs) bar renders */}
+      <FooterNav active={null} onPress={(tab) => router.push(`/(tabs)/${tab}`)} />
     </View>
   );
 }
@@ -331,15 +321,4 @@ const S = StyleSheet.create({
     elevation: 1,
   },
   emptyText: { fontSize: 13, color: T.mid, textAlign: 'center' },
-
-  // Footer nav
-  footer: {
-    flexDirection: 'row',
-    backgroundColor: T.surface,
-    borderTopWidth: 1,
-    borderTopColor: T.line,
-    paddingTop: 2,
-  },
-  footerTab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  footerTabLabel: { fontSize: 10, fontWeight: '700', color: T.mid, textAlign: 'center' },
 });

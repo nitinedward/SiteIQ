@@ -1,54 +1,23 @@
 import { Tabs } from 'expo-router'
-import { Ionicons } from '@expo/vector-icons'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { theme } from '../../lib/theme'
-
-const T = theme.colors
+import { FooterNav, type FooterTab } from '../../components/FooterNav'
 
 export default function TabLayout() {
-  const insets = useSafeAreaInsets()
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: T.indigo,
-        tabBarInactiveTintColor: T.mid,
-        tabBarStyle: {
-          backgroundColor: T.surface,
-          borderTopColor: T.line,
-          borderTopWidth: 1,
-          height: 50 + insets.bottom,
-          paddingBottom: 0 + insets.bottom,
-          paddingTop: 2,
-        },
-        tabBarIconStyle: {
-          marginBottom: 6,
-        },
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '700',
-          textAlign: 'center',
-        },
+      screenOptions={{ headerShown: false }}
+      tabBar={({ state, navigation }) => {
+        const activeName = state.routes[state.index].name
+        const active: FooterTab | null = activeName === 'projects' ? 'projects' : activeName === 'profile' ? 'profile' : null
+        return (
+          <FooterNav
+            active={active}
+            onPress={(tab) => navigation.navigate(tab)}
+          />
+        )
       }}
     >
-      <Tabs.Screen
-        name="projects"
-        options={{
-          title: 'Projects',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'briefcase' : 'briefcase-outline'} size={28} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={26} color={color} style={{ marginLeft: -3 }} />
-          ),
-        }}
-      />
+      <Tabs.Screen name="projects" options={{ title: 'Projects' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
       <Tabs.Screen name="capture" options={{ href: null }} />
     </Tabs>
   )
