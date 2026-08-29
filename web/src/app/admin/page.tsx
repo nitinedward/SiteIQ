@@ -890,10 +890,15 @@ export default function AdminPage() {
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                       <div style={{ flex: 1 }}>
                         <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 28, fontWeight: 800, color: 'var(--indigo-deep)', marginBottom: 4 }}>{selectedProject.name}</h2>
-                        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 4 }}>#{selectedProject.project_number}</div>
-                        {(selectedProject.client_name || selectedProject.address) && (
+                        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 4 }}>{selectedProject.project_number}</div>
+                        {selectedProject.address && (
                           <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)', marginTop: 4 }}>
-                            {[selectedProject.client_name, selectedProject.address].filter(Boolean).join(' · ')}
+                            {selectedProject.address}
+                          </div>
+                        )}
+                        {selectedProject.client_name && (
+                          <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)', marginTop: 4 }}>
+                            {selectedProject.client_name}
                           </div>
                         )}
                       </div>
