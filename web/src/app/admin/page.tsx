@@ -1139,8 +1139,8 @@ export default function AdminPage() {
                           </div>
                         )}
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {drawings.map(d => {
+                        <div>
+                          {drawings.map((d, i) => {
                             const checked = selectedDrawingIds.includes(d.id)
                             return (
                               <div
@@ -1152,10 +1152,9 @@ export default function AdminPage() {
                                 onDragEnd={handleDrawingDragEnd}
                                 onClick={() => { if (!editModeDrawings) window.open(d.file_url, '_blank', 'noopener,noreferrer') }}
                                 style={{
-                                  display: 'flex', alignItems: 'center', gap: 14,
-                                  background: checked ? 'var(--indigo-soft)' : 'var(--paper)',
-                                  border: `1px solid ${dragOverDrawingId === d.id ? 'var(--indigo)' : checked ? 'var(--indigo)' : 'var(--border-line)'}`,
-                                  borderRadius: 'var(--radius-sm)', padding: '14px 20px',
+                                  display: 'flex', alignItems: 'center', gap: 16, padding: '16px 4px',
+                                  borderBottom: i < drawings.length - 1 ? '1px solid var(--border-line)' : 'none',
+                                  background: checked || dragOverDrawingId === d.id ? 'var(--indigo-soft)' : 'transparent',
                                   cursor: editModeDrawings ? 'grab' : 'pointer',
                                   opacity: draggedDrawingId === d.id ? 0.4 : 1,
                                 }}
@@ -1183,13 +1182,13 @@ export default function AdminPage() {
                                       if (e.key === 'Enter') { e.preventDefault(); saveEditDrawingField() }
                                       if (e.key === 'Escape') { e.preventDefault(); cancelEditDrawingField() }
                                     }}
-                                    style={{ width: 70, background: 'var(--white)', color: 'var(--indigo)', fontSize: 11, fontWeight: 700, padding: '5px 8px', borderRadius: 6, fontFamily: 'var(--f-mono)', border: '1px solid var(--indigo)', flexShrink: 0 }}
+                                    style={{ width: 70, background: 'var(--white)', color: 'var(--text-mid)', fontSize: 12, fontWeight: 700, padding: '6px 10px', borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-mono)', border: '1px solid var(--indigo)', flexShrink: 0 }}
                                   />
                                 ) : (
                                   <div
                                     onClick={e => { if (editModeDrawings) { e.stopPropagation(); startEditDrawingField(d, 'number') } }}
                                     style={{
-                                      background: 'var(--indigo-soft)', color: 'var(--indigo)', fontSize: 11, fontWeight: 700, padding: '5px 12px', borderRadius: 6, fontFamily: 'var(--f-mono)', flexShrink: 0,
+                                      background: 'var(--paper)', color: 'var(--text-mid)', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-mono)', flexShrink: 0,
                                       cursor: editModeDrawings ? 'text' : 'default',
                                       border: editModeDrawings ? '1px dashed var(--indigo)' : '1px solid transparent',
                                     }}
@@ -1213,7 +1212,7 @@ export default function AdminPage() {
                                     />
                                   ) : (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                                      <div style={{ fontFamily: 'var(--f-text)', fontSize: 15, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
+                                      <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
                                       {editModeDrawings && (
                                         <button
                                           type="button"
