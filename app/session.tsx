@@ -511,16 +511,34 @@ export default function SessionScreen() {
               {generalObservations.map((obs, idx) => {
                 const summary = obs.transcript?.trim() || obs.notes?.trim() || 'General observation';
                 return (
-                  <TouchableOpacity key={obs.id} style={S.drawingRow}
-                    onPress={() => router.push({ pathname: '/observation', params: { inspection_id: inspectionId, project_id: String(project_id), zone_id: 'general', zone_label: 'General Site Observation', observation_id: obs.id } })}
-                    activeOpacity={0.7}>
-                    <View style={S.drawBadge}><Text style={S.drawBadgeText}>{idx + 1}</Text></View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={S.drawTitle} numberOfLines={1}>{summary}</Text>
-                      <Text style={S.drawMeta}>{(obs.severity || 'NONE')} - Tap to edit</Text>
-                    </View>
-                    <Text style={S.arrow}>{'→'}</Text>
-                  </TouchableOpacity>
+                  <Swipeable
+                    key={obs.id}
+                    overshootRight={false}
+                    renderRightActions={() => (
+                      <TouchableOpacity
+                        style={S.swipeDeleteBtn}
+                        onPress={() => Alert.alert('Delete Observation', 'Delete this general observation? This cannot be undone.', [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: async () => {
+                            const { error } = await supabase.from('observations').delete().eq('id', obs.id);
+                            if (error) { Alert.alert('Delete Failed', error.message); return; }
+                            setGeneralObservations(curr => curr.filter(o => o.id !== obs.id));
+                          } },
+                        ])}>
+                        <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    )}>
+                    <TouchableOpacity style={S.drawingRow}
+                      onPress={() => router.push({ pathname: '/observation', params: { inspection_id: inspectionId, project_id: String(project_id), zone_id: 'general', zone_label: 'General Site Observation', observation_id: obs.id } })}
+                      activeOpacity={0.7}>
+                      <View style={S.drawBadge}><Text style={S.drawBadgeText}>{idx + 1}</Text></View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={S.drawTitle} numberOfLines={1}>{summary}</Text>
+                        <Text style={S.drawMeta}>{(obs.severity || 'NONE')} - Tap to edit</Text>
+                      </View>
+                      <Text style={S.arrow}>{'→'}</Text>
+                    </TouchableOpacity>
+                  </Swipeable>
                 );
               })}
             </>
