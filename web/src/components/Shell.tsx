@@ -121,6 +121,10 @@ function NavBtn({ id, label, active, onClick }: {
   )
 }
 
+const PAGE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard', projects: 'Projects', team: 'Team', settings: 'Settings',
+}
+
 // ── SHELL ─────────────────────────────────────────────────────────────────────
 export function Shell({ activePage, role = '', fullName = '', firmName = '', onSignOut, children }: ShellProps) {
   const router   = useRouter()
@@ -136,36 +140,33 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
           .shell-topbar      { grid-column: 1 / -1 !important; padding: 0 16px !important; }
           .shell-content     { padding-bottom: 70px !important; }
           .bottom-nav        { display: flex !important; }
-          .topbar-firm-pill  { display: none !important; }
-          .topbar-brand      { font-size: 18px !important; }
           .topbar-user-name  { display: none !important; }
         }
       `}</style>
       <div className="shell-grid" style={{
         display: 'grid',
         gridTemplateColumns: '240px 1fr',
-        gridTemplateRows: '60px 1fr',
+        gridTemplateRows: '64px 1fr',
         height: '100vh',
         overflow: 'hidden',
         fontFamily: 'var(--f-text)',
         background: 'var(--paper)',
       }}>
 
-      {/* ── TOPBAR ───────────────────────────────────────────── */}
-      <div className="shell-topbar" style={{
-        gridColumn: '1 / -1',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 28px',
+      {/* ── SIDEBAR (spans full height, brand lives here) ─────── */}
+      <div className="shell-sidebar" style={{
+        gridRow: '1 / -1', gridColumn: '1',
         background: 'var(--surface)',
-        borderBottom: '1px solid var(--border-line)',
-        zIndex: 50,
+        borderRight: '1px solid var(--border-line)',
+        display: 'flex', flexDirection: 'column',
+        overflowY: 'auto',
       }}>
 
-        {/* LEFT — brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '20px 20px 16px' }}>
           <div style={{
             width: 32, height: 32, borderRadius: 'var(--radius-sm)',
-            background: 'var(--indigo)',
+            background: 'var(--marigold)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
           }}>
@@ -174,68 +175,10 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
               <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
           </div>
-          <span className="topbar-brand" style={{ fontFamily: 'var(--f-heading)', fontSize: 21, fontWeight: 800, color: 'var(--text-ink)' }}>
-            Site<span style={{ color: 'var(--indigo)' }}>IQ</span>
+          <span className="topbar-brand" style={{ fontFamily: 'var(--f-heading)', fontSize: 20, fontWeight: 800, color: 'var(--text-ink)' }}>
+            SiteIQ
           </span>
         </div>
-
-        {/* CENTRE — live pill */}
-        <div className="topbar-firm-pill" style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          background: 'var(--indigo-soft)',
-          borderRadius: 'var(--radius-pill)', padding: '5px 14px 5px 10px',
-        }}>
-          <span style={{
-            width: 7, height: 7, borderRadius: '50%',
-            background: 'var(--sage)',
-            animation: 'pulse 2s infinite',
-            display: 'inline-block', flexShrink: 0,
-          }} />
-          <span style={{
-            fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700,
-            textTransform: 'uppercase', letterSpacing: '1.5px',
-            color: 'var(--indigo)',
-          }}>
-            {firmName || 'SiteIQ'}
-          </span>
-        </div>
-
-        {/* RIGHT — user chip */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '5px 6px 5px 14px',
-          background: 'var(--paper)', borderRadius: 'var(--radius-pill)', border: '1px solid var(--border-line)',
-        }}>
-          <div style={{ lineHeight: 1.25 }}>
-            <div className="topbar-user-name" style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>{fullName}</div>
-            <div style={{
-              fontFamily: 'var(--f-heading)', fontSize: 10, fontWeight: 600,
-              textTransform: 'uppercase', letterSpacing: '1px',
-              color: role === 'admin' ? 'var(--indigo)' : 'var(--text-mid)',
-            }}>
-              {role === 'admin' ? 'Administrator' : 'Engineer'}
-            </div>
-          </div>
-          <div style={{
-            width: 30, height: 30, borderRadius: '50%',
-            background: 'var(--sage)', color: '#fff',
-            fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0,
-          }}>
-            {initials}
-          </div>
-        </div>
-      </div>
-
-      {/* ── SIDEBAR ──────────────────────────────────────────── */}
-      <div className="shell-sidebar" style={{
-        background: 'var(--surface)',
-        borderRight: '1px solid var(--border-line)',
-        display: 'flex', flexDirection: 'column',
-        padding: '20px 0',
-        overflowY: 'auto',
-      }}>
 
         {/* Section label */}
         <div style={{
@@ -254,7 +197,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
         </div>
 
         {/* Bottom section */}
-        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border-line)', paddingTop: 12 }}>
+        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border-line)', padding: '12px 0 16px' }}>
           <NavBtn id="settings" label="Settings" active={activePage === 'settings'} onClick={() => router.push('/settings')} />
 
           <button
@@ -282,8 +225,58 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
         </div>
       </div>
 
+      {/* ── HEADER (above main content only — breadcrumb + user) ── */}
+      <div className="shell-topbar" style={{
+        gridRow: '1', gridColumn: '2',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 28px',
+        background: 'var(--paper)',
+        borderBottom: '1px solid var(--border-line)',
+        zIndex: 50,
+      }}>
+        {/* LEFT — breadcrumb (+ brand mark on mobile, where the sidebar is hidden) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="mobile-only" style={{
+            width: 28, height: 28, borderRadius: 'var(--radius-sm)',
+            background: 'var(--marigold)', boxSizing: 'border-box', padding: 7,
+            flexShrink: 0,
+          }}>
+            <svg width="13" height="13" fill="none" stroke="#fff" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+          </div>
+          <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>
+            {firmName || 'SiteIQ'}
+            <span style={{ margin: '0 6px' }}>/</span>
+            <span style={{ fontFamily: 'var(--f-heading)', fontWeight: 700, color: 'var(--text-ink)' }}>
+              {PAGE_LABELS[activePage] ?? activePage}
+            </span>
+          </div>
+        </div>
+
+        {/* RIGHT — user */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ lineHeight: 1.25, textAlign: 'right' }}>
+            <div className="topbar-user-name" style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>{fullName}</div>
+            <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)' }}>
+              {role === 'admin' ? 'Administrator' : 'Engineer'}
+            </div>
+          </div>
+          <div style={{
+            width: 34, height: 34, borderRadius: '50%',
+            background: 'var(--paper)', border: '1px solid var(--border-line)', color: 'var(--text-ink)',
+            fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}>
+            {initials}
+          </div>
+        </div>
+      </div>
+
       {/* ── MAIN ─────────────────────────────────────────────── */}
-      <div className="shell-main shell-content" style={{ overflowY: 'auto', background: 'var(--paper)', animation: 'fadeIn 0.2s ease-out' }}>
+      <div className="shell-main shell-content" style={{ gridRow: '2', gridColumn: '2', overflowY: 'auto', background: 'var(--paper)', animation: 'fadeIn 0.2s ease-out' }}>
         {children}
       </div>
 
