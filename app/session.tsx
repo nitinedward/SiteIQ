@@ -96,6 +96,7 @@ export default function SessionScreen() {
 
   const today      = new Date().toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const todayShort = new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' });
+  const nowTime    = new Date().toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' });
 
   useEffect(() => {
     loadSavedDetails();
@@ -337,6 +338,7 @@ export default function SessionScreen() {
           <View style={S.banner}>
             <Text style={S.bannerProject}>{project_name}</Text>
             <Text style={S.bannerDate}>{today}</Text>
+            <Text style={S.bannerTime}>{nowTime}</Text>
           </View>
 
           {/* Weather */}
@@ -512,8 +514,9 @@ const S = StyleSheet.create({
     shadowRadius: 12,
     elevation: 2,
   },
-  bannerProject:{ fontSize: 16, fontWeight: '700', color: T.ink },
+  bannerProject:{ fontSize: 20, fontWeight: '700', color: T.ink },
   bannerDate:   { fontSize: 13, color: T.mid },
+  bannerTime:   { fontSize: 13, color: T.mid, marginTop: 2 },
   activeBadge:  { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   activeDot:    { width: 8, height: 8, borderRadius: 4, backgroundColor: T.sage },
   activeBadgeText:{ fontSize: 12, color: T.sage, fontWeight: '600' },
