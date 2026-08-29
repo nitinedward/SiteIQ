@@ -154,8 +154,12 @@ export default function DrawingViewerScreen() {
   };
 
   const fetchZones = async () => {
-    if (!inspectionId) { setZonesAndRef([]); return; }
-    const { data } = await supabase.from('zones').select('*').eq('drawing_id', drawingId).eq('inspection_id', inspectionId).order('created_at', { ascending: true });
+    // Zones placed during an inspection are scoped to that inspection_id.
+    // Zones placed while just browsing a drawing (no active inspection,
+    // e.g. from Project Detail) are standalone — inspection_id is null.
+    let query = supabase.from('zones').select('*').eq('drawing_id', drawingId);
+    query = inspectionId ? query.eq('inspection_id', inspectionId) : query.is('inspection_id', null);
+    const { data } = await query.order('created_at', { ascending: true });
     setZonesAndRef((data as Zone[]) ?? []);
   };
   useFocusEffect(useCallback(() => { fetchZones(); }, [drawingId, inspectionId]));
@@ -319,18 +323,16 @@ export default function DrawingViewerScreen() {
   };
 
   const handleTapZone = async (zone: Zone) => {
-    let hasObs = false; let obsId: string | null = null;
-    if (inspectionId) {
-      const { data: existingObs } = await supabase.from('observations').select('id').eq('zone_id', zone.id).eq('inspection_id', inspectionId).limit(1);
-      hasObs = !!(existingObs && existingObs.length > 0);
-      obsId  = hasObs ? existingObs![0].id : null;
-    }
+    let obsQuery = supabase.from('observations').select('id').eq('zone_id', zone.id).limit(1);
+    obsQuery = inspectionId ? obsQuery.eq('inspection_id', inspectionId) : obsQuery.is('inspection_id', null);
+    const { data: existingObs } = await obsQuery;
+    const hasObs = !!(existingObs && existingObs.length > 0);
+    const obsId  = hasObs ? existingObs![0].id : null;
+
     const buttons: any[] = [];
-    if (!viewOnly && inspectionId) {
-      buttons.push({ text: hasObs ? 'Edit Observation' : 'Add Observation', onPress: () => router.push({ pathname: '/observation', params: { zone_id: zone.id, zone_label: zone.label, project_id: projectId, inspection_id: inspectionId, ...(obsId ? { observation_id: obsId } : {}) } }) });
-      if (hasObs) buttons.push({ text: 'Add Another Observation', onPress: () => router.push({ pathname: '/observation', params: { zone_id: zone.id, zone_label: zone.label, project_id: projectId, inspection_id: inspectionId } }) });
-      buttons.push({ text: 'Delete Zone', style: 'destructive' as const, onPress: async () => { await supabase.from('zones').delete().eq('id', zone.id); setZonesAndRef(zonesRef.current.filter(z => z.id !== zone.id)); } });
-    }
+    buttons.push({ text: hasObs ? 'Edit Observation' : 'Add Observation', onPress: () => router.push({ pathname: '/observation', params: { zone_id: zone.id, zone_label: zone.label, project_id: projectId, inspection_id: inspectionId, ...(obsId ? { observation_id: obsId } : {}) } }) });
+    if (hasObs) buttons.push({ text: 'Add Another Observation', onPress: () => router.push({ pathname: '/observation', params: { zone_id: zone.id, zone_label: zone.label, project_id: projectId, inspection_id: inspectionId } }) });
+    if (!viewOnly) buttons.push({ text: 'Delete Zone', style: 'destructive' as const, onPress: async () => { await supabase.from('zones').delete().eq('id', zone.id); setZonesAndRef(zonesRef.current.filter(z => z.id !== zone.id)); } });
     buttons.push({ text: 'Cancel', style: 'cancel' as const });
     Alert.alert(zone.label, 'What would you like to do?', buttons);
   };
