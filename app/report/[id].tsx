@@ -546,6 +546,62 @@ function buildReportHtml(
   };
   const drawingNames = drawings.map(d => d.number || d.title).join(', ') || '-';
 
+  const buildObsCardHtml = (obs: Observation, idx: number): string => {
+    const photos = getPhotos(obs);
+    let measurements: any[] = [];
+    try { measurements = typeof obs.measurements === 'string' ? JSON.parse(obs.measurements || '[]') : obs.measurements || []; } catch {}
+    const severity = obs.severity || 'NONE';
+    const colour   = severityColour[severity] || '#94A3B8';
+
+    const photosHtml = photos.length > 0
+      ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0">
+          ${photos.map(url =>
+            `<img src="${url}" style="width:160px;height:120px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0" />`
+          ).join('')}
+         </div>` : '';
+
+    const transcriptHtml = obs.transcript
+      ? `<div style="background:#EEF1F6;border-left:3px solid #3A4A63;padding:10px;border-radius:4px;margin:8px 0">
+          <div style="font-size:11px;color:#64748b;margin-bottom:4px">VOICE NOTE</div>
+          <div style="font-size:13px;color:#1e293b">${obs.transcript}</div>
+         </div>` : '';
+
+    const notesHtml = obs.notes
+      ? `<div style="background:#f0fdf4;border-left:3px solid #16A34A;padding:10px;border-radius:4px;margin:8px 0">
+          <div style="font-size:11px;color:#64748b;margin-bottom:4px">NOTES</div>
+          <div style="font-size:13px;color:#1e293b">${obs.notes}</div>
+         </div>` : '';
+
+    const measureHtml = measurements.length > 0
+      ? `<div style="margin:8px 0">
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px">MEASUREMENTS</div>
+          ${measurements.map((m: any) =>
+            `<div style="display:flex;justify-content:space-between;padding:6px 10px;background:#f8fafc;border-radius:4px;margin:3px 0">
+              <span style="color:#64748b">${m.label || m.type}</span>
+              <strong>${m.value} ${m.unit}</strong>
+             </div>`
+          ).join('')}
+         </div>` : '';
+
+    return `
+      <div style="border:1px solid #e2e8f0;border-radius:6px;padding:14px;margin:8px 0;background:#fff">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span style="font-size:12px;color:#64748b;font-weight:600">OBSERVATION ${idx + 1}</span>
+          <span style="background:${colour}22;color:${colour};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">${severity}</span>
+        </div>
+        ${photosHtml}${transcriptHtml}${notesHtml}${measureHtml}
+      </div>`;
+  };
+
+  const generalObs = observations.filter(o => !o.zone_id);
+  const generalObsHtml = generalObs.length === 0 ? '' : `
+    <div style="font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:28px 0 12px;border-top:1px solid #e2e8f0;padding-top:20px">
+      General Observations — ${generalObs.length}
+    </div>
+    <div style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;background:#fafafa">
+      ${generalObs.map((obs, idx) => buildObsCardHtml(obs, idx)).join('')}
+    </div>`;
+
   const zonesHtml = zones.map(zone => {
     const zoneObs = observations.filter(o => String(o.zone_id) === String(zone.id));
     const icon = !zone.markup_type || zone.markup_type === 'pin' ? '[Pin]'
@@ -640,6 +696,7 @@ body { font-family:-apple-system,Helvetica,Arial,sans-serif; color:#1e293b; back
     Findings — ${zones.length} Marked Zone${zones.length !== 1 ? 's' : ''}
   </div>
   ${zones.length === 0 ? '<p style="color:#94a3b8;font-style:italic">No zones were marked up.</p>' : zonesHtml}
+  ${generalObsHtml}
 
   <div style="margin-top:40px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:11px;color:#94a3b8">
     <span>SiteIQ · Generated ${new Date().toLocaleDateString()}</span>
@@ -963,6 +1020,55 @@ export default function ReportScreen() {
               );
             })}
           </View>
+
+          {/* General observations — not tied to any zone/drawing */}
+          {(() => {
+            const generalObs = observations.filter(o => !o.zone_id);
+            if (generalObs.length === 0) return null;
+            return (
+              <View style={S.reportSection}>
+                <Text style={S.reportSectionTitle}>
+                  General Observations ({generalObs.length})
+                </Text>
+                <View style={S.zoneCard}>
+                  {generalObs.map((obs, idx) => {
+                    let measurements: { label: string; value: string; unit: string }[] = [];
+                    try { measurements = typeof obs.measurements === 'string' ? JSON.parse(obs.measurements || '[]') : obs.measurements || []; } catch {}
+                    const severity = obs.severity || 'NONE';
+
+                    return (
+                      <View key={obs.id} style={S.obsRow}>
+                        <View style={S.obsRowHeader}>
+                          <Text style={S.obsRowNum}>Obs {idx + 1}</Text>
+                          <View style={[S.severityPill, { backgroundColor: SEVERITY_COLOURS[severity] + '22' }]}>
+                            <Text style={[S.severityPillText, { color: SEVERITY_COLOURS[severity] }]}>
+                              {severity}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {getPhotos(obs).length > 0 && (
+                          <Text style={S.obsDetail}>Photos: {getPhotos(obs).length} photo{getPhotos(obs).length !== 1 ? 's' : ''}</Text>
+                        )}
+                        {!!obs.transcript && (
+                          <Text style={S.obsDetail} numberOfLines={3}>Voice: {obs.transcript}</Text>
+                        )}
+                        {!!obs.notes && (
+                          <Text style={S.obsDetail} numberOfLines={2}>Notes: {obs.notes}</Text>
+                        )}
+                        {measurements.length > 0 && (
+                          <Text style={S.obsDetail}>
+                            Measurements: {measurements.map((m: any) => `${m.label || m.type}: ${m.value}${m.unit}`).join(', ')}
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })()}
+
           <View style={{ height: 50 }} />
         </ScrollView>
       )}
