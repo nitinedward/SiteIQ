@@ -15,6 +15,7 @@ export default function RootLayout() {
           <Stack.Screen name="reports" options={{ presentation: 'modal' }} />
           <Stack.Screen name="select-drawings" options={{ presentation: 'modal' }} />
           <Stack.Screen name="camera" />
+          <Stack.Screen name="ar-measure" />
           <Stack.Screen name="recorder" />
           <Stack.Screen name="observation" />
           <Stack.Screen name="session" />

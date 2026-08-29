@@ -3,13 +3,14 @@ import {
   TextInput, Image, Alert, KeyboardAvoidingView, Platform,
   ActivityIndicator, Animated,
 } from 'react-native';
-import { useState, useRef, useEffect } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../lib/theme';
+import { consumePendingMeasurement } from '../lib/pendingMeasurement';
 
 const T = theme.colors;
 const R = theme.radius;
@@ -116,6 +117,15 @@ export default function ObservationScreen() {
       }
     };
   }, []);
+
+  useFocusEffect(useCallback(() => {
+    const m = consumePendingMeasurement();
+    if (m) {
+      setNewMeasValue(m.value);
+      setNewMeasUnit(m.unit);
+      setShowMeasForm(true);
+    }
+  }, []));
 
   useEffect(() => {
     if (!isEditMode) return;
@@ -474,6 +484,10 @@ export default function ObservationScreen() {
                   <TextInput style={S.measInput} value={newMeasType === 'Custom' ? customUnit : newMeasUnit} onChangeText={newMeasType === 'Custom' ? setCustomUnit : undefined} editable={newMeasType === 'Custom'} placeholderTextColor={T.mid} />
                 </View>
               </View>
+              <TouchableOpacity style={S.arMeasureBtn} onPress={() => router.push('/ar-measure')}>
+                <Ionicons name="scan-outline" size={16} color={T.indigo} />
+                <Text style={S.arMeasureBtnText}>Measure with AR</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={S.measSaveBtn} onPress={addMeasurement}>
                 <Text style={S.measSaveBtnText}>Add Measurement</Text>
               </TouchableOpacity>
@@ -548,6 +562,8 @@ const S = StyleSheet.create({
   measTypeChipActive:{ backgroundColor: T.indigo },
   measTypeText: { fontSize: 12, color: T.mid },
   measInput:    { backgroundColor: T.paper, borderWidth: 1, borderColor: T.line, borderRadius: 8, padding: 10, fontSize: 14, color: T.ink },
+  arMeasureBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: T.indigoSoft, borderRadius: R.sm, height: 40, marginBottom: 10 },
+  arMeasureBtnText: { color: T.indigo, fontSize: 13, fontWeight: '700' },
   measSaveBtn:  { backgroundColor: T.indigo, borderRadius: R.sm, height: 44, alignItems: 'center', justifyContent: 'center' },
   measSaveBtnText:{ color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   measRow:      { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: R.sm, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: T.line },

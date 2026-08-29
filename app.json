@@ -59,6 +59,14 @@
           "cameraPermission": "Allow SiteIQ to use the camera to photograph inspection findings."
         }
       ],
+      [
+        "@reactvision/react-viro",
+        {
+          "ios": {
+            "cameraUsagePermission": "SiteIQ needs camera access to take AR measurements."
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {},
