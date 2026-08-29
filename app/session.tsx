@@ -32,7 +32,7 @@ const WEATHER_OPTIONS = [
 
 type Step = 'details' | 'capture';
 type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; preview_url: string | null };
-type GeneralObservation = { id: string; notes: string | null; transcript: string | null; severity: string | null; created_at: string };
+type GeneralObservation = { id: string; notes: string | null; transcript: string | null; severity: string | null; observed_at: string };
 
 function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; metering: number }) {
   const barAnims = useRef(Array.from({ length: BAR_COUNT }, () => new Animated.Value(0.05))).current;
@@ -138,8 +138,7 @@ export default function SessionScreen() {
   }, []));
 
   const fetchGeneralObservations = async (id: string) => {
-    const { data, error } = await supabase.from('observations').select('id,notes,transcript,severity,created_at').eq('inspection_id', id).is('zone_id', null).order('created_at', { ascending: false });
-    console.log('[fetchGeneralObservations] inspection_id:', id, 'rows:', data?.length ?? 0, 'error:', error);
+    const { data } = await supabase.from('observations').select('id,notes,transcript,severity,observed_at').eq('inspection_id', id).is('zone_id', null).order('observed_at', { ascending: false });
     setGeneralObservations((data as GeneralObservation[]) ?? []);
   };
   useFocusEffect(useCallback(() => {

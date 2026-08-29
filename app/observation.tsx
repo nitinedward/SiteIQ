@@ -332,13 +332,10 @@ export default function ObservationScreen() {
     }
     setIsSubmitting(true);
     const payload = { severity, transcript: transcript.trim(), notes: '', photos, measurements };
-    const insertPayload = { ...payload, zone_id: zoneId !== 'general' ? zoneId : null, project_id: projectId, inspection_id: inspectionId || null, zone_label: zoneLabel };
-    console.log('[observation] saving, isEditMode:', isEditMode, 'zoneId:', zoneId, 'inspectionId:', inspectionId, insertPayload);
-    const { data: savedRow, error } = isEditMode
-      ? await supabase.from('observations').update(payload).eq('id', observationId).select()
-      : await supabase.from('observations').insert(insertPayload).select();
+    const { error } = isEditMode
+      ? await supabase.from('observations').update(payload).eq('id', observationId)
+      : await supabase.from('observations').insert({ ...payload, zone_id: zoneId !== 'general' ? zoneId : null, project_id: projectId, inspection_id: inspectionId || null, zone_label: zoneLabel });
     setIsSubmitting(false);
-    console.log('[observation] save result, error:', error, 'row:', savedRow);
     if (error) { Alert.alert('Save Failed', error.message); return; }
     Alert.alert(isEditMode ? 'Updated' : 'Saved', `Observation for "${zoneLabel}" has been ${isEditMode ? 'updated' : 'recorded'}.`, [{ text: 'OK', onPress: () => router.back() }]);
   };
