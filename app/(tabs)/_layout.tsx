@@ -19,11 +19,12 @@ export default function TabLayout() {
           borderTopWidth: 1,
           height: 40 + insets.bottom,
           paddingBottom: 0.25 + insets.bottom,
-          paddingTop: 10,
+          paddingTop: 2,
         },
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: '700',
+          textAlign: 'center',
         },
       }}
     >
