@@ -33,6 +33,7 @@ const statusConfig = {
 };
 
 const fmt = (d: string) => new Date(d).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+const DRAWING_PREVIEW_COUNT = 3;
 
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -160,25 +161,32 @@ export default function ProjectDetailScreen() {
 
         {/* DRAWINGS */}
         <View style={S.section}>
-          <Text style={S.sectionTitle}>Drawings</Text>
+          <View style={S.sectionHeaderRow}>
+            <Text style={S.sectionTitleRow}>Drawings</Text>
+            {drawings.length > DRAWING_PREVIEW_COUNT && (
+              <TouchableOpacity onPress={() => router.push({ pathname: '/drawings', params: { project_id: project.id, project_name: project.name } })}>
+                <Text style={S.viewAllText}>View all</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           {drawings.length === 0 ? (
             <View style={S.emptyCard}>
               <Text style={S.emptyText}>No drawings — admin uploads via web portal</Text>
             </View>
-          ) : (
-            <TouchableOpacity style={S.row}
-              onPress={() => router.push({ pathname: '/drawings', params: { project_id: project.id, project_name: project.name } })}
+          ) : drawings.slice(0, DRAWING_PREVIEW_COUNT).map(d => (
+            <TouchableOpacity key={d.id} style={S.row}
+              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, file_url: d.file_url, preview_url: d.preview_url ?? '', project_id: project.id, view_only: 'true' } })}
               activeOpacity={0.7}>
               <View style={S.rowBadge}>
-                <Text style={S.rowBadgeText}>{drawings.length}</Text>
+                <Text style={S.rowBadgeText}>{d.number || '-'}</Text>
               </View>
               <View style={S.rowInfo}>
-                <Text style={S.rowTitle}>{drawings.length === 1 ? '1 Drawing' : `${drawings.length} Drawings`}</Text>
-                <Text style={S.rowMeta}>Tap to view all</Text>
+                <Text style={S.rowTitle} numberOfLines={1}>{d.title}</Text>
+                <Text style={S.rowMeta}>Rev {d.revision}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={T.mid} />
             </TouchableOpacity>
-          )}
+          ))}
         </View>
 
         {/* PAST REPORTS */}
@@ -262,8 +270,11 @@ const S = StyleSheet.create({
   statLabel: { fontSize: 13, color: T.mid, marginTop: 4 },
 
   // Sections
-  section:      { paddingHorizontal: 16, paddingBottom: 8 },
-  sectionTitle: { fontSize: 11, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginTop: 24 },
+  section:         { paddingHorizontal: 16, paddingBottom: 8 },
+  sectionTitle:    { fontSize: 11, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginTop: 24 },
+  sectionHeaderRow:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, marginTop: 24 },
+  sectionTitleRow: { fontSize: 11, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1 },
+  viewAllText:     { fontSize: 11, fontWeight: '700', color: T.indigo },
 
   // Rows
   row: {
@@ -280,7 +291,7 @@ const S = StyleSheet.create({
   rowBadge:    { backgroundColor: T.indigoSoft, borderRadius: R.sm, paddingHorizontal: 10, paddingVertical: 6, minWidth: 48, alignItems: 'center' },
   rowBadgeText:{ fontSize: 10, color: T.indigo, fontWeight: '700' },
   rowInfo:     { flex: 1 },
-  rowTitle:    { fontSize: 13, fontWeight: '700', color: T.ink, marginBottom: 2 },
+  rowTitle:    { fontSize: 15, fontWeight: '700', color: T.ink, marginBottom: 2 },
   rowMeta:     { fontSize: 11, color: T.mid },
   rowArrow:    { fontSize: 22, color: T.mid },
 
