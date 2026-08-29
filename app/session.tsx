@@ -138,7 +138,8 @@ export default function SessionScreen() {
   }, []));
 
   const fetchGeneralObservations = async (id: string) => {
-    const { data } = await supabase.from('observations').select('id,notes,transcript,severity,created_at').eq('inspection_id', id).is('zone_id', null).order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('observations').select('id,notes,transcript,severity,created_at').eq('inspection_id', id).is('zone_id', null).order('created_at', { ascending: false });
+    console.log('[fetchGeneralObservations] inspection_id:', id, 'rows:', data?.length ?? 0, 'error:', error);
     setGeneralObservations((data as GeneralObservation[]) ?? []);
   };
   useFocusEffect(useCallback(() => {
