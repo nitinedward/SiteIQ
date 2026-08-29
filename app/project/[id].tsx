@@ -225,7 +225,7 @@ const S = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   headerMid:   { flex: 1 },
-  headerTitle: { fontSize: 15, fontWeight: '800', color: T.indigo },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: T.indigo },
   headerSub:   { fontSize: 11, color: T.mid, marginTop: 1 },
   statusPill:  { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   statusText:  { fontSize: 10, fontWeight: '700' },
