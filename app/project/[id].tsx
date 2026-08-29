@@ -229,11 +229,11 @@ export default function ProjectDetailScreen() {
       {/* Footer nav — matches (tabs) bottom bar */}
       <View style={[S.footer, { paddingBottom: 4 + insets.bottom }]}>
         <TouchableOpacity style={S.footerTab} onPress={() => router.push('/(tabs)/projects')} activeOpacity={0.7}>
-          <Ionicons name="folder-outline" size={26} color={T.mid} />
+          <Ionicons name="folder-outline" size={28} color={T.mid} />
           <Text style={S.footerTabLabel}>Projects</Text>
         </TouchableOpacity>
         <TouchableOpacity style={S.footerTab} onPress={() => router.push('/(tabs)/profile')} activeOpacity={0.7}>
-          <Ionicons name="person-outline" size={26} color={T.mid} />
+          <Ionicons name="person-outline" size={28} color={T.mid} />
           <Text style={S.footerTabLabel}>Profile</Text>
         </TouchableOpacity>
       </View>
@@ -338,8 +338,8 @@ const S = StyleSheet.create({
     backgroundColor: T.surface,
     borderTopWidth: 1,
     borderTopColor: T.line,
-    paddingTop: 16,
+    paddingTop: 12,
   },
   footerTab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
-  footerTabLabel: { fontSize: 11, fontWeight: '700', color: T.mid },
+  footerTabLabel: { fontSize: 12, fontWeight: '700', color: T.mid },
 });
