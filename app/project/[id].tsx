@@ -252,14 +252,14 @@ const S = StyleSheet.create({
   startArrow:  { fontSize: 32, color: T.indigoDeep, lineHeight: 36 },
 
   // Stats
-  statsRow:  { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginTop: 16, marginBottom: 20 },
+  statsRow:  { flexDirection: 'row', gap: 12, paddingHorizontal: 24, marginTop: 16, marginBottom: 20 },
   statTile:  {
     flex: 1, backgroundColor: T.surface, borderRadius: 18,
-    paddingVertical: 12, paddingHorizontal: 12, alignItems: 'center',
+    paddingVertical: 22, paddingHorizontal: 8, alignItems: 'center',
     borderWidth: 1, borderColor: T.line,
   },
-  statNum:   { fontSize: 18, fontWeight: '800', color: T.indigo },
-  statLabel: { fontSize: 11, color: T.mid, marginTop: 4 },
+  statNum:   { fontSize: 22, fontWeight: '800', color: T.indigo },
+  statLabel: { fontSize: 13, color: T.mid, marginTop: 4 },
 
   // Sections
   section:      { paddingHorizontal: 16, paddingBottom: 8 },
