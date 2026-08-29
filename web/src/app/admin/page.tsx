@@ -885,6 +885,9 @@ export default function AdminPage() {
                           {saving ? 'Saving…' : 'Save Changes'}
                         </Btn>
                       </div>
+                      <div style={{ marginTop: 10 }}>
+                        <Btn variant="danger" onClick={() => deleteProject(selectedProject.id)} style={{ width: '100%' }}>Delete Project</Btn>
+                      </div>
                     </>
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -905,7 +908,6 @@ export default function AdminPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 20 }}>
                         <Badge status={selectedProject.status} />
                         <Btn variant="outline" small onClick={startEdit}>Edit</Btn>
-                        <Btn variant="danger"  small onClick={() => deleteProject(selectedProject.id)}>Delete</Btn>
                       </div>
                     </div>
                   )}
