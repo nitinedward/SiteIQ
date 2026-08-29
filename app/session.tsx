@@ -468,6 +468,14 @@ export default function SessionScreen() {
                 <Text style={S.drawTitle}>{drawing.title}</Text>
                 <Text style={S.drawMeta}>Rev {drawing.revision} - Tap to inspect</Text>
               </View>
+              <TouchableOpacity
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={() => Alert.alert('Remove Drawing', `Remove "${drawing.title}" from today's inspection? Any zones already marked on it are kept.`, [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Remove', style: 'destructive', onPress: () => setSelectedDrawings(curr => curr.filter(id => id !== drawing.id)) },
+                ])}>
+                <Ionicons name="trash-outline" size={18} color={T.clay} />
+              </TouchableOpacity>
               <Text style={S.arrow}>{'→'}</Text>
             </TouchableOpacity>
           ))}
