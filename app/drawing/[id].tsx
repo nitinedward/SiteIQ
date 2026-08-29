@@ -454,6 +454,9 @@ export default function DrawingViewerScreen() {
             {isLoading && <View style={S.overlay}><ActivityIndicator size="large" color={T.indigo} /><Text style={S.loadingTxt}>Loading drawing...</Text></View>}
             {!!pdfError && <View style={S.overlay}><Text style={S.errTxt}>{pdfError}</Text><TouchableOpacity onPress={loadPreviewDimensions}><Text style={S.retryTxt}>Tap to retry</Text></TouchableOpacity></View>}
           </View>
+          {editingZones && (
+            <TouchableOpacity style={S.editDismissOverlay} activeOpacity={1} onPress={() => setEditingZones(false)} />
+          )}
           {zones.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>
               {zones.map((zone, idx) => {
@@ -589,6 +592,7 @@ const S = StyleSheet.create({
   hintText:      { fontSize: 12, color: T.mid, textAlign: 'center' },
   pdfWrap:       { flex: 1, overflow: 'hidden', backgroundColor: T.indigoSoft },
   overlay:       { ...StyleSheet.absoluteFillObject, backgroundColor: T.paper, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  editDismissOverlay: { ...StyleSheet.absoluteFillObject },
   loadingTxt:    { color: T.mid, fontSize: 14 },
   errTxt:        { color: T.clay, fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
   retryTxt:      { color: T.indigo, fontSize: 14, fontWeight: '500' },
