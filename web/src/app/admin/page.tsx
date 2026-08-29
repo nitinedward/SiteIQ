@@ -929,125 +929,60 @@ export default function AdminPage() {
                       <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={28} /></div>
                     ) : (
                       <>
-                        {/* Section A — Needs AI Report */}
-                        <div style={{ marginBottom: 28 }}>
-                          <div style={{ background: 'var(--marigold-soft)', padding: '10px 20px', borderRadius: 'var(--radius-sm)', marginBottom: 12 }}>
-                            <span style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--marigold-ink)' }}>
-                              ⚡ Pending AI Report — {pendingInspections.length}
-                            </span>
-                          </div>
-                          <div style={{ background: 'var(--surface)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                              <thead>
-                                <tr>
-                                  {['Report #', 'Date', 'Site Contact', 'Weather', 'Actions'].map(h => (
-                                    <th key={h} style={th}>{h}</th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {pendingInspections.length === 0 ? (
-                                  <tr>
-                                    <td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--text-mid)' }}>
-                                      No pending reports for this project
-                                    </td>
-                                  </tr>
-                                ) : pendingInspections.map(ins => (
-                                  <tr key={ins.id}
-                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--paper)')}
-                                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                                  >
-                                    <td style={td}>
-                                      <span style={{ background: 'var(--indigo-soft)', color: 'var(--indigo)', fontFamily: 'var(--f-mono)', fontSize: 11, padding: '4px 8px', borderRadius: 6 }}>
-                                        #{ins.report_no ?? '—'}
-                                      </span>
-                                    </td>
-                                    <td style={{ ...td, fontFamily: 'var(--f-mono)', fontSize: 13 }}>{ins.date ?? '—'}</td>
-                                    <td style={td}>{ins.site_contact ?? '—'}</td>
-                                    <td style={td}>{ins.weather ?? '—'}</td>
-                                    <td style={td}>
-                                      <div style={{ display: 'flex', gap: 8 }}>
-                                        <button
-                                          onClick={() => router.push(`/report/${ins.id}?project_name=${encodeURIComponent(selectedProject?.name ?? '')}`)}
-                                          style={{ background: 'var(--indigo)', color: '#fff', border: 'none', borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-heading)', padding: '8px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
-                                        >
-                                          Generate AI Report
-                                        </button>
-                                        <button
-                                          onClick={() => deleteReport(ins.id)}
-                                          disabled={deletingReportId === ins.id}
-                                          style={{ background: 'var(--clay-soft)', color: 'var(--clay-ink)', border: '1px solid rgba(229,115,91,.3)', borderRadius: 'var(--radius-pill)', padding: '8px 14px', fontSize: 14, cursor: deletingReportId === ins.id ? 'not-allowed' : 'pointer', opacity: deletingReportId === ins.id ? 0.6 : 1 }}
-                                        >
-                                          {deletingReportId === ins.id ? '…' : 'Delete'}
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-
-                        {/* Section B — Completed Reports */}
-                        <div>
-                          <div style={{ background: 'var(--sage-soft)', padding: '10px 20px', borderRadius: 'var(--radius-sm)', marginBottom: 12 }}>
-                            <span style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--sage-ink)' }}>
-                              ✓ Completed Reports — {finalisedInspections.length}
-                            </span>
-                          </div>
-                          <div style={{ background: 'var(--surface)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                              <thead>
-                                <tr>
-                                  {['Report #', 'Date', 'Site Contact', 'Weather', 'Actions'].map(h => (
-                                    <th key={h} style={th}>{h}</th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {finalisedInspections.length === 0 ? (
-                                  <tr>
-                                    <td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--text-mid)' }}>
-                                      No completed reports yet
-                                    </td>
-                                  </tr>
-                                ) : finalisedInspections.map(ins => (
-                                  <tr key={`done-${ins.id}`}
-                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--paper)')}
-                                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                                  >
-                                    <td style={td}>
-                                      <span style={{ background: 'var(--sage-soft)', color: 'var(--sage-ink)', fontFamily: 'var(--f-mono)', fontSize: 11, padding: '4px 8px', borderRadius: 6 }}>
-                                        #{ins.report_no ?? '—'}
-                                      </span>
-                                    </td>
-                                    <td style={{ ...td, fontFamily: 'var(--f-mono)', fontSize: 13 }}>{ins.date ?? '—'}</td>
-                                    <td style={td}>{ins.site_contact ?? '—'}</td>
-                                    <td style={td}>{ins.weather ?? '—'}</td>
-                                    <td style={td}>
-                                      <div style={{ display: 'flex', gap: 8 }}>
-                                        <button
-                                          onClick={() => router.push(`/report/${ins.id}`)}
-                                          style={{ background: 'none', color: 'var(--indigo)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-heading)', fontWeight: 700, padding: '8px 14px', fontSize: 14, cursor: 'pointer' }}
-                                        >
-                                          Open
-                                        </button>
-                                        <button
-                                          onClick={() => deleteReport(ins.id)}
-                                          disabled={deletingReportId === ins.id}
-                                          style={{ background: 'var(--clay-soft)', color: 'var(--clay-ink)', border: '1px solid rgba(229,115,91,.3)', borderRadius: 'var(--radius-pill)', padding: '8px 14px', fontSize: 14, cursor: deletingReportId === ins.id ? 'not-allowed' : 'pointer', opacity: deletingReportId === ins.id ? 0.6 : 1 }}
-                                        >
-                                          {deletingReportId === ins.id ? '…' : 'Delete'}
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                        <h3 style={{ fontFamily: 'var(--f-heading)', fontSize: 18, fontWeight: 800, color: 'var(--indigo-deep)', marginBottom: 12 }}>Reports</h3>
+                        {(() => {
+                          const allReports = [...pendingInspections, ...finalisedInspections]
+                            .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
+                          if (allReports.length === 0) {
+                            return (
+                              <div style={{ padding: '24px 0', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>
+                                No reports yet — once an engineer completes a site visit on mobile, it appears here.
+                              </div>
+                            )
+                          }
+                          return (
+                            <div>
+                              {allReports.map((ins, i) => {
+                                const isFinal = finalisedInspections.some(f => f.id === ins.id)
+                                return (
+                                  <div key={ins.id} style={{
+                                    display: 'flex', alignItems: 'center', gap: 16, padding: '16px 4px',
+                                    borderBottom: i < allReports.length - 1 ? '1px solid var(--border-line)' : 'none',
+                                  }}>
+                                    <span style={{ background: 'var(--paper)', color: 'var(--text-mid)', fontFamily: 'var(--f-mono)', fontSize: 12, padding: '6px 12px', borderRadius: 'var(--radius-pill)', flexShrink: 0 }}>
+                                      #{ins.report_no ?? '—'}
+                                    </span>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>Site inspection report</div>
+                                      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 2 }}>{ins.date ?? '—'}</div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+                                      <Badge status={isFinal ? 'final' : 'pending'} />
+                                      <button
+                                        onClick={() => router.push(`/report/${ins.id}?project_name=${encodeURIComponent(selectedProject?.name ?? '')}`)}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}
+                                      >
+                                        Open
+                                        <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                                      </button>
+                                      <button
+                                        onClick={() => deleteReport(ins.id)}
+                                        disabled={deletingReportId === ins.id}
+                                        title="Delete report"
+                                        style={{ background: 'none', border: 'none', padding: 4, color: 'var(--text-mid)', cursor: deletingReportId === ins.id ? 'not-allowed' : 'pointer', opacity: deletingReportId === ins.id ? 0.5 : 0.7 }}
+                                      >
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24">
+                                          <polyline points="3 6 5 6 21 6"/>
+                                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        })()}
                       </>
                     )}
                   </div>
