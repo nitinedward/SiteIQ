@@ -782,7 +782,10 @@ export default function AdminPage() {
                   background: 'var(--marigold)', color: 'var(--text-ink)',
                   border: 'none', borderRadius: 'var(--radius-pill)',
                   fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                  transition: 'background .15s, color .15s',
                 }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--marigold-deep)'; e.currentTarget.style.color = '#fff' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--marigold)'; e.currentTarget.style.color = 'var(--text-ink)' }}
               >
                 + New Project
               </button>
