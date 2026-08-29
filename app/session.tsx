@@ -438,7 +438,16 @@ export default function SessionScreen() {
         </View>
 
         <View style={S.section}>
-          <Text style={S.sectionTitle}>Drawings ({inspDrawings.length})</Text>
+          <View style={S.sectionRow}>
+            <Text style={[S.sectionTitle, { marginBottom: 0 }]}>Drawings ({inspDrawings.length})</Text>
+            <TouchableOpacity onPress={() => {
+              const unsel = allDrawings.filter(d => !selectedDrawings.includes(d.id));
+              if (!unsel.length) { Alert.alert('All drawings added', 'All project drawings are already in this inspection.'); return; }
+              Alert.alert('Add Drawing', 'Select an additional drawing:', [...unsel.map(d => ({ text: `${d.number ? d.number + ' -' : ''}${d.title}`, onPress: () => setSelectedDrawings(curr => [...curr, d.id]) })), { text: 'Cancel', style: 'cancel' as const }]);
+            }}>
+              <Text style={S.addDrawText}>+ Add</Text>
+            </TouchableOpacity>
+          </View>
           <Text style={S.hint}>Tap a drawing to open the PDF and mark inspection zones</Text>
           {inspDrawings.map(drawing => (
             <TouchableOpacity key={drawing.id} style={S.drawingRow}
@@ -452,13 +461,6 @@ export default function SessionScreen() {
               <Text style={S.arrow}>{'→'}</Text>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity style={S.addDrawBtn} onPress={() => {
-            const unsel = allDrawings.filter(d => !selectedDrawings.includes(d.id));
-            if (!unsel.length) { Alert.alert('All drawings added', 'All project drawings are already in this inspection.'); return; }
-            Alert.alert('Add Drawing', 'Select an additional drawing:', [...unsel.map(d => ({ text: `${d.number ? d.number + ' -' : ''}${d.title}`, onPress: () => setSelectedDrawings(curr => [...curr, d.id]) })), { text: 'Cancel', style: 'cancel' as const }]);
-          }}>
-            <Text style={S.addDrawText}>+ Add another drawing</Text>
-          </TouchableOpacity>
         </View>
 
         <View style={S.section}>
@@ -582,8 +584,7 @@ const S = StyleSheet.create({
   drawTitle:    { fontSize: 14, color: T.ink, fontWeight: '500', marginBottom: 2 },
   drawMeta:     { fontSize: 12, color: T.mid },
   arrow:        { fontSize: 20, color: T.mid },
-  addDrawBtn:   { backgroundColor: T.surface, borderRadius: R.md, padding: 14, borderWidth: 1.5, borderColor: T.indigo, borderStyle: 'dashed', alignItems: 'center', marginTop: 4 },
-  addDrawText:  { fontSize: 13, color: T.indigo, fontWeight: '500' },
+  addDrawText:  { fontSize: 13, color: T.indigo, fontWeight: '700' },
 
   // General observation card
   addCard:      {
