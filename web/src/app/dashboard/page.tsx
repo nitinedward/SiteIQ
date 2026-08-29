@@ -77,9 +77,9 @@ function getWeekBuckets(): { start: Date; end: Date; label: string }[] {
 
 // ── PANEL HEADER ──────────────────────────────────────────────────────────────
 function PanelHeader({
-  dot, title, count, action, accentBorder, extra,
+  title, count, action, accentBorder, extra,
 }: {
-  dot: string; title: string
+  dot?: string; title: string
   count?: number; action?: { label: string; onClick: () => void }
   accentBorder?: string
   extra?: React.ReactNode
@@ -92,22 +92,23 @@ function PanelHeader({
       borderTop: accentBorder ? `3px solid ${accentBorder}` : undefined,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ width: 9, height: 9, borderRadius: '50%', background: dot, display: 'inline-block', flexShrink: 0 }} />
-        <span style={{ fontFamily: 'var(--f-heading)', fontSize: 16, fontWeight: 700, color: 'var(--text-ink)' }}>{title}</span>
+        <span style={{ fontFamily: 'var(--f-heading)', fontSize: 17, fontWeight: 700, color: 'var(--indigo-deep)' }}>{title}</span>
         {count !== undefined && count > 0 && (
           <span style={{
-            background: 'var(--marigold-soft)', color: 'var(--marigold-ink)',
-            fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+            background: 'var(--secondary, var(--paper))', color: 'var(--text-mid)',
+            fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, padding: '2px 10px', borderRadius: 99,
           }}>{count}</span>
         )}
         {extra}
       </div>
       {action && (
         <button onClick={action.onClick} style={{
+          display: 'flex', alignItems: 'center', gap: 4,
           background: 'none', border: 'none', cursor: 'pointer',
           fontFamily: 'var(--f-heading)', fontSize: 13, color: 'var(--indigo)', fontWeight: 700,
         }}>
           {action.label}
+          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
         </button>
       )}
     </div>
@@ -309,8 +310,8 @@ export default function DashboardPage() {
         {/* PAGE HEADER */}
         <div className="dash-header" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 36 }}>
           <div>
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--text-mid)', marginBottom: 8 }}>
-              {new Date().toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()}
+            <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)', marginBottom: 8 }}>
+              {new Date().toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </div>
             <h1 className="dash-title" style={{ fontFamily: 'var(--f-heading)', fontSize: 40, fontWeight: 800, color: 'var(--indigo-deep)', lineHeight: 1, margin: 0 }}>
               Dashboard
@@ -345,22 +346,18 @@ export default function DashboardPage() {
             onMouseLeave={e => { e.currentTarget.style.transform = 'none' }}
             style={{
               background: 'var(--surface)', border: '1px solid var(--border-line)',
-              borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card-v3)',
-              padding: '28px 32px', cursor: 'pointer',
-              transition: 'all .2s', position: 'relative', overflow: 'hidden',
+              borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card-v3)',
+              padding: '28px 32px', cursor: 'pointer', transition: 'all .2s',
             }}
           >
-            <div style={{ position: 'absolute', top: -30, right: -30, width: 100, height: 100, borderRadius: '50%', background: 'var(--sage-soft)', opacity: 0.6, pointerEvents: 'none' }} />
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-mid)' }}>ACTIVE PROJECTS</div>
-              <div style={{ position: 'relative', width: 30, height: 30, borderRadius: 10, background: 'var(--sage-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--sage-ink)', flexShrink: 0 }}>
-                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                  <rect x="2" y="7" width="20" height="15"/><polyline points="17,22 17,7 7,7 7,22"/><polyline points="7,2 12,7 17,2"/>
-                </svg>
-              </div>
+            <div style={{ width: 44, height: 44, borderRadius: 16, background: 'var(--sage-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--sage-ink)' }}>
+              <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                <rect x="2" y="7" width="20" height="15"/><polyline points="17,22 17,7 7,7 7,22"/><polyline points="7,2 12,7 17,2"/>
+              </svg>
             </div>
-            <div style={{ position: 'relative', fontFamily: 'var(--f-heading)', fontSize: 40, fontWeight: 800, lineHeight: 1, color: 'var(--text-ink)', marginBottom: 8 }}>{activeProjects.length}</div>
-            <div style={{ position: 'relative', fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>Currently on site</div>
+            <div style={{ fontFamily: 'var(--f-heading)', fontSize: 36, fontWeight: 800, lineHeight: 1, color: 'var(--indigo-deep)', marginTop: 24 }}>{activeProjects.length}</div>
+            <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)', marginTop: 8 }}>Active projects</div>
+            <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 2 }}>Currently on site</div>
           </div>
 
           {/* Card 2 — On Hold */}
@@ -370,22 +367,18 @@ export default function DashboardPage() {
             onMouseLeave={e => { e.currentTarget.style.transform = 'none' }}
             style={{
               background: 'var(--surface)', border: '1px solid var(--border-line)',
-              borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card-v3)',
-              padding: '28px 32px', cursor: 'pointer',
-              transition: 'all .2s', position: 'relative', overflow: 'hidden',
+              borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card-v3)',
+              padding: '28px 32px', cursor: 'pointer', transition: 'all .2s',
             }}
           >
-            <div style={{ position: 'absolute', top: -30, right: -30, width: 100, height: 100, borderRadius: '50%', background: 'var(--marigold-soft)', opacity: 0.6, pointerEvents: 'none' }} />
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-mid)' }}>ON HOLD</div>
-              <div style={{ position: 'relative', width: 30, height: 30, borderRadius: 10, background: 'var(--marigold-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--marigold-ink)', flexShrink: 0 }}>
-                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                  <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
-                </svg>
-              </div>
+            <div style={{ width: 44, height: 44, borderRadius: 16, background: 'var(--marigold-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--marigold-ink)' }}>
+              <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+              </svg>
             </div>
-            <div style={{ position: 'relative', fontFamily: 'var(--f-heading)', fontSize: 40, fontWeight: 800, lineHeight: 1, color: 'var(--text-ink)', marginBottom: 8 }}>{onHoldProjects.length}</div>
-            <div style={{ position: 'relative', fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>Awaiting client</div>
+            <div style={{ fontFamily: 'var(--f-heading)', fontSize: 36, fontWeight: 800, lineHeight: 1, color: 'var(--indigo-deep)', marginTop: 24 }}>{onHoldProjects.length}</div>
+            <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)', marginTop: 8 }}>On hold</div>
+            <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 2 }}>Awaiting client sign-off</div>
           </div>
 
           {/* Card 3 — Site Visits */}
@@ -394,22 +387,18 @@ export default function DashboardPage() {
             onMouseLeave={e => { e.currentTarget.style.transform = 'none' }}
             style={{
               background: 'var(--surface)', border: '1px solid var(--border-line)',
-              borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card-v3)',
-              padding: '28px 32px',
-              transition: 'all .2s', position: 'relative', overflow: 'hidden',
+              borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card-v3)',
+              padding: '28px 32px', transition: 'all .2s',
             }}
           >
-            <div style={{ position: 'absolute', top: -30, right: -30, width: 100, height: 100, borderRadius: '50%', background: 'var(--indigo-soft)', opacity: 0.6, pointerEvents: 'none' }} />
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-mid)' }}>SITE VISITS THIS WEEK</div>
-              <div style={{ position: 'relative', width: 30, height: 30, borderRadius: 10, background: 'var(--indigo-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--indigo)', flexShrink: 0 }}>
-                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
-              </div>
+            <div style={{ width: 44, height: 44, borderRadius: 16, background: 'var(--indigo-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--indigo)' }}>
+              <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
             </div>
-            <div style={{ position: 'relative', fontFamily: 'var(--f-heading)', fontSize: 40, fontWeight: 800, lineHeight: 1, color: 'var(--text-ink)', marginBottom: 8 }}>{siteVisitsThisWeek}</div>
-            <div style={{ position: 'relative', fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>Inspections recorded</div>
+            <div style={{ fontFamily: 'var(--f-heading)', fontSize: 36, fontWeight: 800, lineHeight: 1, color: 'var(--indigo-deep)', marginTop: 24 }}>{siteVisitsThisWeek}</div>
+            <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)', marginTop: 8 }}>Site visits this week</div>
+            <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 2 }}>Inspections recorded</div>
           </div>
         </div>
 
@@ -418,7 +407,7 @@ export default function DashboardPage() {
 
           {/* Panel 1 — Active Projects */}
           <Card style={{ overflow: 'hidden' }}>
-            <PanelHeader dot="var(--sage)" title="Active Projects" action={{ label: 'View all >', onClick: () => router.push('/admin') }} />
+            <PanelHeader dot="var(--sage)" title="Active Projects" action={{ label: 'View all', onClick: () => router.push('/admin') }} />
             {activeProjects.length === 0 ? (
               <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>No active projects</div>
             ) : activeProjects.slice(0, 5).map(p => {
@@ -533,7 +522,7 @@ export default function DashboardPage() {
 
           {/* Panel 4 — Recent Completed */}
           <Card style={{ overflow: 'hidden' }}>
-            <PanelHeader dot="var(--sage)" title="Recent Completed" action={{ label: 'View all >', onClick: () => router.push('/admin') }} />
+            <PanelHeader dot="var(--sage)" title="Recent Completed" action={{ label: 'View all', onClick: () => router.push('/admin') }} />
             {(finalisedReports ?? recentCompleted).length === 0 ? (
               <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>No completed reports yet</div>
             ) : (finalisedReports ?? recentCompleted).slice(0, 4).map(ins => (
