@@ -125,6 +125,7 @@ export default function AdminPage() {
   const [deletingSelected, setDeletingSelected]     = useState(false)
   const [renamingDrawingId, setRenamingDrawingId]   = useState<string | null>(null)
   const [renameTitle, setRenameTitle]               = useState('')
+  const [hoveredDrawingId, setHoveredDrawingId]     = useState<string | null>(null)
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([])
   const [showNewProject, setShowNewProject]   = useState(false)
   const [savingAssignment, setSavingAssignment] = useState(false)
@@ -1078,6 +1079,8 @@ export default function AdminPage() {
                               <div
                                 key={d.id}
                                 onClick={() => window.open(d.file_url, '_blank', 'noopener,noreferrer')}
+                                onMouseEnter={() => setHoveredDrawingId(d.id)}
+                                onMouseLeave={() => setHoveredDrawingId(curr => curr === d.id ? null : curr)}
                                 style={{ display: 'flex', alignItems: 'center', gap: 14, background: checked ? 'var(--indigo-soft)' : 'var(--paper)', border: `1px solid ${checked ? 'var(--indigo)' : 'var(--border-line)'}`, borderRadius: 'var(--radius-sm)', padding: '14px 20px', cursor: 'pointer' }}
                               >
                                 <input
@@ -1111,7 +1114,12 @@ export default function AdminPage() {
                                         type="button"
                                         title="Rename"
                                         onClick={e => { e.stopPropagation(); startRenameDrawing(d) }}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, color: 'var(--text-mid)', fontSize: 13, lineHeight: 1 }}
+                                        style={{
+                                          background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0,
+                                          color: 'var(--text-mid)', fontSize: 11, lineHeight: 1,
+                                          opacity: hoveredDrawingId === d.id ? 0.6 : 0,
+                                          transition: 'opacity 0.15s ease',
+                                        }}
                                       >
                                         ✏️
                                       </button>
