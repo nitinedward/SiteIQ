@@ -123,6 +123,8 @@ export default function AdminPage() {
   const [drawings, setDrawings]               = useState<Drawing[]>([])
   const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([])
   const [deletingSelected, setDeletingSelected]     = useState(false)
+  const [renamingDrawingId, setRenamingDrawingId]   = useState<string | null>(null)
+  const [renameTitle, setRenameTitle]               = useState('')
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([])
   const [showNewProject, setShowNewProject]   = useState(false)
   const [savingAssignment, setSavingAssignment] = useState(false)
@@ -262,6 +264,29 @@ export default function AdminPage() {
       .eq('project_id', selectedProject.id)
       .order('created_at', { ascending: false })
     setDrawings(data ?? [])
+  }
+
+  const startRenameDrawing = (d: Drawing) => {
+    setRenamingDrawingId(d.id)
+    setRenameTitle(d.title)
+  }
+
+  const cancelRenameDrawing = () => {
+    setRenamingDrawingId(null)
+    setRenameTitle('')
+  }
+
+  const saveRenameDrawing = async (id: string) => {
+    const trimmed = renameTitle.trim()
+    if (!trimmed) { cancelRenameDrawing(); return }
+    setDrawings(curr => curr.map(d => d.id === id ? { ...d, title: trimmed } : d))
+    setRenamingDrawingId(null)
+    const { error } = await supabase.from('drawings').update({ title: trimmed }).eq('id', id)
+    if (error) {
+      console.error('[rename] failed:', error)
+      setUploadMsg({ ok: false, text: 'Rename failed: ' + error.message })
+      await reloadDrawings()
+    }
   }
 
   const toggleDrawingSelected = (id: string) => {
@@ -1066,7 +1091,32 @@ export default function AdminPage() {
                                   {d.number || '—'}
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontFamily: 'var(--f-text)', fontSize: 15, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
+                                  {renamingDrawingId === d.id ? (
+                                    <input
+                                      autoFocus
+                                      value={renameTitle}
+                                      onClick={e => e.stopPropagation()}
+                                      onChange={e => setRenameTitle(e.target.value)}
+                                      onBlur={() => saveRenameDrawing(d.id)}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') { e.preventDefault(); saveRenameDrawing(d.id) }
+                                        if (e.key === 'Escape') { e.preventDefault(); cancelRenameDrawing() }
+                                      }}
+                                      style={{ width: '100%', fontFamily: 'var(--f-text)', fontSize: 15, fontWeight: 500, color: 'var(--text-ink)', background: 'var(--white)', border: '1px solid var(--indigo)', borderRadius: 6, padding: '3px 8px' }}
+                                    />
+                                  ) : (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                                      <div style={{ fontFamily: 'var(--f-text)', fontSize: 15, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
+                                      <button
+                                        type="button"
+                                        title="Rename"
+                                        onClick={e => { e.stopPropagation(); startRenameDrawing(d) }}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, color: 'var(--text-mid)', fontSize: 13, lineHeight: 1 }}
+                                      >
+                                        ✏️
+                                      </button>
+                                    </div>
+                                  )}
                                   <div style={{ fontSize: 12, color: 'var(--text-mid)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>Rev {d.revision}</div>
                                 </div>
                               </div>
