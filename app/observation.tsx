@@ -84,13 +84,14 @@ const wave = StyleSheet.create({
 
 export default function ObservationScreen() {
   const params = useLocalSearchParams();
-  const zoneLabel     = params.zone_label as string || 'General Observation';
   const zoneId        = params.zone_id as string || '';
+  const isGeneral     = zoneId === 'general';
   const projectId     = params.project_id as string || '';
   const inspectionId  = params.inspection_id as string || '';
   const observationId = params.observation_id as string || '';
   const isEditMode    = !!observationId;
 
+  const [zoneLabel, setZoneLabel]   = useState(params.zone_label as string || 'General Observation');
   const [photos, setPhotos]         = useState<string[]>([]);
   const [transcript, setTranscript] = useState('');
   const [severity, setSeverity]     = useState<Severity>('NONE');
@@ -121,6 +122,7 @@ export default function ObservationScreen() {
     (async () => {
       const { data, error } = await supabase.from('observations').select('*').eq('id', observationId).single();
       if (error || !data) { Alert.alert('Error', 'Could not load observation.'); router.back(); return; }
+      if (data.zone_label) setZoneLabel(data.zone_label);
       setPhotos(Array.isArray(data.photos) ? data.photos : JSON.parse(data.photos || '[]'));
       setTranscript(data.transcript || '');
       setSeverity(data.severity || 'NONE');
@@ -331,10 +333,11 @@ export default function ObservationScreen() {
       Alert.alert('Nothing to Save', 'Please add at least one photo, voice note, or measurement.'); return;
     }
     setIsSubmitting(true);
-    const payload = { severity, transcript: transcript.trim(), notes: '', photos, measurements };
+    const label = zoneLabel.trim() || 'General Site Observation';
+    const payload = { severity, transcript: transcript.trim(), notes: '', photos, measurements, zone_label: label };
     const { error } = isEditMode
       ? await supabase.from('observations').update(payload).eq('id', observationId)
-      : await supabase.from('observations').insert({ ...payload, zone_id: zoneId !== 'general' ? zoneId : null, project_id: projectId, inspection_id: inspectionId || null, zone_label: zoneLabel });
+      : await supabase.from('observations').insert({ ...payload, zone_id: zoneId !== 'general' ? zoneId : null, project_id: projectId, inspection_id: inspectionId || null });
     setIsSubmitting(false);
     if (error) { Alert.alert('Save Failed', error.message); return; }
     Alert.alert(isEditMode ? 'Updated' : 'Saved', `Observation for "${zoneLabel}" has been ${isEditMode ? 'updated' : 'recorded'}.`, [{ text: 'OK', onPress: () => router.back() }]);
@@ -365,7 +368,17 @@ export default function ObservationScreen() {
         <View style={S.zoneBanner}>
           <Text style={{ fontSize: 16, fontWeight: '700', color: T.indigo }}>Zone:</Text>
           <View style={{ flex: 1 }}>
-            <Text style={S.zoneLabel}>{zoneLabel}</Text>
+            {isGeneral ? (
+              <TextInput
+                style={S.zoneLabelInput}
+                value={zoneLabel}
+                onChangeText={setZoneLabel}
+                placeholder="General Site Observation"
+                placeholderTextColor={T.mid}
+              />
+            ) : (
+              <Text style={S.zoneLabel}>{zoneLabel}</Text>
+            )}
             <Text style={S.zoneSub}>Tap below to capture your observations</Text>
           </View>
         </View>
@@ -501,6 +514,7 @@ const S = StyleSheet.create({
   headerTitle:  { fontSize: 16, fontWeight: '600', color: T.ink, flex: 1, textAlign: 'center' },
   zoneBanner:   { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: T.surface, margin: 16, borderRadius: R.md, padding: 16, borderWidth: 1, borderColor: T.line, borderLeftWidth: 4, borderLeftColor: T.marigold, shadowColor: '#2C3950', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
   zoneLabel:    { fontSize: 16, fontWeight: '700', color: T.ink, marginBottom: 2 },
+  zoneLabelInput: { fontSize: 16, fontWeight: '700', color: T.ink, marginBottom: 2, padding: 0 },
   zoneSub:      { fontSize: 12, color: T.mid },
   section:      { paddingHorizontal: 16, paddingBottom: 16 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
