@@ -327,10 +327,10 @@ export default function SessionScreen() {
       <KeyboardAvoidingView style={S.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={S.header}>
           <TouchableOpacity style={S.backBtn} onPress={handleBack}>
-            <Ionicons name="arrow-back" size={20} color={T.indigo} />
+            <Ionicons name="arrow-back" size={22} color={T.indigo} />
           </TouchableOpacity>
           <Text style={S.headerTitle}>New Inspection</Text>
-          <View style={{ width: 40 }} />
+          <View style={{ width: 50 }} />
         </View>
 
         <ScrollView style={S.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -420,10 +420,10 @@ export default function SessionScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => setStep('details')}>
-          <Ionicons name="arrow-back" size={20} color={T.indigo} />
+          <Ionicons name="arrow-back" size={22} color={T.indigo} />
         </TouchableOpacity>
         <Text style={S.headerTitle}>Capturing</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 50 }} />
       </View>
 
       <ScrollView style={S.scroll} showsVerticalScrollIndicator={false}>
@@ -491,7 +491,7 @@ const S = StyleSheet.create({
   // Header
   header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, backgroundColor: T.paper, borderBottomWidth: 1, borderBottomColor: T.line },
   backBtn:      {
-    width: 40, height: 40, borderRadius: 20,
+    width: 50, height: 50, borderRadius: 25,
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.line,
     alignItems: 'center', justifyContent: 'center',
   },
