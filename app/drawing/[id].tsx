@@ -508,7 +508,7 @@ const S = StyleSheet.create({
   toggleBtn:     { backgroundColor: T.indigoSoft, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20 },
   toggleText:    { fontSize: 13, color: T.indigo, fontWeight: '700' },
   pdfScreen:     { flex: 1 },
-  toolbar:       { flexDirection: 'row', backgroundColor: T.line, paddingTop: 8, paddingBottom: 12, paddingHorizontal: 40, gap: 28, zIndex: 10 },
+  toolbar:       { flexDirection: 'row', backgroundColor: T.paper, paddingTop: 8, paddingBottom: 12, paddingHorizontal: 40, gap: 28, zIndex: 10 },
   toolBtn:       { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 3, borderRadius: 20, backgroundColor: T.surface, borderWidth: 1, borderColor: T.line, gap: 4 },
   toolBtnOn:     { backgroundColor: T.indigoSoft, borderColor: T.indigo },
   toolLabel:     { fontSize: 15, color: T.mid, fontWeight: '700' },
