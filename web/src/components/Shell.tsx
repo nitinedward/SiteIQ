@@ -393,7 +393,7 @@ export function Badge({ status }: { status: string }) {
     ON_HOLD:   { label: 'On Hold',   color: 'var(--marigold-ink)', bg: 'var(--marigold-soft)' },
     COMPLETED: { label: 'Completed', color: 'var(--indigo)',       bg: 'var(--indigo-soft)'   },
     draft:     { label: 'Draft',     color: 'var(--marigold-ink)', bg: 'var(--marigold-soft)' },
-    final:     { label: 'Final',     color: 'var(--sage-ink)',     bg: 'var(--sage-soft)'     },
+    final:     { label: 'Finalised', color: 'var(--sage-ink)',     bg: 'var(--sage-soft)'     },
     pending:   { label: 'Pending',   color: 'var(--marigold-ink)', bg: 'var(--marigold-soft)' },
   }
   const s = map[status] ?? { label: status, color: 'var(--text-mid)', bg: 'var(--paper)' }
