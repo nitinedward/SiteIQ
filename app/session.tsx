@@ -376,7 +376,7 @@ export default function SessionScreen() {
                 </View>
                 <View style={S.checkInfo}>
                   <Text style={S.checkTitle}>
-                    {selectedDrawings.length === 0 ? 'Select drawings' : `${selectedDrawings.length} of ${allDrawings.length} selected`}
+                    {selectedDrawings.length === 0 ? 'Select drawings' : `${selectedDrawings.length} drawing${selectedDrawings.length === 1 ? '' : 's'} selected`}
                   </Text>
                   <Text style={S.checkMeta}>Tap to choose the drawings relevant to today's inspection</Text>
                 </View>
@@ -544,8 +544,8 @@ const S = StyleSheet.create({
   checkRowActive:{ borderColor: T.indigo, backgroundColor: T.indigoSoft },
   checkbox:     { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: T.line, alignItems: 'center', justifyContent: 'center' },
   checkboxActive:{ backgroundColor: T.indigo, borderColor: T.indigo },
-  pickerBadge:     { backgroundColor: T.indigoSoft, borderRadius: R.sm, paddingHorizontal: 12, paddingVertical: 8, minWidth: 40, alignItems: 'center' },
-  pickerBadgeText: { fontSize: 15, color: T.indigo, fontWeight: '800' },
+  pickerBadge:     { backgroundColor: T.indigoSoft, borderRadius: R.md, paddingHorizontal: 16, paddingVertical: 12, minWidth: 52, alignItems: 'center' },
+  pickerBadgeText: { fontSize: 19, color: T.indigo, fontWeight: '800' },
   checkmark:    { fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
   checkInfo:    { flex: 1 },
   checkTitle:   { fontSize: 14, color: T.ink, fontWeight: '500', marginBottom: 2 },
