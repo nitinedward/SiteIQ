@@ -341,5 +341,5 @@ const S = StyleSheet.create({
     paddingTop: 4,
   },
   footerTab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
-  footerTabLabel: { fontSize: 12, fontWeight: '700', color: T.mid },
+  footerTabLabel: { fontSize: 11, fontWeight: '700', color: T.mid },
 });
