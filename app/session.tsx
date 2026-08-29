@@ -32,7 +32,7 @@ const WEATHER_OPTIONS = [
 
 type Step = 'details' | 'capture';
 type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; preview_url: string | null };
-type GeneralObservation = { id: string; notes: string | null; transcript: string | null; severity: string | null; observed_at: string };
+type GeneralObservation = { id: string; notes: string | null; transcript: string | null; severity: string | null; observed_at: string; zone_label: string | null };
 
 function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; metering: number }) {
   const barAnims = useRef(Array.from({ length: BAR_COUNT }, () => new Animated.Value(0.05))).current;
@@ -138,7 +138,7 @@ export default function SessionScreen() {
   }, []));
 
   const fetchGeneralObservations = async (id: string) => {
-    const { data } = await supabase.from('observations').select('id,notes,transcript,severity,observed_at').eq('inspection_id', id).is('zone_id', null).order('observed_at', { ascending: false });
+    const { data } = await supabase.from('observations').select('id,notes,transcript,severity,observed_at,zone_label').eq('inspection_id', id).is('zone_id', null).order('observed_at', { ascending: false });
     setGeneralObservations((data as GeneralObservation[]) ?? []);
   };
   useFocusEffect(useCallback(() => {
@@ -509,7 +509,7 @@ export default function SessionScreen() {
                 </TouchableOpacity>
               </View>
               {generalObservations.map((obs, idx) => {
-                const summary = obs.transcript?.trim() || obs.notes?.trim() || 'General observation';
+                const summary = obs.zone_label?.trim() || obs.transcript?.trim() || obs.notes?.trim() || 'General observation';
                 return (
                   <Swipeable
                     key={obs.id}
