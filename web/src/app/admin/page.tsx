@@ -1,6 +1,6 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useRef, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { Shell, Badge, Btn, Spinner, Card } from '@/components/Shell'
 
@@ -129,7 +129,20 @@ function Avatar({ name, size = 40 }: { name: string; size?: number }) {
 
 // ── PAGE ──────────────────────────────────────────────────────────────────────
 export default function AdminPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <Spinner size={32} />
+      </div>
+    }>
+      <AdminPageInner />
+    </Suspense>
+  )
+}
+
+function AdminPageInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   // ── existing state ────────────────────────────────────────────────────────
   const [firmId, setFirmId]           = useState('')
@@ -187,9 +200,8 @@ export default function AdminPage() {
   useEffect(() => { loadData() }, [])
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('tab') === 'team') setTab('team')
-  }, [])
+    setTab(searchParams.get('tab') === 'team' ? 'team' : 'projects')
+  }, [searchParams])
 
   // ── existing functions (unchanged) ────────────────────────────────────────
   const loadData = async () => {
@@ -680,15 +692,6 @@ export default function AdminPage() {
     </div>
   )
 
-  const tabBtn = (active: boolean): React.CSSProperties => ({
-    padding: '14px 20px', fontFamily: 'var(--f-heading)', fontSize: 14.5,
-    fontWeight: 700,
-    color: active ? 'var(--indigo)' : 'var(--text-mid)',
-    background: 'none', border: 'none',
-    borderBottom: active ? '2px solid var(--indigo)' : '2px solid transparent',
-    cursor: 'pointer', transition: 'all .15s',
-  })
-
   const subTabBtn = (active: boolean): React.CSSProperties => ({
     padding: '14px 24px', fontFamily: 'var(--f-heading)', fontSize: 14.5,
     fontWeight: 700,
@@ -729,17 +732,11 @@ export default function AdminPage() {
           .admin-panel   { width: 100% !important; }
         }
       `}</style>
-      {/* ── Main tab bar ─────────────────────────────────── */}
-      <div style={{ borderBottom: '1px solid var(--border-line)', background: 'var(--surface)', padding: '0 28px', display: 'flex', gap: 4 }}>
-        <button style={tabBtn(tab === 'projects')} onClick={() => setTab('projects')}>Projects</button>
-        <button style={tabBtn(tab === 'team')}     onClick={() => setTab('team')}>Team</button>
-      </div>
-
       {/* ══════════════════════════════════════════════════════
           PROJECTS TAB
       ══════════════════════════════════════════════════════ */}
       {tab === 'projects' && (
-        <div className="admin-layout" style={{ display: 'flex', gap: 20, height: 'calc(100vh - 64px - 49px)', overflow: 'hidden', padding: 20, background: 'var(--paper)', boxSizing: 'border-box' }}>
+        <div className="admin-layout" style={{ display: 'flex', gap: 20, height: 'calc(100vh - 64px)', overflow: 'hidden', padding: 20, background: 'var(--paper)', boxSizing: 'border-box' }}>
 
           {/* Left — project list (300px fixed) */}
           <div className="admin-sidebar" style={{
