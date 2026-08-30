@@ -94,11 +94,11 @@ function NavBtn({ id, label, active, onClick }: {
       <button
         onClick={onClick}
         style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          width: 'calc(100% - 40px)', padding: '10px 14px',
-          margin: '1px 20px',
+          display: 'flex', alignItems: 'center', gap: 12,
+          width: 'calc(100% - 40px)', minHeight: 44, padding: '10px 16px',
+          margin: '3px 20px',
           borderRadius: 'var(--radius-pill)',
-          fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
+          fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: active ? 600 : 500,
           color: active ? 'var(--indigo)' : 'var(--text-mid)',
           background: active ? 'var(--indigo-soft)' : 'none',
           border: 'none', textAlign: 'left', cursor: 'pointer',
@@ -207,10 +207,10 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
           <button
             onClick={() => onSignOut?.()}
             style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              width: 'calc(100% - 40px)', margin: '1px 20px',
-              padding: '10px 14px', borderRadius: 'var(--radius-pill)',
-              fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
+              display: 'flex', alignItems: 'center', gap: 12,
+              width: 'calc(100% - 40px)', minHeight: 44, margin: '3px 20px',
+              padding: '10px 16px', borderRadius: 'var(--radius-pill)',
+              fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: 500,
               color: 'var(--clay)',
               background: 'none', border: 'none',
               textAlign: 'left', cursor: 'pointer',
