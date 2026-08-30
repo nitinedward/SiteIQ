@@ -251,7 +251,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
             </svg>
           </div>
           <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>
-            {firmName || 'SiteIQ'}
+            SiteIQ
             <span style={{ margin: '0 6px' }}>/</span>
             <span style={{ fontFamily: 'var(--f-heading)', fontWeight: 700, color: 'var(--text-ink)' }}>
               {PAGE_LABELS[activePage] ?? activePage}
