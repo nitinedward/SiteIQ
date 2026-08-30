@@ -35,23 +35,23 @@ function parseVisitDate(raw: string): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
+// Calendar days between the site visit and today (midnight to midnight, so
+// same-day time-of-day doesn't cause an off-by-one).
+function daysSinceVisit(visitDate: string): number {
+  const v = parseVisitDate(visitDate)
+  if (!v) return 0
+  const vMidnight = new Date(v)
+  vMidnight.setHours(0, 0, 0, 0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.round((today.getTime() - vMidnight.getTime()) / 86400000))
+}
+
 // A report is overdue when its site visit was more than 2 days ago and the
 // report has not yet been finalised.
 function isOverdue(visitDate: string, status?: string | null): boolean {
   if (status === 'finalised') return false
-  const v = parseVisitDate(visitDate)
-  if (!v) return false
-  const cutoff = new Date()
-  cutoff.setHours(0, 0, 0, 0)
-  cutoff.setDate(cutoff.getDate() - 2)
-  return v < cutoff
-}
-
-function daysOverdue(visitDate: string): number {
-  const v = parseVisitDate(visitDate)
-  if (!v) return 0
-  const diff = Date.now() - v.getTime()
-  return Math.max(0, Math.floor(diff / 86400000) - 2)
+  return daysSinceVisit(visitDate) > 2
 }
 
 // ── WEEKLY CHART HELPERS ─────────────────────────────────────────────────────
@@ -422,7 +422,7 @@ export default function DashboardPage() {
                 >
                   <div>
                     <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}>{p.name}</div>
-                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 2 }}>#{p.project_number}</div>
+                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 2 }}>{p.project_number}</div>
                   </div>
                   {pCount > 0
                     ? <span style={{ background: 'var(--marigold-soft)', color: 'var(--marigold-ink)', fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>{pCount} pending</span>
@@ -446,9 +446,6 @@ export default function DashboardPage() {
                 }}>{overdueCount} overdue</span>
               ) : undefined}
             />
-            <div style={{ background: 'var(--marigold-soft)', padding: '10px 24px', fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--marigold-ink)', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid rgba(224,141,11,0.15)' }}>
-              Completed on mobile - ready for AI report generation
-            </div>
             {pendingReports.length === 0 ? (
               <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>No pending reports - all caught up</div>
             ) : sortedPendingReports.slice(0, 5).map(ins => {
@@ -468,12 +465,11 @@ export default function DashboardPage() {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
                       <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)' }}>{ins.date}</span>
-                      {overdue && (
-                        <span style={{
-                          background: '#FBE4DF', color: '#E5735B',
-                          fontFamily: 'var(--f-heading)', fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 20,
-                        }}>Overdue · {daysOverdue(ins.date)}d</span>
-                      )}
+                      <span style={{
+                        background: overdue ? '#FBE4DF' : 'var(--sage-soft)',
+                        color: overdue ? '#E5735B' : 'var(--sage-ink)',
+                        fontFamily: 'var(--f-heading)', fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 20,
+                      }}>{overdue ? `Overdue · ${daysSinceVisit(ins.date)}d` : `${daysSinceVisit(ins.date)}d`}</span>
                     </div>
                   </div>
                 </div>
@@ -482,14 +478,16 @@ export default function DashboardPage() {
                     onClick={() => router.push(`/report/${ins.id}?project_name=${encodeURIComponent((ins.projects as any)?.name ?? '')}`)}
                     style={{ background: 'var(--indigo)', color: 'white', border: 'none', borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, padding: '6px 14px', cursor: 'pointer' }}
                   >
-                    Generate
+                    View
                   </button>
                   <button
                     onClick={() => deleteInspection(ins.id)}
                     disabled={deletingId === ins.id}
-                    style={{ background: 'var(--clay-soft)', color: 'var(--clay-ink)', border: '1px solid rgba(229,115,91,0.25)', borderRadius: 'var(--radius-pill)', fontSize: 12, padding: '6px 10px', cursor: deletingId === ins.id ? 'not-allowed' : 'pointer', opacity: deletingId === ins.id ? 0.6 : 1 }}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-mid)', borderRadius: 'var(--radius-pill)', fontSize: 13, padding: '6px 10px', cursor: deletingId === ins.id ? 'not-allowed' : 'pointer', opacity: deletingId === ins.id ? 0.6 : 1, transition: 'background .12s, color .12s' }}
+                    onMouseEnter={e => { if (deletingId !== ins.id) { e.currentTarget.style.background = 'var(--clay-soft)'; e.currentTarget.style.color = 'var(--clay-ink)' } }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-mid)' }}
                   >
-                    x
+                    ✕
                   </button>
                 </div>
               </div>
