@@ -63,7 +63,7 @@ function NavIcon({ id }: { id: string }) {
     ),
   }
   return (
-    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7"
+    <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.7"
       viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
       {paths[id] ?? null}
     </svg>
@@ -94,9 +94,9 @@ function NavBtn({ id, label, active, onClick }: {
       <button
         onClick={onClick}
         style={{
-          display: 'flex', alignItems: 'center', gap: 12,
-          width: 'calc(100% - 40px)', minHeight: 44, padding: '10px 16px',
-          margin: '3px 20px',
+          display: 'flex', alignItems: 'center', gap: 14,
+          width: 'calc(100% - 40px)', minHeight: 48, padding: '13px 18px',
+          margin: '5px 20px',
           borderRadius: 'var(--radius-pill)',
           fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: active ? 600 : 500,
           color: active ? 'var(--indigo)' : 'var(--text-mid)',
@@ -168,19 +168,19 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
       }}>
 
         {/* Brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '20px 20px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '22px 20px 18px' }}>
           <div style={{
-            width: 32, height: 32, borderRadius: 'var(--radius-sm)',
+            width: 38, height: 38, borderRadius: 'var(--radius-sm)',
             background: 'var(--marigold)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
           }}>
-            <svg width="15" height="15" fill="none" stroke="#fff" strokeWidth="2" viewBox="0 0 24 24">
+            <svg width="18" height="18" fill="none" stroke="#fff" strokeWidth="2" viewBox="0 0 24 24">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
               <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
           </div>
-          <span className="topbar-brand" style={{ fontFamily: 'var(--f-heading)', fontSize: 20, fontWeight: 800, color: 'var(--text-ink)' }}>
+          <span className="topbar-brand" style={{ fontFamily: 'var(--f-heading)', fontSize: 23, fontWeight: 800, color: 'var(--text-ink)' }}>
             SiteIQ
           </span>
         </div>
@@ -207,9 +207,9 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
           <button
             onClick={() => onSignOut?.()}
             style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              width: 'calc(100% - 40px)', minHeight: 44, margin: '3px 20px',
-              padding: '10px 16px', borderRadius: 'var(--radius-pill)',
+              display: 'flex', alignItems: 'center', gap: 14,
+              width: 'calc(100% - 40px)', minHeight: 48, margin: '5px 20px',
+              padding: '13px 18px', borderRadius: 'var(--radius-pill)',
               fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: 500,
               color: 'var(--clay)',
               background: 'none', border: 'none',
@@ -219,7 +219,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--clay-soft)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'none')}
           >
-            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+            <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
               <polyline points="16 17 21 12 16 7"/>
               <line x1="21" y1="12" x2="9" y2="12"/>
@@ -260,17 +260,17 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
         </div>
 
         {/* RIGHT — user */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ lineHeight: 1.25, textAlign: 'right' }}>
-            <div className="topbar-user-name" style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>{fullName}</div>
-            <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)' }}>
+            <div className="topbar-user-name" style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>{fullName}</div>
+            <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>
               {role === 'admin' ? 'Administrator' : 'Engineer'}
             </div>
           </div>
           <div style={{
-            width: 34, height: 34, borderRadius: '50%',
+            width: 40, height: 40, borderRadius: '50%',
             background: 'var(--paper)', border: '1px solid var(--border-line)', color: 'var(--text-ink)',
-            fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700,
+            fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
           }}>
