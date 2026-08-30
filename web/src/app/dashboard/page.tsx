@@ -322,7 +322,7 @@ export default function DashboardPage() {
           </div>
           {role === 'admin' && (
             <button
-              onClick={() => router.push('/admin')}
+              onClick={() => router.push('/admin?new=1')}
               style={{
                 background: 'var(--marigold)', color: 'var(--indigo-deep)',
                 padding: '12px 24px', borderRadius: 'var(--radius-pill)',

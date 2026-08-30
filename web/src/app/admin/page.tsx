@@ -201,6 +201,11 @@ function AdminPageInner() {
 
   useEffect(() => {
     setTab(searchParams.get('tab') === 'team' ? 'team' : 'projects')
+    if (searchParams.get('new') === '1') {
+      setShowNewProject(true)
+      setSelectedProject(null)
+      router.replace('/admin', { scroll: false })
+    }
   }, [searchParams])
 
   // ── existing functions (unchanged) ────────────────────────────────────────
