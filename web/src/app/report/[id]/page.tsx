@@ -551,9 +551,10 @@ export default function ReportPage() {
 
           <button
             onClick={() => router.push('/dashboard')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mid)', fontSize: 12, fontWeight: 700, fontFamily: 'var(--f-heading)' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mid)', fontSize: 12, fontWeight: 700, fontFamily: 'var(--f-heading)' }}
           >
-            ← Dashboard
+            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+            Dashboard
           </button>
 
           <div className="report-breadcrumb" style={{ width: 1, height: 18, background: 'var(--border-line)' }} />
@@ -571,7 +572,7 @@ export default function ReportPage() {
               color: reportStatus === 'finalised' ? 'var(--sage-ink)' : 'var(--marigold-ink)',
             }}>
               <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />
-              {reportStatus === 'finalised' ? 'Finalised' : 'Pending Review'}
+              {reportStatus === 'finalised' ? 'Finalised' : 'Pending review'}
             </span>
           </div>
 
@@ -581,13 +582,15 @@ export default function ReportPage() {
               <button
                 onClick={() => { setEditorError(false); setEditorKey(prev => prev + 1) }}
                 style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
                   background: 'var(--marigold-soft)', color: 'var(--marigold-ink)',
                   border: '1px solid rgba(224,141,11,0.3)',
                   borderRadius: 'var(--radius-pill)', padding: '7px 14px',
                   fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
                 }}
               >
-                ⚠ Editor Offline — Retry
+                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Editor Offline — Retry
               </button>
             )}
             {reportStatus === 'pending' ? (
@@ -595,26 +598,37 @@ export default function ReportPage() {
                 onClick={finaliseReport}
                 disabled={finalisingReport}
                 style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
                   background: 'var(--sage)', color: 'white', border: 'none', borderRadius: 'var(--radius-pill)',
                   padding: '7px 18px', fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
                   opacity: finalisingReport ? 0.6 : 1,
                 }}
               >
-                {finalisingReport
-                  ? <>⏳<span className="report-btn-text"> Finalising…</span></>
-                  : <>✓<span className="report-btn-text"> Finalise Report</span></>}
+                {finalisingReport ? (
+                  <>
+                    <div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
+                    <span className="report-btn-text">Finalising…</span>
+                  </>
+                ) : (
+                  <>
+                    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span className="report-btn-text">Finalise Report</span>
+                  </>
+                )}
               </button>
             ) : (
               <button
                 onClick={reopenReport}
                 style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
                   background: 'var(--surface)', color: 'var(--text-ink)',
                   border: '1px solid var(--border-line)', borderRadius: 'var(--radius-pill)',
                   padding: '7px 18px', fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700,
                   cursor: 'pointer',
                 }}
               >
-                ✏<span className="report-btn-text"> Edit Report</span>
+                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                <span className="report-btn-text">Edit Report</span>
               </button>
             )}
             <button
@@ -650,9 +664,15 @@ export default function ReportPage() {
                   <span className="report-btn-text">Preparing...</span>
                 </>
               ) : totalAttachments > 0 ? (
-                <>⬇<span className="report-btn-text"> Download with {totalAttachments}{totalAttachments === 1 ? ' attachment' : ' attachments'}</span></>
+                <>
+                  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span className="report-btn-text">Download with {totalAttachments}{totalAttachments === 1 ? ' attachment' : ' attachments'}</span>
+                </>
               ) : (
-                <>⬇<span className="report-btn-text"> Download</span></>
+                <>
+                  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span className="report-btn-text">Download</span>
+                </>
               )}
             </button>
           </div>
@@ -838,7 +858,12 @@ export default function ReportPage() {
                     }} />
                     Generating...
                   </>
-                ) : '✨ Generate AI Report'}
+                ) : (
+                  <>
+                    <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/></svg>
+                    Generate AI Report
+                  </>
+                )}
               </button>
             </div>
 
@@ -896,7 +921,7 @@ export default function ReportPage() {
                         key={d.id}
                         style={{
                           border: `1.5px solid ${d.selected && d.captured ? 'var(--sage)' : 'var(--border-line)'}`,
-                          borderRadius: 'var(--radius-sm)', marginBottom: 8,
+                          borderRadius: 'var(--radius-md)', marginBottom: 8,
                           overflow: 'hidden',
                           background: d.selected && d.captured ? 'var(--sage-soft)' : 'var(--surface)',
                           transition: 'all 0.15s',
@@ -1092,7 +1117,7 @@ export default function ReportPage() {
                                   position: 'relative',
                                   aspectRatio: '4/3',
                                   cursor: 'pointer',
-                                  borderRadius: 'var(--radius-sm)',
+                                  borderRadius: 'var(--radius-md)',
                                   overflow: 'hidden',
                                   border: `2px solid ${photo.selected ? 'var(--sage)' : 'transparent'}`,
                                   opacity: photo.selected ? 1 : 0.35,
@@ -1205,7 +1230,17 @@ export default function ReportPage() {
                     ? 0.5 : 1,
                 }}
               >
-                {inserting ? '⏳ Inserting...' : 'Insert into Document'}
+                {inserting ? (
+                  <>
+                    <div style={{ width: 12, height: 12, border: '2px solid var(--border-line)', borderTopColor: 'var(--text-mid)', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
+                    Inserting...
+                  </>
+                ) : (
+                  <>
+                    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                    Insert into Document
+                  </>
+                )}
               </button>
 
               {/* Download button */}
@@ -1242,10 +1277,14 @@ export default function ReportPage() {
                     }} />
                     Preparing download...
                   </>
-                ) : totalAttachments > 0
-                  ? `⬇ Download with ${totalAttachments} attachment${totalAttachments !== 1 ? 's' : ''}`
-                  : '⬇ Download Report'
-                }
+                ) : (
+                  <>
+                    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    {totalAttachments > 0
+                      ? `Download with ${totalAttachments} attachment${totalAttachments !== 1 ? 's' : ''}`
+                      : 'Download Report'}
+                  </>
+                )}
               </button>
             </div>
           </div>
