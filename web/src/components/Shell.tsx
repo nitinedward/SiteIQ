@@ -87,37 +87,42 @@ function NavBtn({ id, label, active, onClick }: {
   id: string; label: string; active: boolean; onClick: () => void
 }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        width: 'calc(100% - 40px)', padding: '10px 14px',
-        margin: '1px 20px',
-        borderRadius: 'var(--radius-pill)',
-        fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
-        color: active ? 'var(--indigo)' : 'var(--text-mid)',
-        background: active ? 'var(--indigo-soft)' : 'none',
-        border: 'none', textAlign: 'left', cursor: 'pointer',
-        transition: 'background .15s, color .15s',
-      }}
-      onMouseEnter={e => {
-        if (!active) {
-          e.currentTarget.style.background = 'var(--paper)'
-          e.currentTarget.style.color = 'var(--text-ink)'
-        }
-      }}
-      onMouseLeave={e => {
-        if (!active) {
-          e.currentTarget.style.background = 'none'
-          e.currentTarget.style.color = 'var(--text-mid)'
-        }
-      }}
-    >
-      <span style={{ color: active ? 'var(--indigo)' : 'var(--text-mid)' }}>
-        <NavIcon id={id} />
-      </span>
-      {label}
-    </button>
+    <div style={{ position: 'relative' }}>
+      {active && (
+        <span style={{ position: 'absolute', left: 0, top: 8, bottom: 8, width: 3, borderRadius: '0 3px 3px 0', background: 'var(--indigo)' }} />
+      )}
+      <button
+        onClick={onClick}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          width: 'calc(100% - 40px)', padding: '10px 14px',
+          margin: '1px 20px',
+          borderRadius: 'var(--radius-pill)',
+          fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
+          color: active ? 'var(--indigo)' : 'var(--text-mid)',
+          background: active ? 'var(--indigo-soft)' : 'none',
+          border: 'none', textAlign: 'left', cursor: 'pointer',
+          transition: 'background .15s, color .15s',
+        }}
+        onMouseEnter={e => {
+          if (!active) {
+            e.currentTarget.style.background = 'var(--paper)'
+            e.currentTarget.style.color = 'var(--text-ink)'
+          }
+        }}
+        onMouseLeave={e => {
+          if (!active) {
+            e.currentTarget.style.background = 'none'
+            e.currentTarget.style.color = 'var(--text-mid)'
+          }
+        }}
+      >
+        <span style={{ color: active ? 'var(--indigo)' : 'var(--text-mid)' }}>
+          <NavIcon id={id} />
+        </span>
+        {label}
+      </button>
+    </div>
   )
 }
 
@@ -182,8 +187,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
 
         {/* Section label */}
         <div style={{
-          fontFamily: 'var(--f-heading)', fontSize: 10, fontWeight: 700,
-          textTransform: 'uppercase', letterSpacing: '2px',
+          fontFamily: 'var(--f-text)', fontSize: 13, fontWeight: 500,
           color: 'var(--text-mid)', padding: '0 20px 8px',
         }}>
           Workspace
