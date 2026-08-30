@@ -91,8 +91,8 @@ function NavBtn({ id, label, active, onClick }: {
       onClick={onClick}
       style={{
         display: 'flex', alignItems: 'center', gap: 10,
-        width: 'calc(100% - 20px)', padding: '10px 14px',
-        margin: '1px 10px',
+        width: 'calc(100% - 40px)', padding: '10px 14px',
+        margin: '1px 20px',
         borderRadius: 'var(--radius-pill)',
         fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
         color: active ? 'var(--indigo)' : 'var(--text-mid)',
@@ -204,7 +204,7 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
             onClick={() => onSignOut?.()}
             style={{
               display: 'flex', alignItems: 'center', gap: 10,
-              width: 'calc(100% - 20px)', margin: '1px 10px',
+              width: 'calc(100% - 40px)', margin: '1px 20px',
               padding: '10px 14px', borderRadius: 'var(--radius-pill)',
               fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
               color: 'var(--clay)',
