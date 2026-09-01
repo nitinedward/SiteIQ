@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef, Suspense } from 'react'
+import { useEffect, useState, useRef, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { Shell, Badge, Btn, Spinner, Card, NewProjectModal } from '@/components/Shell'
@@ -158,6 +158,7 @@ function AdminPageInner() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [projTab, setProjTab]                 = useState<'reports' | 'drawings' | 'engineers'>('reports')
   const [drawings, setDrawings]               = useState<Drawing[]>([])
+  const [revisionHistoryFor, setRevisionHistoryFor] = useState<string | null>(null)
   const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([])
   const [deletingSelected, setDeletingSelected]     = useState(false)
   const [editingDrawingField, setEditingDrawingField] = useState<{ id: string; field: 'title' | 'number' | 'revision' } | null>(null)
@@ -370,7 +371,7 @@ function AdminPageInner() {
   }
 
   const toggleSelectAllDrawings = () => {
-    setSelectedDrawingIds(curr => curr.length === drawings.length ? [] : drawings.map(d => d.id))
+    setSelectedDrawingIds(curr => curr.length === listToRender.length ? [] : listToRender.map(d => d.id))
   }
 
   const deleteSelectedDrawings = async () => {
@@ -745,6 +746,38 @@ function AdminPageInner() {
     (p.client_name ?? '').toLowerCase().includes(projectSearch.toLowerCase())
   )
 
+  // Drawings sharing the same number are treated as revisions of the same
+  // sheet. `drawings` is already sorted newest-first (sortDrawingsForDisplay),
+  // so the first row seen per number is the latest revision — that's the one
+  // shown in the main list; older revisions are reachable via the revision
+  // badge instead of cluttering the flat list.
+  const revisionCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const d of drawings) {
+      const key = (d.number ?? '').trim()
+      if (!key) continue
+      counts[key] = (counts[key] ?? 0) + 1
+    }
+    return counts
+  }, [drawings])
+
+  const displayedDrawings = useMemo(() => {
+    const seen = new Set<string>()
+    const result: Drawing[] = []
+    for (const d of drawings) {
+      const key = (d.number ?? '').trim()
+      if (!key) { result.push(d); continue }
+      if (seen.has(key)) continue
+      seen.add(key)
+      result.push(d)
+    }
+    return result
+  }, [drawings])
+
+  // Edit mode manages every individual file (including older revisions);
+  // normal browsing shows only the latest revision per drawing number.
+  const listToRender = editModeDrawings ? drawings : displayedDrawings
+
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
       <Spinner size={32} />
@@ -856,6 +889,76 @@ function AdminPageInner() {
                 onCreated={loadData}
               />
             )}
+
+            {/* Revision history popup */}
+            {revisionHistoryFor && (() => {
+              const history = drawings.filter(d => (d.number ?? '').trim() === revisionHistoryFor)
+              return (
+                <div
+                  onClick={() => setRevisionHistoryFor(null)}
+                  style={{
+                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 1000, padding: 20,
+                  }}
+                >
+                  <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480 }}>
+                    <Card style={{ padding: 24, maxHeight: '80vh', overflowY: 'auto' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, gap: 12 }}>
+                        <div style={{ fontFamily: 'var(--f-heading)', fontSize: 19, fontWeight: 800, color: 'var(--text-ink)' }}>
+                          Revision History — {revisionHistoryFor}
+                        </div>
+                        <button
+                          onClick={() => setRevisionHistoryFor(null)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--text-mid)', lineHeight: 1, flexShrink: 0 }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div>
+                        {history.map((d, i) => (
+                          <div
+                            key={d.id}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                              padding: '14px 0', borderBottom: i < history.length - 1 ? '1px solid var(--border-line)' : 'none',
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{
+                                  fontFamily: 'var(--f-mono)', fontSize: 12, fontWeight: 700,
+                                  color: i === 0 ? 'var(--indigo)' : 'var(--text-mid)',
+                                  background: i === 0 ? 'var(--indigo-soft)' : 'var(--paper)',
+                                  padding: '3px 10px', borderRadius: 99,
+                                }}>
+                                  Rev {d.revision}
+                                </span>
+                                {i === 0 && (
+                                  <span style={{ fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, color: 'var(--sage-ink)' }}>Latest</span>
+                                )}
+                              </div>
+                              <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {d.title}
+                              </div>
+                              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-mid)', marginTop: 2 }}>
+                                {new Date(d.created_at).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => window.open(d.file_url, '_blank', 'noopener,noreferrer')}
+                              style={{ background: 'none', border: '1px solid var(--border-line)', color: 'var(--indigo)', borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, padding: '6px 14px', cursor: 'pointer', flexShrink: 0 }}
+                            >
+                              View
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Project list */}
             <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1131,7 +1234,8 @@ function AdminPageInner() {
                         {/* Count + Upload + subtle Edit toggle */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 4px 12px' }}>
                           <span style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>
-                            {drawings.length} drawing{drawings.length !== 1 ? 's' : ''}
+                            {listToRender.length} drawing{listToRender.length !== 1 ? 's' : ''}
+                            {!editModeDrawings && drawings.length !== listToRender.length && ` (${drawings.length - listToRender.length} older revision${drawings.length - listToRender.length !== 1 ? 's' : ''} hidden)`}
                           </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                             <button
@@ -1165,8 +1269,8 @@ function AdminPageInner() {
                             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-ink)', cursor: 'pointer', userSelect: 'none' }}>
                               <input
                                 type="checkbox"
-                                checked={drawings.length > 0 && selectedDrawingIds.length === drawings.length}
-                                ref={el => { if (el) el.indeterminate = selectedDrawingIds.length > 0 && selectedDrawingIds.length < drawings.length }}
+                                checked={listToRender.length > 0 && selectedDrawingIds.length === listToRender.length}
+                                ref={el => { if (el) el.indeterminate = selectedDrawingIds.length > 0 && selectedDrawingIds.length < listToRender.length }}
                                 onChange={toggleSelectAllDrawings}
                                 style={{ width: 16, height: 16, cursor: 'pointer' }}
                               />
@@ -1189,8 +1293,10 @@ function AdminPageInner() {
                         )}
 
                         <div>
-                          {drawings.map((d, i) => {
+                          {listToRender.map((d, i) => {
                             const checked = selectedDrawingIds.includes(d.id)
+                            const revisionKey = (d.number ?? '').trim()
+                            const hasHistory = !editModeDrawings && revisionKey && revisionCounts[revisionKey] > 1
                             return (
                               <div
                                 key={d.id}
@@ -1202,7 +1308,7 @@ function AdminPageInner() {
                                 onClick={() => { if (!editModeDrawings) window.open(d.file_url, '_blank', 'noopener,noreferrer') }}
                                 style={{
                                   display: 'flex', alignItems: 'center', gap: 16, padding: '16px 4px',
-                                  borderBottom: i < drawings.length - 1 ? '1px solid var(--border-line)' : 'none',
+                                  borderBottom: i < listToRender.length - 1 ? '1px solid var(--border-line)' : 'none',
                                   background: checked || dragOverDrawingId === d.id ? 'var(--indigo-soft)' : 'transparent',
                                   cursor: editModeDrawings ? 'grab' : 'pointer',
                                   opacity: draggedDrawingId === d.id ? 0.4 : 1,
@@ -1289,14 +1395,20 @@ function AdminPageInner() {
                                     />
                                   ) : (
                                     <div
-                                      onClick={e => { if (editModeDrawings) { e.stopPropagation(); startEditDrawingField(d, 'revision') } }}
+                                      onClick={e => {
+                                        if (editModeDrawings) { e.stopPropagation(); startEditDrawingField(d, 'revision') }
+                                        else if (hasHistory) { e.stopPropagation(); setRevisionHistoryFor(revisionKey) }
+                                      }}
                                       style={{
-                                        fontSize: 12, color: 'var(--text-mid)', fontFamily: 'var(--f-mono)', marginTop: 2, width: 'fit-content',
-                                        cursor: editModeDrawings ? 'text' : 'default',
-                                        borderBottom: editModeDrawings ? '1px dashed var(--text-mid)' : 'none',
+                                        display: 'flex', alignItems: 'center', gap: 4,
+                                        fontSize: 12, color: hasHistory ? 'var(--indigo)' : 'var(--text-mid)', fontFamily: 'var(--f-mono)', marginTop: 2, width: 'fit-content',
+                                        fontWeight: hasHistory ? 700 : 400,
+                                        cursor: editModeDrawings ? 'text' : hasHistory ? 'pointer' : 'default',
+                                        borderBottom: editModeDrawings ? '1px dashed var(--text-mid)' : hasHistory ? '1px dashed var(--indigo)' : 'none',
                                       }}
                                     >
                                       Rev {d.revision}
+                                      {hasHistory && <span>· {revisionCounts[revisionKey]} revisions</span>}
                                     </div>
                                   )}
                                 </div>
