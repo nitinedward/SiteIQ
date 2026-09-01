@@ -342,6 +342,17 @@ export default function DashboardPage() {
                 fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: 8,
                 boxShadow: 'var(--shadow-glow-v3)',
+                transform: 'translateY(0)', transition: 'transform .15s, background .15s, color .15s',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.background = 'var(--marigold-deep)'
+                e.currentTarget.style.color = '#fff'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.background = 'var(--marigold)'
+                e.currentTarget.style.color = 'var(--indigo-deep)'
               }}
             >
               + New Project
