@@ -860,22 +860,31 @@ function AdminPageInner() {
               </button>
             </div>
 
-            {/* New project inline form */}
+            {/* New project popup */}
             {showNewProject && (
-              <div style={{ padding: '0 16px 16px' }}>
-                <Card style={{ padding: 16 }}>
-                  <div style={{ fontFamily: 'var(--f-heading)', fontSize: 17, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 14 }}>New Project</div>
-                  {projectFormFields(
-                    { name: newName, number: newNumber, address: newAddress, client: newClient, status: newStatus },
-                    { name: setNewName, number: setNewNumber, address: setNewAddress, client: setNewClient, status: setNewStatus }
-                  )}
-                  <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-                    <Btn variant="outline" onClick={() => setShowNewProject(false)} style={{ flex: 1 }}>Cancel</Btn>
-                    <Btn variant="primary" onClick={createProject} disabled={saving} style={{ flex: 1 }}>
-                      {saving ? 'Creating…' : 'Create'}
-                    </Btn>
-                  </div>
-                </Card>
+              <div
+                onClick={() => setShowNewProject(false)}
+                style={{
+                  position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  zIndex: 1000, padding: 20,
+                }}
+              >
+                <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 440 }}>
+                  <Card style={{ padding: 24 }}>
+                    <div style={{ fontFamily: 'var(--f-heading)', fontSize: 19, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 18 }}>New Project</div>
+                    {projectFormFields(
+                      { name: newName, number: newNumber, address: newAddress, client: newClient, status: newStatus },
+                      { name: setNewName, number: setNewNumber, address: setNewAddress, client: setNewClient, status: setNewStatus }
+                    )}
+                    <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                      <Btn variant="outline" onClick={() => setShowNewProject(false)} style={{ flex: 1 }}>Cancel</Btn>
+                      <Btn variant="primary" onClick={createProject} disabled={saving} style={{ flex: 1 }}>
+                        {saving ? 'Creating…' : 'Create'}
+                      </Btn>
+                    </div>
+                  </Card>
+                </div>
               </div>
             )}
 
