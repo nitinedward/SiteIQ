@@ -481,21 +481,6 @@ export default function ReportPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant:wght@400;500;600&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
-        :root {
-          --white: #ffffff; --off: #f8f7f5; --stone: #f0ede8;
-          --line: #e4e0d9; --line2: #ccc8c0; --mid: #9b968d;
-          --dark: #2c2a27; --ink: #1a1917; --accent: #2c5282;
-          --accent2: #edf2fb; --accent3: #dbeafe;
-          --red: #c0392b; --red2: #fdf0ef;
-          --green: #27705a; --green2: #e6f4ef;
-          --amber: #b8860b; --amber2: #fef9e7;
-          --orange: #c05621; --orange2: #fef3e2;
-          --f-serif: 'Cormorant', Georgia, serif;
-          --f-body: 'Outfit', sans-serif;
-          --f-mono: 'JetBrains Mono', monospace;
-          --r1: 6px; --r2: 10px; --r3: 14px; --r4: 20px;
-        }
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
         html,body{height:100%;font-family:var(--f-text);background:var(--paper);-webkit-font-smoothing:antialiased;}
         @keyframes spin{to{transform:rotate(360deg)}}
@@ -539,11 +524,11 @@ export default function ReportPage() {
         }}>
           {/* Brand */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <div style={{ width: 22, height: 22, background: 'var(--indigo)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="11" height="11" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            <div style={{ width: 24, height: 24, background: 'var(--marigold)', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="12" height="12" fill="none" stroke="#fff" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             </div>
             <span style={{ fontFamily: 'var(--f-heading)', fontSize: 16, fontWeight: 800, color: 'var(--text-ink)' }}>
-              Site<span style={{ color: 'var(--indigo)' }}>IQ</span>
+              SiteIQ
             </span>
           </div>
 
