@@ -486,7 +486,7 @@ function AdminPageInner() {
   // preview image per drawing — the mobile app displays this image instead
   // of rendering the raw PDF natively, since large/landscape (A3/A1) sheets
   // were getting clipped by the native PDF viewer's internal scaling.
-  const renderPdfPageToPng = async (pdfBytes: Uint8Array): Promise<Blob> => {
+  const renderPdfPageToCanvas = async (pdfBytes: Uint8Array): Promise<HTMLCanvasElement> => {
     const pdfjsLib = await import('pdfjs-dist')
     pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
     const pdf  = await pdfjsLib.getDocument({ data: pdfBytes }).promise
@@ -502,10 +502,28 @@ function AdminPageInner() {
     canvas.height = viewport.height
     const ctx = canvas.getContext('2d')!
     await page.render({ canvasContext: ctx as unknown as CanvasRenderingContext2D, viewport }).promise
+    return canvas
+  }
 
-    return new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('PNG export failed')), 'image/png', 0.92)
+  const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Image export failed')), type, quality)
     })
+
+  // A small, compressed JPEG copy of the same render, used only for the AI
+  // title-block read — the full-size PNG can be several MB, which on a slow
+  // or restricted network can blow past the extraction timeout and silently
+  // fall back to placeholder number/revision/title.
+  const canvasToSmallJpeg = (canvas: HTMLCanvasElement): Promise<Blob> => {
+    const MAX_DIM = 1100
+    const scale = Math.min(1, MAX_DIM / Math.max(canvas.width, canvas.height))
+    if (scale >= 1) return canvasToBlob(canvas, 'image/jpeg', 0.78)
+    const small = document.createElement('canvas')
+    small.width  = Math.round(canvas.width * scale)
+    small.height = Math.round(canvas.height * scale)
+    const ctx = small.getContext('2d')!
+    ctx.drawImage(canvas, 0, 0, small.width, small.height)
+    return canvasToBlob(small, 'image/jpeg', 0.78)
   }
 
   // Base64 payload only (strips the "data:image/png;base64," prefix) for
@@ -573,16 +591,25 @@ function AdminPageInner() {
 
         const { data: { publicUrl } } = supabase.storage.from('drawings').getPublicUrl(fileName)
 
-        // Generate + upload a preview PNG. Strictly non-fatal — we use a
-        // 20-second timeout so a hung worker never stalls the whole upload.
+        // Render the page once, then derive both a full-size PNG (for the
+        // stored preview) and a small compressed JPEG (for the AI read) from
+        // the same canvas — avoids re-rendering the PDF twice. Strictly
+        // non-fatal — a generous timeout so a hung worker never stalls the
+        // whole upload, but generous enough that a slow computer or network
+        // doesn't spuriously fall back to placeholder values.
         let previewUrl: string | null = null
         let previewBlob: Blob | null = null
+        let aiJpegBlob: Blob | null = null
         try {
-          previewBlob = await Promise.race<Blob>([
-            renderPdfPageToPng(pdfBytes),
+          const canvas = await Promise.race<HTMLCanvasElement>([
+            renderPdfPageToCanvas(pdfBytes),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('Preview render timed out')), 20000)
+              setTimeout(() => reject(new Error('Preview render timed out')), 45000)
             ),
+          ])
+          ;[previewBlob, aiJpegBlob] = await Promise.all([
+            canvasToBlob(canvas, 'image/png'),
+            canvasToSmallJpeg(canvas),
           ])
           const previewFileName = `drawing-${batchId}-p${i + 1}-preview.png`
           const { error: pvErr } = await supabase.storage
@@ -600,20 +627,23 @@ function AdminPageInner() {
         // Read the title block via AI to get the sheet's actual drawing
         // number/revision instead of a guessed sequential number + fixed
         // "A". Strictly non-fatal — falls back to the old defaults on any
-        // failure, timeout, or low-confidence (null) field.
+        // failure, timeout, or low-confidence (null) field. Sends the small
+        // JPEG (not the full-size PNG) so this stays fast even on a slow or
+        // restricted network — a large payload here was silently timing out
+        // and falling back to placeholders off the office network.
         setUploadProgress(`Reading drawing details for page ${i + 1} of ${pageCount}…`)
         let extracted: { drawing_number: string | null; revision: string | null; title: string | null } | null = null
-        if (previewBlob) {
+        if (aiJpegBlob) {
           try {
-            const imageBase64 = await blobToBase64(previewBlob)
+            const imageBase64 = await blobToBase64(aiJpegBlob)
             const extractRes = await Promise.race<Response>([
               fetch('/api/drawings/extract-info', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageBase64 }),
+                body: JSON.stringify({ imageBase64, mediaType: 'image/jpeg' }),
               }),
               new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('Drawing info extraction timed out')), 20000)
+                setTimeout(() => reject(new Error('Drawing info extraction timed out')), 45000)
               ),
             ])
             if (extractRes.ok) extracted = await extractRes.json()

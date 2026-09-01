@@ -13,10 +13,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { imageBase64 } = await request.json()
+    const { imageBase64, mediaType } = await request.json()
     if (!imageBase64 || typeof imageBase64 !== 'string') {
       return NextResponse.json({ error: 'Missing imageBase64' }, { status: 400 })
     }
+    const imageMediaType = mediaType === 'image/jpeg' ? 'image/jpeg' : 'image/png'
 
     const prompt = `This image is one sheet of a structural/architectural drawing set. Look at its title block (usually bottom-right or bottom edge of the sheet) and read off:
 - drawing_number: the sheet's own drawing/sheet number (e.g. "S-101", "A-201", "DWG-04")
@@ -41,7 +42,7 @@ Use null for any field you cannot read with confidence. Do not guess.`
         messages: [{
           role: 'user',
           content: [
-            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageBase64 } },
+            { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: imageBase64 } },
             { type: 'text', text: prompt },
           ],
         }],
