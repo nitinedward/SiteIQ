@@ -539,20 +539,25 @@ function AdminPageInner() {
       reader.readAsDataURL(blob)
     })
 
-  const handlePdfUpload = async (file: File) => {
-    if (!selectedProject) return
-
+  // Uploads + splits a single PDF. Returns the page count on success, or an
+  // error string on failure — never throws and never alert()s, so a batch of
+  // several files can run them one after another and report one combined
+  // summary at the end instead of a popup per file.
+  const uploadSinglePdf = async (
+    file: File, progressPrefix: string, projectId: string
+  ): Promise<{ pageCount: number } | { error: string }> => {
     console.log('[drawing] File size:', file.size, 'bytes  type:', file.type)
 
-    // Generous size guard — A3 drawings are large. Splitting below keeps each
-    // uploaded object small, but reject anything absurd up front.
-    const MAX_SIZE = 100 * 1024 * 1024 // 100MB
+    // Generous size guard — A1/A0 drawing sets are large. Splitting below
+    // keeps each uploaded object small, but reject anything absurd up front.
+    // Kept well under what could stall/crash the browser tab while pdf-lib
+    // parses the whole file into memory client-side.
+    const MAX_SIZE = 300 * 1024 * 1024 // 300MB
     if (file.size > MAX_SIZE) {
-      alert(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 100 MB.`)
-      return
+      return { error: `${file.name} is too large (${(file.size / 1024 / 1024).toFixed(1)} MB) — maximum is 300 MB` }
     }
 
-    setUploadProgress('Reading PDF…')
+    setUploadProgress(`${progressPrefix}Reading PDF…`)
     try {
       const arrayBuffer = await file.arrayBuffer()
 
@@ -567,7 +572,7 @@ function AdminPageInner() {
       const batchId  = Date.now()
 
       for (let i = 0; i < pageCount; i++) {
-        setUploadProgress(`Splitting & uploading page ${i + 1} of ${pageCount}…`)
+        setUploadProgress(`${progressPrefix}Splitting & uploading page ${i + 1} of ${pageCount}…`)
 
         // Build a standalone single-page PDF for page i
         const newPdf = await PDFDocument.create()
@@ -584,9 +589,7 @@ function AdminPageInner() {
           .upload(fileName, pageBlob, { contentType: 'application/pdf', upsert: true })
         if (upErr) {
           console.error('[split] Upload failed on page', i + 1, upErr)
-          alert(`Upload failed on page ${i + 1}: ${upErr.message}`)
-          setUploadProgress(null)
-          return
+          return { error: `${file.name}: upload failed on page ${i + 1} (${upErr.message})` }
         }
 
         const { data: { publicUrl } } = supabase.storage.from('drawings').getPublicUrl(fileName)
@@ -631,7 +634,7 @@ function AdminPageInner() {
         // JPEG (not the full-size PNG) so this stays fast even on a slow or
         // restricted network — a large payload here was silently timing out
         // and falling back to placeholders off the office network.
-        setUploadProgress(`Reading drawing details for page ${i + 1} of ${pageCount}…`)
+        setUploadProgress(`${progressPrefix}Reading drawing details for page ${i + 1} of ${pageCount}…`)
         let extracted: { drawing_number: string | null; revision: string | null; title: string | null } | null = null
         if (aiJpegBlob) {
           try {
@@ -660,7 +663,7 @@ function AdminPageInner() {
         const { data: newRow, error: insErr } = await supabase
           .from('drawings')
           .insert({
-            project_id: selectedProject.id,
+            project_id: projectId,
             title: extracted?.title || pageTitle,
             number: extracted?.drawing_number || `DWG-${String(i + 1).padStart(3, '0')}`,
             revision: extracted?.revision || 'A',
@@ -671,9 +674,7 @@ function AdminPageInner() {
           .single()
         if (insErr) {
           console.error('[split] Insert failed on page', i + 1, insErr)
-          setUploadMsg({ ok: false, text: `Saving page ${i + 1} failed: ${insErr.message}` })
-          setUploadProgress(null)
-          return
+          return { error: `${file.name}: saving page ${i + 1} failed (${insErr.message})` }
         }
 
         // Step 2 — attach preview URL if we got one (non-fatal; column may
@@ -687,16 +688,52 @@ function AdminPageInner() {
         }
       }
 
-      setUploadProgress(null)
-      setUploadMsg({ ok: true, text: `Drawing uploaded and split into ${pageCount} page${pageCount > 1 ? 's' : ''}` })
-      setTimeout(() => setUploadMsg(null), 5000)
-      // Stay on the Drawings tab — just refresh the list
-      await reloadDrawings()
+      return { pageCount }
     } catch (err: any) {
       console.error('[drawing] Upload error:', err)
-      setUploadMsg({ ok: false, text: 'Upload failed: ' + (err?.message ?? 'Please try again.') })
-      setUploadProgress(null)
+      return { error: `${file.name}: ${err?.message ?? 'upload failed, please try again'}` }
     }
+  }
+
+  // Entry point for both drag-drop and the file picker — accepts any number
+  // of PDFs dropped/selected together and uploads them one after another,
+  // then reports one combined summary instead of a toast per file.
+  const handlePdfFiles = async (files: File[]) => {
+    if (!selectedProject) return
+    const pdfFiles = files.filter(f => f.type === 'application/pdf')
+    if (pdfFiles.length === 0) return
+
+    const projectId = selectedProject.id
+    let succeeded = 0
+    let totalPages = 0
+    const errors: string[] = []
+
+    for (let f = 0; f < pdfFiles.length; f++) {
+      const prefix = pdfFiles.length > 1 ? `File ${f + 1} of ${pdfFiles.length} — ` : ''
+      const result = await uploadSinglePdf(pdfFiles[f], prefix, projectId)
+      if ('error' in result) errors.push(result.error)
+      else { succeeded++; totalPages += result.pageCount }
+    }
+
+    setUploadProgress(null)
+    if (errors.length === 0) {
+      setUploadMsg({
+        ok: true,
+        text: pdfFiles.length > 1
+          ? `${succeeded} drawings uploaded (${totalPages} pages total)`
+          : `Drawing uploaded and split into ${totalPages} page${totalPages > 1 ? 's' : ''}`,
+      })
+    } else {
+      setUploadMsg({
+        ok: false,
+        text: succeeded > 0
+          ? `${succeeded} of ${pdfFiles.length} uploaded (${totalPages} pages). Failed: ${errors.join('; ')}`
+          : errors.join('; '),
+      })
+    }
+    setTimeout(() => setUploadMsg(null), 6000)
+    // Stay on the Drawings tab — just refresh the list
+    await reloadDrawings()
   }
 
   // ── helpers ───────────────────────────────────────────────────────────────
@@ -1031,8 +1068,7 @@ function AdminPageInner() {
                     onDrop={e => {
                       e.preventDefault()
                       setIsDraggingFile(false)
-                      const file = e.dataTransfer.files?.[0]
-                      if (file && file.type === 'application/pdf') handlePdfUpload(file)
+                      handlePdfFiles(Array.from(e.dataTransfer.files ?? []))
                     }}
                     style={{
                       padding: '24px 28px',
@@ -1075,10 +1111,10 @@ function AdminPageInner() {
                       ref={drawingInputRef}
                       type="file"
                       accept="application/pdf"
+                      multiple
                       style={{ display: 'none' }}
                       onChange={e => {
-                        const file = e.target.files?.[0]
-                        if (file) handlePdfUpload(file)
+                        handlePdfFiles(Array.from(e.target.files ?? []))
                         e.target.value = ''
                       }}
                     />
