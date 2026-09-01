@@ -428,7 +428,7 @@ export default function DashboardPage() {
               return (
                 <div
                   key={p.id}
-                  onClick={() => router.push('/admin')}
+                  onClick={() => router.push(`/admin?project=${p.id}`)}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid var(--border-line)', cursor: 'pointer', transition: 'background .12s' }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--paper)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}
@@ -516,6 +516,7 @@ export default function DashboardPage() {
             ) : onHoldProjects.slice(0, 5).map(p => (
               <div
                 key={p.id}
+                onClick={() => router.push(`/admin?project=${p.id}`)}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid var(--border-line)', cursor: 'pointer', transition: 'background .12s' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--paper)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'none')}

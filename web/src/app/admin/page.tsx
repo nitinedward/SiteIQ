@@ -233,6 +233,15 @@ function AdminPageInner() {
     setProjects(projs ?? [])
     setMembers(mems ?? [])
     setLoading(false)
+
+    // Deep-link from elsewhere (e.g. a dashboard project row) straight into
+    // a specific project instead of just landing on the unselected list.
+    const projectId = searchParams.get('project')
+    if (projectId) {
+      const match = (projs ?? []).find(p => p.id === projectId)
+      if (match) selectProject(match)
+      router.replace('/admin', { scroll: false })
+    }
   }
 
   const selectProject = async (project: Project) => {
