@@ -134,6 +134,7 @@ export default function DashboardPage() {
   const [firmId, setFirmId]                   = useState('')
   const [userId, setUserId]                   = useState('')
   const [showNewProject, setShowNewProject]   = useState(false)
+  const [showAllCompleted, setShowAllCompleted] = useState(false)
 
   // new: inspections split by report_status
   const [pendingReports, setPendingReports]     = useState<Inspection[]>([])
@@ -199,7 +200,7 @@ export default function DashboardPage() {
         .eq('status', 'COMPLETED')
         .eq('report_status', 'finalised')
         .order('created_at', { ascending: false })
-        .limit(4)
+        .limit(50)
       setPendingReports((pendingData as Inspection[]) ?? [])
       setFinalisedReports((finalisedData as Inspection[]) ?? [])
 
@@ -280,7 +281,6 @@ export default function DashboardPage() {
   const oneWeekAgo      = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
   const allInspections  = [...pendingReports, ...finalisedReports]
   const siteVisitsThisWeek = allInspections.filter(i => new Date(i.created_at) >= oneWeekAgo).length
-  const recentCompleted = finalisedReports.slice(0, 4)
   const pendingByProject = (projectId: string) =>
     pendingReports.filter(i => i.project_id === projectId).length
 
@@ -534,35 +534,46 @@ export default function DashboardPage() {
 
           {/* Panel 4 — Recent Completed */}
           <Card style={{ overflow: 'hidden' }}>
-            <PanelHeader dot="var(--sage)" title="Recent Completed" action={{ label: 'View all', onClick: () => router.push('/admin') }} />
-            {(finalisedReports ?? recentCompleted).length === 0 ? (
+            <PanelHeader
+              dot="var(--sage)"
+              title="Recent Completed"
+              action={finalisedReports.length > 4 ? {
+                label: showAllCompleted ? 'Show less' : 'View all',
+                onClick: () => setShowAllCompleted(v => !v),
+              } : undefined}
+            />
+            {finalisedReports.length === 0 ? (
               <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>No completed reports yet</div>
-            ) : (finalisedReports ?? recentCompleted).slice(0, 4).map(ins => (
-              <div
-                key={ins.id}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid var(--border-line)', gap: 12 }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600, background: 'var(--sage-soft)', color: 'var(--sage-ink)', padding: '3px 8px', borderRadius: 8, flexShrink: 0 }}>
-                    #{ins.report_no}
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {(ins.projects as any)?.name ?? '—'}
+            ) : (
+              <div style={{ maxHeight: showAllCompleted ? 400 : 'none', overflowY: showAllCompleted ? 'auto' : 'visible' }}>
+                {finalisedReports.slice(0, showAllCompleted ? finalisedReports.length : 4).map(ins => (
+                  <div
+                    key={ins.id}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid var(--border-line)', gap: 12 }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600, background: 'var(--sage-soft)', color: 'var(--sage-ink)', padding: '3px 8px', borderRadius: 8, flexShrink: 0 }}>
+                        #{ins.report_no}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {(ins.projects as any)?.name ?? '—'}
+                        </div>
+                        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 1 }}>{ins.date}</div>
+                      </div>
                     </div>
-                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 1 }}>{ins.date}</div>
+                    <button
+                      onClick={() => router.push(`/report/${ins.id}`)}
+                      style={{ background: 'none', border: '1px solid var(--border-line)', color: 'var(--indigo)', borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, padding: '6px 14px', cursor: 'pointer', transition: 'background .12s', flexShrink: 0 }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--indigo-soft)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      Open
+                    </button>
                   </div>
-                </div>
-                <button
-                  onClick={() => router.push(`/report/${ins.id}`)}
-                  style={{ background: 'none', border: '1px solid var(--border-line)', color: 'var(--indigo)', borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, padding: '6px 14px', cursor: 'pointer', transition: 'background .12s', flexShrink: 0 }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--indigo-soft)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                >
-                  Open
-                </button>
+                ))}
               </div>
-            ))}
+            )}
           </Card>
 
         </div>
