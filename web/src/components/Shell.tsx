@@ -1,5 +1,7 @@
 'use client'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 // ── DESIGN TOKENS (kept for backward compat) ──────────────────────────────────
 export const DS = {
@@ -429,6 +431,110 @@ export function Card({ children, style, className }: { children: React.ReactNode
       ...style,
     }}>
       {children}
+    </div>
+  )
+}
+
+const NPM_STATUS_OPTIONS = ['ACTIVE', 'ON_HOLD', 'COMPLETED'] as const
+const NPM_STATUS_LABELS: Record<string, string> = { ACTIVE: 'Active', ON_HOLD: 'On Hold', COMPLETED: 'Completed' }
+
+function NPMField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label style={{ display: 'block', fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-mid)', marginBottom: 6 }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+function NPMInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <input
+      value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+      style={{
+        width: '100%', padding: '12px 16px', boxSizing: 'border-box',
+        background: 'var(--surface)',
+        border: `1.5px solid ${focused ? 'var(--indigo)' : 'var(--border-line)'}`,
+        borderRadius: 'var(--radius-sm)', fontFamily: 'var(--f-text)', fontSize: 15, color: 'var(--text-ink)',
+        outline: 'none', transition: 'all .15s',
+      }}
+      onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+    />
+  )
+}
+
+/** New Project popup — shared between the admin Projects tab and the
+ *  dashboard so "+ New Project" opens the same form in place, wherever
+ *  it's clicked from, instead of navigating away first. */
+export function NewProjectModal({ firmId, userId, onClose, onCreated }: {
+  firmId: string; userId: string; onClose: () => void; onCreated: () => void
+}) {
+  const [name, setName]       = useState('')
+  const [number, setNumber]   = useState('')
+  const [address, setAddress] = useState('')
+  const [client, setClient]   = useState('')
+  const [status, setStatus]   = useState('ACTIVE')
+  const [saving, setSaving]   = useState(false)
+
+  const create = async () => {
+    if (!name.trim()) { alert('Project name is required'); return }
+    setSaving(true)
+    const { data: newProj } = await supabase.from('projects').insert({
+      name: name.trim(), project_number: number.trim() || `PRJ-${Date.now().toString().slice(-6)}`,
+      address: address.trim(), client_name: client.trim(),
+      firm_id: firmId, status,
+    }).select().single()
+    if (newProj) {
+      await supabase.from('project_members').insert({ project_id: newProj.id, user_id: userId, added_by: userId })
+    }
+    setSaving(false)
+    onCreated()
+    onClose()
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000, padding: 20,
+      }}
+    >
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 440 }}>
+        <Card style={{ padding: 24 }}>
+          <div style={{ fontFamily: 'var(--f-heading)', fontSize: 19, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 18 }}>New Project</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <NPMField label="Project Name *"><NPMInput value={name} onChange={setName} placeholder="e.g. Auckland Mall Carpark" /></NPMField>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <NPMField label="Project Number"><NPMInput value={number} onChange={setNumber} placeholder="PRJ-2024-001" /></NPMField>
+              <NPMField label="Status">
+                <select
+                  value={status} onChange={e => setStatus(e.target.value)}
+                  style={{
+                    width: '100%', padding: '12px 16px', boxSizing: 'border-box',
+                    background: 'var(--surface)', border: '1.5px solid var(--border-line)',
+                    borderRadius: 'var(--radius-sm)', fontFamily: 'var(--f-text)', fontSize: 15, color: 'var(--text-ink)', outline: 'none',
+                  }}
+                >
+                  {NPM_STATUS_OPTIONS.map(s => <option key={s} value={s}>{NPM_STATUS_LABELS[s]}</option>)}
+                </select>
+              </NPMField>
+            </div>
+            <NPMField label="Address"><NPMInput value={address} onChange={setAddress} placeholder="123 Queen St, Auckland" /></NPMField>
+            <NPMField label="Client"><NPMInput value={client} onChange={setClient} placeholder="e.g. Auckland Council" /></NPMField>
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+            <Btn variant="outline" onClick={onClose} style={{ flex: 1 }}>Cancel</Btn>
+            <Btn variant="primary" onClick={create} disabled={saving} style={{ flex: 1 }}>
+              {saving ? 'Creating…' : 'Create'}
+            </Btn>
+          </div>
+        </Card>
+      </div>
     </div>
   )
 }

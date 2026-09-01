@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
-import { Shell, Badge, Btn, Spinner, Card } from '@/components/Shell'
+import { Shell, Badge, Btn, Spinner, Card, NewProjectModal } from '@/components/Shell'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL ??
@@ -173,11 +173,6 @@ function AdminPageInner() {
   const [editingProject, setEditingProject] = useState(false)
   const [editForm, setEditForm]             = useState<Partial<Project>>({})
 
-  const [newName, setNewName]       = useState('')
-  const [newNumber, setNewNumber]   = useState('')
-  const [newAddress, setNewAddress] = useState('')
-  const [newClient, setNewClient]   = useState('')
-  const [newStatus, setNewStatus]   = useState('ACTIVE')
   const [saving, setSaving]         = useState(false)
 
   const [projectSearch, setProjectSearch]     = useState('')
@@ -266,23 +261,6 @@ function AdminPageInner() {
       setAssignedUserIds(curr => [...curr, userId])
     }
     setSavingAssignment(false)
-  }
-
-  const createProject = async () => {
-    if (!newName.trim()) { alert('Project name is required'); return }
-    setSaving(true)
-    const { data: newProj } = await supabase.from('projects').insert({
-      name: newName.trim(), project_number: newNumber.trim() || `PRJ-${Date.now().toString().slice(-6)}`,
-      address: newAddress.trim(), client_name: newClient.trim(),
-      firm_id: firmId, status: newStatus,
-    }).select().single()
-    if (newProj) {
-      await supabase.from('project_members').insert({ project_id: newProj.id, user_id: adminUserId, added_by: adminUserId })
-    }
-    setNewName(''); setNewNumber(''); setNewAddress(''); setNewClient(''); setNewStatus('ACTIVE')
-    setShowNewProject(false)
-    setSaving(false)
-    loadData()
   }
 
   const startEdit = () => { if (!selectedProject) return; setEditForm({ ...selectedProject }); setEditingProject(true) }
@@ -862,30 +840,12 @@ function AdminPageInner() {
 
             {/* New project popup */}
             {showNewProject && (
-              <div
-                onClick={() => setShowNewProject(false)}
-                style={{
-                  position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  zIndex: 1000, padding: 20,
-                }}
-              >
-                <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 440 }}>
-                  <Card style={{ padding: 24 }}>
-                    <div style={{ fontFamily: 'var(--f-heading)', fontSize: 19, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 18 }}>New Project</div>
-                    {projectFormFields(
-                      { name: newName, number: newNumber, address: newAddress, client: newClient, status: newStatus },
-                      { name: setNewName, number: setNewNumber, address: setNewAddress, client: setNewClient, status: setNewStatus }
-                    )}
-                    <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-                      <Btn variant="outline" onClick={() => setShowNewProject(false)} style={{ flex: 1 }}>Cancel</Btn>
-                      <Btn variant="primary" onClick={createProject} disabled={saving} style={{ flex: 1 }}>
-                        {saving ? 'Creating…' : 'Create'}
-                      </Btn>
-                    </div>
-                  </Card>
-                </div>
-              </div>
+              <NewProjectModal
+                firmId={firmId}
+                userId={adminUserId}
+                onClose={() => setShowNewProject(false)}
+                onCreated={loadData}
+              />
             )}
 
             {/* Project list */}

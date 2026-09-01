@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { Shell, Spinner, Card } from '@/components/Shell'
+import { Shell, Spinner, Card, NewProjectModal } from '@/components/Shell'
 
 // ── TYPES ─────────────────────────────────────────────────────────────────────
 type Project = {
@@ -131,6 +131,9 @@ export default function DashboardPage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [loadingReports, setLoadingReports]   = useState(false)
   const [activeNav, setActiveNav]             = useState('dashboard')
+  const [firmId, setFirmId]                   = useState('')
+  const [userId, setUserId]                   = useState('')
+  const [showNewProject, setShowNewProject]   = useState(false)
 
   // new: inspections split by report_status
   const [pendingReports, setPendingReports]     = useState<Inspection[]>([])
@@ -163,6 +166,8 @@ export default function DashboardPage() {
     setRole(member.role)
     setFullName(member.full_name)
     setFirmName(firm?.name ?? '')
+    setFirmId(member.firm_id)
+    setUserId(user.id)
 
     let projs: Project[] = []
     if (member.role === 'admin') {
@@ -305,6 +310,14 @@ export default function DashboardPage() {
           .panel-grid    { grid-template-columns: 1fr !important; gap: 14px !important; }
         }
       `}</style>
+      {showNewProject && (
+        <NewProjectModal
+          firmId={firmId}
+          userId={userId}
+          onClose={() => setShowNewProject(false)}
+          onCreated={load}
+        />
+      )}
       <div className="dash-content" style={{ padding: '32px 36px' }}>
 
         {/* PAGE HEADER */}
@@ -322,7 +335,7 @@ export default function DashboardPage() {
           </div>
           {role === 'admin' && (
             <button
-              onClick={() => router.push('/admin?new=1')}
+              onClick={() => setShowNewProject(true)}
               style={{
                 background: 'var(--marigold)', color: 'var(--indigo-deep)',
                 padding: '12px 24px', borderRadius: 'var(--radius-pill)',
