@@ -29,25 +29,44 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
 
 Use null for any field you cannot read with confidence. Do not guess.`
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type':      'application/json',
-        'x-api-key':         anthropicKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model:      'claude-sonnet-4-6',
-        max_tokens: 300,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: imageBase64 } },
-            { type: 'text', text: prompt },
-          ],
-        }],
-      }),
-    })
+    // Bound the Anthropic call server-side, where the connection is fast
+    // and stable, rather than relying solely on the client's own timeout —
+    // the client's request to us can then be a short-lived, well-defined
+    // round trip instead of racing an open-ended upstream call.
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000)
+
+    let response: Response
+    try {
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type':      'application/json',
+          'x-api-key':         anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model:      'claude-sonnet-4-6',
+          max_tokens: 300,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: imageBase64 } },
+              { type: 'text', text: prompt },
+            ],
+          }],
+        }),
+        signal: controller.signal,
+      })
+    } catch (fetchErr: any) {
+      if (fetchErr?.name === 'AbortError') {
+        console.error('[extract-drawing-info] Anthropic call timed out after 30s')
+        return NextResponse.json({ error: 'AI extraction timed out' }, { status: 504 })
+      }
+      throw fetchErr
+    } finally {
+      clearTimeout(timeoutId)
+    }
 
     if (!response.ok) {
       const err = await response.text()

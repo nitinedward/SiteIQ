@@ -527,13 +527,44 @@ function AdminPageInner() {
       reader.readAsDataURL(blob)
     })
 
-  // Uploads + splits a single PDF. Returns the page count on success, or an
-  // error string on failure — never throws and never alert()s, so a batch of
-  // several files can run them one after another and report one combined
-  // summary at the end instead of a popup per file.
+  // One attempt at reading a page's title block via AI. Races the request
+  // against a generous client-side backstop (the server bounds its own
+  // Anthropic call to 30s — see extract-info/route.ts — so this 90s ceiling
+  // is a safety net for a hung connection, not the primary timeout). Returns
+  // null on any failure (network error, non-OK response, or timeout); never
+  // throws.
+  const attemptExtraction = async (
+    aiJpegBlob: Blob
+  ): Promise<{ drawing_number: string | null; revision: string | null; title: string | null } | null> => {
+    try {
+      const imageBase64 = await blobToBase64(aiJpegBlob)
+      const extractRes = await Promise.race<Response>([
+        fetch('/api/drawings/extract-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64, mediaType: 'image/jpeg' }),
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Drawing info extraction timed out')), 90000)
+        ),
+      ])
+      if (extractRes.ok) return await extractRes.json()
+      console.error('[split] Drawing info extraction failed:', await extractRes.text())
+      return null
+    } catch (exErr) {
+      console.error('[split] Drawing info extraction error:', exErr)
+      return null
+    }
+  }
+
+  // Uploads + splits a single PDF. Returns the page count (and how many
+  // pages couldn't be auto-named) on success, or an error string on
+  // failure — never throws and never alert()s, so a batch of several files
+  // can run them one after another and report one combined summary at the
+  // end instead of a popup per file.
   const uploadSinglePdf = async (
     file: File, progressPrefix: string, projectId: string
-  ): Promise<{ pageCount: number } | { error: string }> => {
+  ): Promise<{ pageCount: number; needsNamingCount: number } | { error: string }> => {
     console.log('[drawing] File size:', file.size, 'bytes  type:', file.type)
 
     // Generous size guard — A1/A0 drawing sets are large. Splitting below
@@ -558,6 +589,7 @@ function AdminPageInner() {
 
       const baseName = file.name.replace(/\.pdf$/i, '')
       const batchId  = Date.now()
+      let needsNamingCount = 0
 
       for (let i = 0; i < pageCount; i++) {
         setUploadProgress(`${progressPrefix}Splitting & uploading page ${i + 1} of ${pageCount}…`)
@@ -617,34 +649,30 @@ function AdminPageInner() {
 
         // Read the title block via AI to get the sheet's actual drawing
         // number/revision instead of a guessed sequential number + fixed
-        // "A". Strictly non-fatal — falls back to the old defaults on any
-        // failure, timeout, or low-confidence (null) field. Sends the small
-        // JPEG (not the full-size PNG) so this stays fast even on a slow or
-        // restricted network — a large payload here was silently timing out
-        // and falling back to placeholders off the office network.
+        // "A". Retries once on failure/timeout before giving up. Sends the
+        // small JPEG (not the full-size PNG) so this stays fast even on a
+        // slow or restricted network.
         setUploadProgress(`${progressPrefix}Reading drawing details for page ${i + 1} of ${pageCount}…`)
         let extracted: { drawing_number: string | null; revision: string | null; title: string | null } | null = null
         if (aiJpegBlob) {
-          try {
-            const imageBase64 = await blobToBase64(aiJpegBlob)
-            const extractRes = await Promise.race<Response>([
-              fetch('/api/drawings/extract-info', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageBase64, mediaType: 'image/jpeg' }),
-              }),
-              new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('Drawing info extraction timed out')), 45000)
-              ),
-            ])
-            if (extractRes.ok) extracted = await extractRes.json()
-            else console.error('[split] Drawing info extraction failed on page', i + 1, await extractRes.text())
-          } catch (exErr) {
-            console.error('[split] Drawing info extraction error on page', i + 1, exErr)
+          extracted = await attemptExtraction(aiJpegBlob)
+          if (!extracted) {
+            setUploadProgress(`${progressPrefix}Retrying drawing details for page ${i + 1} of ${pageCount}…`)
+            extracted = await attemptExtraction(aiJpegBlob)
           }
         }
 
+        // If the AI genuinely couldn't confidently read the number or
+        // revision — whether because both attempts failed/timed out, or it
+        // ran but wasn't confident — don't write a fabricated "DWG-001" /
+        // "Rev A" that looks like a real value. Leave those fields blank and
+        // flag the page so the upload summary can tell the user to name it
+        // themselves, instead of silently shipping a wrong name.
+        const needsNaming = !extracted?.drawing_number || !extracted?.revision
+        if (needsNaming) needsNamingCount++
+
         const pageTitle = pageCount > 1 ? `${baseName} — Page ${i + 1} of ${pageCount}` : baseName
+        const finalTitle = extracted?.title || (needsNaming ? 'Untitled drawing — tap to name' : pageTitle)
 
         // Step 1 — insert core drawing record (no preview_url so a missing
         // column can't abort the upload).
@@ -652,9 +680,9 @@ function AdminPageInner() {
           .from('drawings')
           .insert({
             project_id: projectId,
-            title: extracted?.title || pageTitle,
-            number: extracted?.drawing_number || `DWG-${String(i + 1).padStart(3, '0')}`,
-            revision: extracted?.revision || 'A',
+            title: finalTitle,
+            number: extracted?.drawing_number || '',
+            revision: extracted?.revision || '',
             file_url: publicUrl,
             file_name: fileName,
           })
@@ -676,7 +704,7 @@ function AdminPageInner() {
         }
       }
 
-      return { pageCount }
+      return { pageCount, needsNamingCount }
     } catch (err: any) {
       console.error('[drawing] Upload error:', err)
       return { error: `${file.name}: ${err?.message ?? 'upload failed, please try again'}` }
@@ -694,32 +722,36 @@ function AdminPageInner() {
     const projectId = selectedProject.id
     let succeeded = 0
     let totalPages = 0
+    let totalNeedsNaming = 0
     const errors: string[] = []
 
     for (let f = 0; f < pdfFiles.length; f++) {
       const prefix = pdfFiles.length > 1 ? `File ${f + 1} of ${pdfFiles.length} — ` : ''
       const result = await uploadSinglePdf(pdfFiles[f], prefix, projectId)
       if ('error' in result) errors.push(result.error)
-      else { succeeded++; totalPages += result.pageCount }
+      else { succeeded++; totalPages += result.pageCount; totalNeedsNaming += result.needsNamingCount }
     }
 
     setUploadProgress(null)
+    const namingNote = totalNeedsNaming > 0
+      ? ` ${totalNeedsNaming} of ${totalPages} drawing${totalPages !== 1 ? 's' : ''} couldn't be auto-named — tap Edit above to name ${totalNeedsNaming !== 1 ? 'them' : 'it'}.`
+      : ''
     if (errors.length === 0) {
       setUploadMsg({
-        ok: true,
-        text: pdfFiles.length > 1
-          ? `${succeeded} drawings uploaded (${totalPages} pages total)`
-          : `Drawing uploaded and split into ${totalPages} page${totalPages > 1 ? 's' : ''}`,
+        ok: totalNeedsNaming === 0,
+        text: (pdfFiles.length > 1
+          ? `${succeeded} drawings uploaded (${totalPages} pages total).`
+          : `Drawing uploaded and split into ${totalPages} page${totalPages > 1 ? 's' : ''}.`) + namingNote,
       })
     } else {
       setUploadMsg({
         ok: false,
-        text: succeeded > 0
+        text: (succeeded > 0
           ? `${succeeded} of ${pdfFiles.length} uploaded (${totalPages} pages). Failed: ${errors.join('; ')}`
-          : errors.join('; '),
+          : errors.join('; ')) + namingNote,
       })
     }
-    setTimeout(() => setUploadMsg(null), 6000)
+    setTimeout(() => setUploadMsg(null), totalNeedsNaming > 0 ? 10000 : 6000)
     // Stay on the Drawings tab — just refresh the list
     await reloadDrawings()
   }
