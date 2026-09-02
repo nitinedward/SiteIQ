@@ -10,7 +10,8 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: NextRequest) {
-  const anthropicKey = process.env.ANTHROPIC_KEY ?? ''
+  // Strip a leading BOM (U+FEFF) — see extract-info/route.ts for why.
+  const anthropicKey = (process.env.ANTHROPIC_KEY ?? '').replace(/^﻿/, '').trim()
   if (!anthropicKey) {
     console.error('[transcribe] ANTHROPIC_KEY not set')
     return NextResponse.json({ error: 'Transcription service not configured' }, { status: 500, headers: CORS })

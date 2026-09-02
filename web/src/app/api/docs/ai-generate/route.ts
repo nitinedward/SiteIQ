@@ -35,7 +35,9 @@ export async function POST(request: NextRequest) {
   }
   const supabase = createClient(supabaseUrl, supabaseKey)
 
-  const anthropicKey = process.env.ANTHROPIC_KEY ?? process.env.ANTHROPIC_API_KEY ?? ''
+  // Strip a leading BOM (U+FEFF) — see extract-info/route.ts for why.
+  const anthropicKey = (process.env.ANTHROPIC_KEY ?? process.env.ANTHROPIC_API_KEY ?? '')
+    .replace(/^﻿/, '').trim()
   if (!anthropicKey) {
     console.error('[ai-generate] No Anthropic API key set (ANTHROPIC_KEY / ANTHROPIC_API_KEY)')
     return NextResponse.json({ error: 'AI service not configured — ANTHROPIC_KEY missing on server' }, { status: 500 })
