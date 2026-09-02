@@ -6,7 +6,13 @@ export const dynamic = 'force-dynamic'
  *  block. Non-authoritative — callers should fall back to their own defaults
  *  when a field comes back null or the request fails. */
 export async function POST(request: NextRequest) {
-  const anthropicKey = process.env.ANTHROPIC_KEY ?? process.env.ANTHROPIC_API_KEY ?? ''
+  // Strip a leading BOM (U+FEFF) and surrounding whitespace — a Vercel env
+  // var pasted from certain editors can carry one, and a BOM in a header
+  // value throws "Cannot convert argument to a ByteString" deep inside
+  // fetch()'s Headers constructor, which otherwise looks like a generic,
+  // unexplained 500 on every single request.
+  const anthropicKey = (process.env.ANTHROPIC_KEY ?? process.env.ANTHROPIC_API_KEY ?? '')
+    .replace(/^﻿/, '').trim()
   if (!anthropicKey) {
     console.error('[extract-drawing-info] No Anthropic API key set (ANTHROPIC_KEY / ANTHROPIC_API_KEY)')
     return NextResponse.json({ error: 'AI service not configured' }, { status: 500 })
