@@ -527,15 +527,19 @@ function AdminPageInner() {
       reader.readAsDataURL(blob)
     })
 
-  // One attempt at reading a page's title block via AI. Races the request
-  // against a generous client-side backstop (the server bounds its own
-  // Anthropic call to 30s — see extract-info/route.ts — so this 90s ceiling
-  // is a safety net for a hung connection, not the primary timeout). Returns
-  // null on any failure (network error, non-OK response, or timeout); never
-  // throws.
-  const attemptExtraction = async (
-    aiJpegBlob: Blob
-  ): Promise<{ drawing_number: string | null; revision: string | null; title: string | null } | null> => {
+  type ExtractionResult = {
+    drawing_number: string | null; revision: string | null; title: string | null
+    status?: 'ok' | 'timeout' | 'failed'
+  }
+
+  // One attempt at reading a page's title block via AI. The server bounds
+  // its own Anthropic call to 30s and always replies 200 with a `status`
+  // field ('ok' | 'timeout' | 'failed') for a genuine read outcome — this
+  // 60s client-side race is only a backstop against a fully hung request,
+  // not the primary timeout. Returns null only on a real transport failure
+  // (network error, or the server itself erroring, e.g. missing API key);
+  // never throws.
+  const attemptExtraction = async (aiJpegBlob: Blob): Promise<ExtractionResult | null> => {
     try {
       const imageBase64 = await blobToBase64(aiJpegBlob)
       const extractRes = await Promise.race<Response>([
@@ -545,11 +549,11 @@ function AdminPageInner() {
           body: JSON.stringify({ imageBase64, mediaType: 'image/jpeg' }),
         }),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Drawing info extraction timed out')), 90000)
+          setTimeout(() => reject(new Error('Drawing info extraction timed out')), 60000)
         ),
       ])
       if (extractRes.ok) return await extractRes.json()
-      console.error('[split] Drawing info extraction failed:', await extractRes.text())
+      console.error('[split] Drawing info extraction request failed:', await extractRes.text())
       return null
     } catch (exErr) {
       console.error('[split] Drawing info extraction error:', exErr)
@@ -649,14 +653,18 @@ function AdminPageInner() {
 
         // Read the title block via AI to get the sheet's actual drawing
         // number/revision instead of a guessed sequential number + fixed
-        // "A". Retries once on failure/timeout before giving up. Sends the
-        // small JPEG (not the full-size PNG) so this stays fast even on a
-        // slow or restricted network.
+        // "A". Retries once if the read didn't come back 'ok' (timed out,
+        // failed, or a transport error) before giving up. A status of 'ok'
+        // with individually-null fields is NOT retried — that's the AI
+        // confidently reporting it can't read that field, not a failure.
+        // Sends the small JPEG (not the full-size PNG) so this stays fast
+        // even on a slow or restricted network.
         setUploadProgress(`${progressPrefix}Reading drawing details for page ${i + 1} of ${pageCount}…`)
-        let extracted: { drawing_number: string | null; revision: string | null; title: string | null } | null = null
+        let extracted: ExtractionResult | null = null
         if (aiJpegBlob) {
           extracted = await attemptExtraction(aiJpegBlob)
-          if (!extracted) {
+          if (!extracted || extracted.status !== 'ok') {
+            await new Promise(r => setTimeout(r, 800))
             setUploadProgress(`${progressPrefix}Retrying drawing details for page ${i + 1} of ${pageCount}…`)
             extracted = await attemptExtraction(aiJpegBlob)
           }
@@ -665,9 +673,11 @@ function AdminPageInner() {
         // If the AI genuinely couldn't confidently read the number or
         // revision — whether because both attempts failed/timed out, or it
         // ran but wasn't confident — don't write a fabricated "DWG-001" /
-        // "Rev A" that looks like a real value. Leave those fields blank and
-        // flag the page so the upload summary can tell the user to name it
-        // themselves, instead of silently shipping a wrong name.
+        // "Rev A" that looks like a real value. Leave those fields blank
+        // (derivable later purely from empty number/placeholder title — no
+        // schema change needed) and flag the page so the upload summary can
+        // tell the user to name it themselves, instead of silently shipping
+        // a wrong name.
         const needsNaming = !extracted?.drawing_number || !extracted?.revision
         if (needsNaming) needsNamingCount++
 

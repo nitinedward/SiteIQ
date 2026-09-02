@@ -61,7 +61,10 @@ Use null for any field you cannot read with confidence. Do not guess.`
     } catch (fetchErr: any) {
       if (fetchErr?.name === 'AbortError') {
         console.error('[extract-drawing-info] Anthropic call timed out after 30s')
-        return NextResponse.json({ error: 'AI extraction timed out' }, { status: 504 })
+        // 200, not 504 — a timeout is a normal "couldn't read it" outcome the
+        // client should handle the same way as any other failed read, not a
+        // transport-level error.
+        return NextResponse.json({ drawing_number: null, revision: null, title: null, status: 'timeout' })
       }
       throw fetchErr
     } finally {
@@ -71,7 +74,7 @@ Use null for any field you cannot read with confidence. Do not guess.`
     if (!response.ok) {
       const err = await response.text()
       console.error('[extract-drawing-info] Anthropic error:', err)
-      return NextResponse.json({ error: 'AI extraction failed' }, { status: 500 })
+      return NextResponse.json({ drawing_number: null, revision: null, title: null, status: 'failed' })
     }
 
     const aiData = await response.json()
@@ -79,7 +82,7 @@ Use null for any field you cannot read with confidence. Do not guess.`
     const jsonMatch = rawText.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       console.error('[extract-drawing-info] No JSON in AI response:', rawText)
-      return NextResponse.json({ drawing_number: null, revision: null, title: null })
+      return NextResponse.json({ drawing_number: null, revision: null, title: null, status: 'failed' })
     }
 
     let parsed: { drawing_number?: string | null; revision?: string | null; title?: string | null }
@@ -87,13 +90,14 @@ Use null for any field you cannot read with confidence. Do not guess.`
       parsed = JSON.parse(jsonMatch[0])
     } catch (e) {
       console.error('[extract-drawing-info] JSON parse failed:', jsonMatch[0])
-      return NextResponse.json({ drawing_number: null, revision: null, title: null })
+      return NextResponse.json({ drawing_number: null, revision: null, title: null, status: 'failed' })
     }
 
     return NextResponse.json({
       drawing_number: parsed.drawing_number || null,
       revision:       parsed.revision || null,
       title:          parsed.title || null,
+      status: 'ok',
     })
   } catch (err) {
     console.error('[extract-drawing-info] error:', err)
