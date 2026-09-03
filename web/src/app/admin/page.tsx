@@ -1073,7 +1073,7 @@ function AdminPageInner() {
                     <span style={{ minWidth: 0 }}>
                       <span style={{ display: 'block', fontFamily: 'var(--f-heading)', fontSize: 16, fontWeight: 800, color: 'var(--text-ink)', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                       <span style={{ display: 'block', fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        #{p.project_number}{p.client_name ? ` · ${p.client_name}` : ''}
+                        {p.project_number}{p.client_name ? ` · ${p.client_name}` : ''}
                       </span>
                     </span>
                     <Badge status={p.status} />
