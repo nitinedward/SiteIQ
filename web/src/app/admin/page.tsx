@@ -19,6 +19,12 @@ type Member  = { id: string; user_id: string; full_name: string; email: string; 
 const STATUS_OPTIONS = ['ACTIVE', 'ON_HOLD', 'COMPLETED'] as const
 const STATUS_LABELS: Record<string, string> = { ACTIVE: 'Active', ON_HOLD: 'On Hold', COMPLETED: 'Completed' }
 
+// How many drawing pages to render/upload/AI-name concurrently during a
+// split upload. Higher = faster large uploads, but risks Anthropic rate
+// limits and higher peak browser memory. Lower this (e.g. to 4) if 429s
+// show up in practice.
+const CONCURRENCY = 6
+
 // Split-page uploads are named "drawing-<batchId>-p<pageNumber>...", inserted
 // one page at a time (page 1 first). Sorting purely by created_at puts the
 // LAST page of the newest batch on top. Sort newest batch first, but pages
@@ -593,11 +599,14 @@ function AdminPageInner() {
 
       const baseName = file.name.replace(/\.pdf$/i, '')
       const batchId  = Date.now()
-      let needsNamingCount = 0
 
-      for (let i = 0; i < pageCount; i++) {
-        setUploadProgress(`${progressPrefix}Splitting & uploading page ${i + 1} of ${pageCount}…`)
-
+      // Processes exactly one page — identical steps/order to the original
+      // sequential loop (render → upload → extract → insert), just wrapped
+      // so a bounded pool of these can run concurrently. Page identity
+      // (filename, drawing number/title) is always derived from the
+      // ORIGINAL page index `i`, never from completion order, so pages
+      // finishing out of order still land correctly numbered.
+      const processPage = async (i: number): Promise<{ needsNaming: boolean } | { error: string }> => {
         // Build a standalone single-page PDF for page i
         const newPdf = await PDFDocument.create()
         const [copiedPage] = await newPdf.copyPages(sourcePdf, [i])
@@ -623,7 +632,10 @@ function AdminPageInner() {
         // the same canvas — avoids re-rendering the PDF twice. Strictly
         // non-fatal — a generous timeout so a hung worker never stalls the
         // whole upload, but generous enough that a slow computer or network
-        // doesn't spuriously fall back to placeholder values.
+        // doesn't spuriously fall back to placeholder values. Canvas/blob
+        // references are local to this call and fall out of scope (GC-able)
+        // as soon as it returns — with CONCURRENCY workers in flight, only
+        // that many are ever live at once, not all pageCount of them.
         let previewUrl: string | null = null
         let previewBlob: Blob | null = null
         let aiJpegBlob: Blob | null = null
@@ -654,18 +666,17 @@ function AdminPageInner() {
         // Read the title block via AI to get the sheet's actual drawing
         // number/revision instead of a guessed sequential number + fixed
         // "A". Retries once if the read didn't come back 'ok' (timed out,
-        // failed, or a transport error) before giving up. A status of 'ok'
-        // with individually-null fields is NOT retried — that's the AI
-        // confidently reporting it can't read that field, not a failure.
-        // Sends the small JPEG (not the full-size PNG) so this stays fast
-        // even on a slow or restricted network.
-        setUploadProgress(`${progressPrefix}Reading drawing details for page ${i + 1} of ${pageCount}…`)
+        // failed, a transient/rate-limit error, or a transport error)
+        // before giving up. A status of 'ok' with individually-null fields
+        // is NOT retried — that's the AI confidently reporting it can't
+        // read that field, not a failure. Sends the small JPEG (not the
+        // full-size PNG) so this stays fast even on a slow or restricted
+        // network.
         let extracted: ExtractionResult | null = null
         if (aiJpegBlob) {
           extracted = await attemptExtraction(aiJpegBlob)
           if (!extracted || extracted.status !== 'ok') {
             await new Promise(r => setTimeout(r, 800))
-            setUploadProgress(`${progressPrefix}Retrying drawing details for page ${i + 1} of ${pageCount}…`)
             extracted = await attemptExtraction(aiJpegBlob)
           }
         }
@@ -679,7 +690,6 @@ function AdminPageInner() {
         // tell the user to name it themselves, instead of silently shipping
         // a wrong name.
         const needsNaming = !extracted?.drawing_number || !extracted?.revision
-        if (needsNaming) needsNamingCount++
 
         const pageTitle = pageCount > 1 ? `${baseName} — Page ${i + 1} of ${pageCount}` : baseName
         const finalTitle = extracted?.title || (needsNaming ? 'Untitled drawing — tap to name' : pageTitle)
@@ -712,8 +722,46 @@ function AdminPageInner() {
             .eq('id', newRow.id)
           // error intentionally ignored — preview_url is optional
         }
+
+        return { needsNaming }
       }
 
+      // Bounded worker pool: CONCURRENCY pages in flight at a time, each
+      // worker pulling the next unclaimed page index until none remain.
+      // Pages can (and will) finish out of order — that's fine, since every
+      // identifying value (filename, number, title) is derived from the
+      // original index `i` inside processPage, never from completion order.
+      // A hard per-page failure (storage upload / DB insert — NOT an
+      // extraction failure, which is handled by the honest fallback above)
+      // stops new pages from being dispatched, but lets already-in-flight
+      // workers finish their current page rather than aborting mid-request.
+      let needsNamingCount = 0
+      let completed = 0
+      let nextIndex = 0
+      let hardError: string | null = null
+
+      setUploadProgress(`${progressPrefix}Processing 0 / ${pageCount} drawings…`)
+
+      const worker = async () => {
+        while (!hardError) {
+          const i = nextIndex++
+          if (i >= pageCount) return
+          const result = await processPage(i)
+          if ('error' in result) {
+            hardError = result.error
+            return
+          }
+          if (result.needsNaming) needsNamingCount++
+          completed++
+          setUploadProgress(`${progressPrefix}Processing ${completed} / ${pageCount} drawings…`)
+        }
+      }
+
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, pageCount) }, () => worker())
+      )
+
+      if (hardError) return { error: hardError }
       return { pageCount, needsNamingCount }
     } catch (err: any) {
       console.error('[drawing] Upload error:', err)
