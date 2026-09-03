@@ -535,7 +535,7 @@ export default function DashboardPage() {
                 <div>
                   <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}>{p.name}</div>
                   <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 2 }}>
-                    #{p.project_number}{p.client_name ? ` · ${p.client_name}` : ''}
+                    {p.project_number}{p.client_name ? ` · ${p.client_name}` : ''}
                   </div>
                 </div>
                 <span style={{ background: 'var(--marigold-soft)', color: 'var(--marigold-ink)', fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99, flexShrink: 0 }}>On Hold</span>
