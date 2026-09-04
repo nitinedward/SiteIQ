@@ -249,9 +249,12 @@ export default function ReportPage() {
       })
     }
 
+    // Nothing selected — this call still runs (it replaces the whole
+    // inserted section, so an empty selection means "remove everything
+    // I've inserted"), but confirm first so a stray click doesn't silently
+    // wipe it out.
     if (photos.length === 0 && drawingsList.length === 0) {
-      alert('Select photos or drawings first.')
-      return
+      if (!confirm('No photos or drawings are selected. This will remove any previously inserted attachments from the document. Continue?')) return
     }
 
     setInserting(true)
@@ -1187,12 +1190,14 @@ export default function ReportPage() {
                 })()}
               </div>
 
-              {/* Insert into Document button */}
+              {/* Update Document button — replaces the whole inserted
+                  drawings+photos section with the current selection each
+                  time, so deselecting something and clicking again removes
+                  it from the document instead of only ever adding more. */}
               <button
                 onClick={insertAttachments}
-                disabled={inserting || !docReady ||
-                  (selectedPhotos.filter(p => p.selected).length === 0
-                  && drawings.filter(d => d.selected && d.captured).length === 0)}
+                disabled={inserting || !docReady}
+                title="Adds newly-selected photos/drawings and removes any you've deselected"
                 style={{
                   width: '100%',
                   background: inserting ? 'var(--paper)' : 'var(--indigo)',
@@ -1209,21 +1214,18 @@ export default function ReportPage() {
                   justifyContent: 'center',
                   gap: 7,
                   marginBottom: 8,
-                  opacity: (!docReady ||
-                    (selectedPhotos.filter(p => p.selected).length === 0
-                    && drawings.filter(d => d.selected && d.captured).length === 0))
-                    ? 0.5 : 1,
+                  opacity: !docReady ? 0.5 : 1,
                 }}
               >
                 {inserting ? (
                   <>
                     <div style={{ width: 12, height: 12, border: '2px solid var(--border-line)', borderTopColor: 'var(--text-mid)', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
-                    Inserting...
+                    Updating...
                   </>
                 ) : (
                   <>
                     <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                    Insert into Document
+                    Update Document
                   </>
                 )}
               </button>

@@ -142,6 +142,42 @@ function refLine(text: string): string {
 
 const PAGE_BREAK = `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`
 
+// The whole appended drawings+photos section is wrapped in this bookmark so
+// a later call can find and remove exactly that content before rebuilding
+// it — every call replaces the section with the CURRENT selection, rather
+// than only ever adding more, so deselecting something and re-applying
+// removes it from the document.
+const ATTACHMENTS_BOOKMARK_ID   = '999000'
+const ATTACHMENTS_BOOKMARK_NAME = 'siteiq_attachments'
+
+/** Removes a previously-inserted attachments section (if any), including
+ *  the image relationships and media files it referenced, so repeated
+ *  add/remove cycles don't leak storage in the .docx. */
+function removeExistingAttachmentsSection(
+  docXml: string, relsXml: string, zip: AdmZip
+): { docXml: string; relsXml: string } {
+  const sectionRe = new RegExp(
+    `<w:bookmarkStart[^>]*w:id="${ATTACHMENTS_BOOKMARK_ID}"[^>]*w:name="${ATTACHMENTS_BOOKMARK_NAME}"[^>]*/>` +
+    `([\\s\\S]*?)` +
+    `<w:bookmarkEnd[^>]*w:id="${ATTACHMENTS_BOOKMARK_ID}"[^>]*/>`
+  )
+  const match = docXml.match(sectionRe)
+  if (!match) return { docXml, relsXml }
+
+  const newDocXml = docXml.replace(sectionRe, '')
+
+  let newRelsXml = relsXml
+  for (const [, rId] of match[0].matchAll(/r:embed="(rId\d+)"/g)) {
+    const relMatch = newRelsXml.match(new RegExp(`<Relationship Id="${rId}"[^>]*Target="([^"]+)"[^>]*/>`))
+    if (relMatch) {
+      try { zip.deleteFile(`word/${relMatch[1]}`) } catch { /* best-effort cleanup */ }
+    }
+    newRelsXml = newRelsXml.replace(new RegExp(`\\s*<Relationship Id="${rId}"[^>]*/>`), '')
+  }
+
+  return { docXml: newDocXml, relsXml: newRelsXml }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -169,13 +205,6 @@ export async function POST(request: NextRequest) {
     const validPhotos   = (photos   as PhotoInput[]).filter(p => p?.url)
     const validDrawings = (drawings as DrawingInput[]).filter(d => d?.dataUrl || d?.pngBase64)
 
-    if (validPhotos.length === 0 && validDrawings.length === 0) {
-      return NextResponse.json(
-        { success: true, photosAdded: 0, drawingsAdded: 0 },
-        { headers: corsHeaders }
-      )
-    }
-
     const zip = new AdmZip(docBuffer)
 
     // ── Relationships file ───────────────────────────────────────────────────
@@ -185,6 +214,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid document structure' }, { status: 500, headers: corsHeaders })
     }
     let relsXml = relsEntry.getData().toString('utf-8')
+
+    const docEntry = zip.getEntry('word/document.xml')
+    if (!docEntry) {
+      return NextResponse.json({ error: 'Invalid document structure' }, { status: 500, headers: corsHeaders })
+    }
+    let docXml = docEntry.getData().toString('utf-8')
+
+    // Remove any previously-inserted attachments section (and its images)
+    // before rebuilding — this always runs, even with an empty selection,
+    // so deselecting everything and clicking again clears the section.
+    ;({ docXml, relsXml } = removeExistingAttachmentsSection(docXml, relsXml, zip))
+
     let nextRId = getMaxRId(relsXml) + 1
 
     // ── Content-Types: ensure PNG and JPEG are registered ───────────────────
@@ -313,16 +354,22 @@ export async function POST(request: NextRequest) {
     // ── Apply relationships ──────────────────────────────────────────────────
     if (newRels.length > 0) {
       relsXml = addRelEntries(relsXml, newRels)
-      zip.updateFile(relsPath, Buffer.from(relsXml, 'utf-8'))
     }
+    zip.updateFile(relsPath, Buffer.from(relsXml, 'utf-8'))
 
     // ── Append content to document.xml ───────────────────────────────────────
-    const docEntry = zip.getEntry('word/document.xml')
-    if (docEntry) {
-      let docXml = docEntry.getData().toString('utf-8')
+    // Wrapped in the attachments bookmark so a future call can find and
+    // remove exactly this section. If there's nothing new to add (e.g. the
+    // user deselected everything), the removal above still ran and gets
+    // saved here — the section is simply left empty.
+    if (appendXml) {
+      appendXml =
+        `<w:bookmarkStart w:id="${ATTACHMENTS_BOOKMARK_ID}" w:name="${ATTACHMENTS_BOOKMARK_NAME}"/>` +
+        appendXml +
+        `<w:bookmarkEnd w:id="${ATTACHMENTS_BOOKMARK_ID}"/>`
       docXml = docXml.replace('</w:body>', `${appendXml}</w:body>`)
-      zip.updateFile('word/document.xml', Buffer.from(docXml, 'utf-8'))
     }
+    zip.updateFile('word/document.xml', Buffer.from(docXml, 'utf-8'))
 
     await saveDoc(inspectionId, zip.toBuffer())
     console.log(`[append] Saved, photos: ${validPhotos.length}, drawings: ${validDrawings.length}`)
