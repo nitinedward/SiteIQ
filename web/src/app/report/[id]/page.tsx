@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import { captureDrawingWithMarkup } from '@/lib/captureDrawing'
+import { REWORD_PLUGIN_GUID } from '@/lib/rewordPlugin'
 import dynamic from 'next/dynamic'
 
 const OnlyOfficeEditor = dynamic(() => import('@/components/OnlyOfficeEditor'), { ssr: false })
@@ -55,8 +56,6 @@ export default function ReportPage() {
   const [loadingFrozenPdf,   setLoadingFrozenPdf]     = useState(false)
 
   // ── AI REWORD ────────────────────────────────────────────────────────────
-  const editorInstanceRef = useRef<any>(null)
-  const connectorRef       = useRef<any>(null)
   const [showRewritePanel, setShowRewritePanel] = useState(false)
   const [rewriteSource,    setRewriteSource]    = useState('')
   const [rewriteTone,      setRewriteTone]      = useState<string | null>(null)
@@ -137,116 +136,62 @@ export default function ReportPage() {
   }, [])
 
   // ── AI REWORD (via OnlyOffice connector) ──────────────────────────────────────
-  // NOTE: the connector/callCommand API below is OnlyOffice's documented
-  // mechanism for reading/writing the current selection from outside the
-  // editor iframe, but its exact behaviour against this specific
-  // self-hosted Document Server version is unverified — this may need
-  // adjustment based on real browser testing.
-  // Walks the full prototype chain (methods are often non-enumerable /
-  // on the prototype, so Object.keys() alone would miss them) to report
-  // exactly what IS callable on the editor instance when createConnector
-  // turns out not to exist — lets us adapt to the real API surface instead
-  // of guessing blindly.
-  const listInstanceMethods = (obj: any): string => {
-    const names = new Set<string>()
-    let cur = obj
-    let depth = 0
-    while (cur && depth < 6) {
-      for (const name of Object.getOwnPropertyNames(cur)) {
-        if (name === 'constructor') continue
-        try { if (typeof obj[name] === 'function') names.add(name) } catch { /* ignore getter throws */ }
-      }
-      cur = Object.getPrototypeOf(cur)
-      depth++
-    }
-    const list = [...names].sort()
-    return list.length ? list.join(', ') : '(none found — object may be a plain data holder, not a class instance)'
-  }
+  // This Document Server build exposes no createConnector()/selection API
+  // on the DocEditor JS instance at all (confirmed by enumerating its full
+  // prototype chain against a live editor — only mail-merge/sharing/etc.
+  // methods exist). Reading/replacing the current selection instead goes
+  // through a real OnlyOffice plugin (public/oo-plugins/siteiq-reword/)
+  // running inside the editor iframe, reached via postMessage — see
+  // src/lib/rewordPlugin.ts for the shared guid/URL.
+  const pendingRewordRequests = useRef(new Map<string, { resolve: (v: any) => void; reject: (e: any) => void }>())
 
-  // Diagnostic-heavy on purpose — the connector API's behaviour against
-  // this specific self-hosted Document Server version was unverified going
-  // in, so every failure mode here throws a SPECIFIC message rather than a
-  // generic one, to pinpoint exactly where it breaks from the first
-  // real-world failure report.
-  const getConnector = (): any => {
-    if (connectorRef.current) return connectorRef.current
-    if (!editorInstanceRef.current) {
-      throw new Error('Editor instance not available yet (onEditorInstance has not fired) — wait for the document to finish loading')
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      let msg: any
+      try { msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data } catch { return }
+      if (!msg || msg.source !== 'siteiq-reword-plugin' || !msg.requestId) return
+      const pending = pendingRewordRequests.current.get(msg.requestId)
+      if (!pending) return
+      pendingRewordRequests.current.delete(msg.requestId)
+      if (msg.error) pending.reject(new Error(msg.error))
+      else pending.resolve(msg)
     }
-    if (typeof editorInstanceRef.current.createConnector !== 'function') {
-      throw new Error(
-        'This OnlyOffice version/build does not expose createConnector() on the editor instance. ' +
-        'Available methods: ' + listInstanceMethods(editorInstanceRef.current)
-      )
-    }
-    const connector = editorInstanceRef.current.createConnector()
-    if (!connector) {
-      throw new Error('createConnector() returned nothing')
-    }
-    if (typeof connector.callCommand !== 'function') {
-      throw new Error('The connector does not expose callCommand()')
-    }
-    connectorRef.current = connector
-    return connector
-  }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [])
 
-  const getSelectedTextFromEditor = (): Promise<string> => {
+  const sendToRewordPlugin = (data: Record<string, any>): Promise<any> => {
     return new Promise((resolve, reject) => {
-      let connector: any
-      try {
-        connector = getConnector()
-      } catch (err) { reject(err); return }
-      const timeoutId = setTimeout(() => reject(new Error('callCommand callback never fired (10s timeout) — GetRangeBySelect may not exist in this API version')), 10000)
-      try {
-        // `Api` only exists inside the document's own sandboxed context at
-        // runtime (not in this app's scope) — built via new Function(...)
-        // rather than a literal function referencing `Api`, so TS doesn't
-        // try to resolve it.
-        // eslint-disable-next-line no-new-func
-        const fn = new Function(
-          `var oDocument = Api.GetDocument();` +
-          `var oRange = oDocument.GetRangeBySelect();` +
-          `return oRange ? oRange.GetText() : '';`
-        )
-        connector.callCommand(fn, function (result: string) {
-          clearTimeout(timeoutId)
-          resolve(result || '')
-        })
-      } catch (err) {
-        clearTimeout(timeoutId)
-        reject(err)
+      const editorIframe = document.querySelector<HTMLIFrameElement>('#onlyoffice-editor iframe')
+      if (!editorIframe || !editorIframe.contentWindow) {
+        reject(new Error('Document editor iframe not found — wait for the document to finish loading and try again'))
+        return
       }
+      const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const timeoutId = setTimeout(() => {
+        pendingRewordRequests.current.delete(requestId)
+        reject(new Error('No response from the reword plugin (10s timeout) — it may not have loaded. Try reloading the page.'))
+      }, 10000)
+      pendingRewordRequests.current.set(requestId, {
+        resolve: (v: any) => { clearTimeout(timeoutId); resolve(v) },
+        reject: (e: any) => { clearTimeout(timeoutId); reject(e) },
+      })
+      editorIframe.contentWindow.postMessage(JSON.stringify({
+        frameEditorId: editorIframe.id || 'onlyoffice-editor-frame',
+        guid: REWORD_PLUGIN_GUID,
+        type: 'onExternalPluginMessage',
+        data: { ...data, requestId },
+      }), '*')
     })
   }
 
-  const replaceSelectedTextInEditor = (newText: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      let connector: any
-      try {
-        connector = getConnector()
-      } catch (err) { reject(err); return }
-      const timeoutId = setTimeout(() => reject(new Error('callCommand callback never fired (10s timeout) while replacing text')), 10000)
-      try {
-        // The function passed to callCommand runs inside the document's own
-        // sandboxed context and does NOT have closure access to outer
-        // variables — the replacement text is baked directly into the
-        // generated function's source via JSON.stringify (safely escaped)
-        // rather than relied on as a closure.
-        // eslint-disable-next-line no-new-func
-        const fn = new Function(
-          `var oDocument = Api.GetDocument();` +
-          `var oRange = oDocument.GetRangeBySelect();` +
-          `if (oRange) { oRange.SetText(${JSON.stringify(newText)}); }`
-        )
-        connector.callCommand(fn, function () {
-          clearTimeout(timeoutId)
-          resolve()
-        })
-      } catch (err) {
-        clearTimeout(timeoutId)
-        reject(err)
-      }
-    })
+  const getSelectedTextFromEditor = async (): Promise<string> => {
+    const result = await sendToRewordPlugin({ type: 'getSelection' })
+    return result.text || ''
+  }
+
+  const replaceSelectedTextInEditor = async (newText: string): Promise<void> => {
+    await sendToRewordPlugin({ type: 'replaceSelection', text: newText })
   }
 
   const openRewritePanel = async () => {
@@ -1595,10 +1540,6 @@ export default function ReportPage() {
                     editable={reportStatus !== 'finalised'}
                     onReady={() => { console.log('[OnlyOffice] editor ready'); setEditorError(false) }}
                     onError={() => setEditorError(true)}
-                    onEditorInstance={editor => {
-                      editorInstanceRef.current = editor
-                      connectorRef.current = null // stale after a remount — recreated lazily
-                    }}
                   />
                 </div>
               </div>

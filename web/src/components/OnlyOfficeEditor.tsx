@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { REWORD_PLUGIN_GUID, rewordPluginConfigUrl } from '@/lib/rewordPlugin'
 
 interface OnlyOfficeEditorProps {
   inspectionId: string
@@ -8,11 +9,6 @@ interface OnlyOfficeEditorProps {
   sessionKey: number
   onReady?: () => void
   onError?: () => void
-  // Hands the raw DocsAPI.DocEditor instance up to the parent once created,
-  // so it can build a connector (createConnector()) for reading/replacing
-  // the current selection — needed for the AI reword feature. Previously
-  // this instance never left the component.
-  onEditorInstance?: (editor: any) => void
 }
 
 export default function OnlyOfficeEditor({
@@ -22,7 +18,6 @@ export default function OnlyOfficeEditor({
   sessionKey,
   onReady,
   onError,
-  onEditorInstance,
 }: OnlyOfficeEditorProps) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const editorRef     = useRef<any>(null)
@@ -88,6 +83,15 @@ export default function OnlyOfficeEditor({
               },
               plugins: false,
               macros: false,
+            },
+            // Loads the "siteiq-reword" system plugin (public/oo-plugins/
+            // siteiq-reword/) invisibly — it has no UI (isVisual:false) and
+            // exists only to bridge selection-read/replace commands from
+            // the outer SiteIQ page via postMessage. See
+            // src/lib/rewordPlugin.ts.
+            plugins: {
+              autostart: [REWORD_PLUGIN_GUID],
+              pluginsData: [rewordPluginConfigUrl(appUrl)],
             },
           },
         }
@@ -163,7 +167,6 @@ export default function OnlyOfficeEditor({
         editorRef.current = editor
         setLoading(false)
         onReady?.()
-        onEditorInstance?.(editor)
       } catch (err: any) {
         console.error('[OnlyOfficeEditor] init error:', err)
         setError(err?.message ?? 'Failed to initialize editor')

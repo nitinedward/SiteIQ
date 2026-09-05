@@ -1,0 +1,22 @@
+{
+    "name"       : "SiteIQ Reword",
+    "guid"       : "asc.{7A2E9C41-6B8A-4F0D-9E43-2B7B6C9D41F0}",
+    "baseUrl"    : "",
+    "variations" : [
+        {
+            "description"         : "SiteIQ Reword bridge",
+            "url"                 : "index.html",
+            "icons"               : [],
+            "isViewer"            : false,
+            "EditorsSupport"      : ["word"],
+            "isVisual"            : false,
+            "isModal"             : true,
+            "isInsideMode"        : false,
+            "isSystem"            : true,
+            "initDataType"        : "none",
+            "initData"            : "",
+            "isUpdateOleOnResize" : true,
+            "buttons"             : []
+        }
+    ]
+}
