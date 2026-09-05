@@ -50,6 +50,7 @@ export default function ReportPage() {
   const [inserting,          setInserting]           = useState(false)
   const [reloadingEditor,    setReloadingEditor]     = useState(false)
   const [mobileTab,          setMobileTab]            = useState<'document' | 'attachments'>('document')
+  const [showFinaliseConfirm, setShowFinaliseConfirm] = useState(false)
 
   // ── LOAD DATA ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -286,7 +287,7 @@ export default function ReportPage() {
 
   // ── FINALISE / REOPEN ─────────────────────────────────────────────────────────
   const finaliseReport = async () => {
-    if (!confirm('Finalise this report? It will move to Completed. You can still edit it later.')) return
+    setShowFinaliseConfirm(false)
     setFinalisingReport(true)
     try {
       // Force-save the OO document before updating status.
@@ -583,7 +584,7 @@ export default function ReportPage() {
             )}
             {reportStatus === 'pending' ? (
               <button
-                onClick={finaliseReport}
+                onClick={() => setShowFinaliseConfirm(true)}
                 disabled={finalisingReport}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6,
@@ -726,80 +727,75 @@ export default function ReportPage() {
             flexShrink: 0,
           }}>
 
-            {/* ── INDIGO HEADER ─────────────────────────────────────────── */}
+            {/* ── HEADER ────────────────────────────────────────────────── */}
             <div style={{
-              background: 'var(--indigo-deep)',
-              padding: '14px 16px',
+              padding: '18px 16px 14px',
+              borderBottom: '1px solid var(--border-line)',
               flexShrink: 0,
             }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: 12,
-              }}>
-                <div>
-                  <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 800, color: 'white', lineHeight: 1 }}>
-                    Attachments
-                  </div>
-                  <div style={{ fontFamily: 'var(--f-text)', fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 3 }}>
-                    Included when you download
-                  </div>
-                </div>
+              <div style={{ fontFamily: 'var(--f-heading)', fontSize: 16, fontWeight: 800, color: 'var(--indigo-deep)', lineHeight: 1 }}>
+                Attachments
+              </div>
+              <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 4 }}>
+                Included when you download
               </div>
 
-              {/* 3 stat counters */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+              {/* 3 stat boxes */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginTop: 14 }}>
                 {([
                   {
                     label: 'Photos',
                     value: selPhotoCount,
                     total: selectedPhotos.length,
-                    highlight: false,
+                    icon: <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>,
+                    icon2: <circle cx="12" cy="13" r="4"/>,
                   },
                   {
                     label: 'Drawings',
                     value: selDrawingCount,
                     total: drawings.length,
-                    highlight: false,
+                    icon: <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>,
+                    icon2: <polyline points="14,2 14,8 20,8"/>,
                   },
                   {
                     label: 'Total',
                     value: totalAttachments,
                     total: null as number | null,
-                    highlight: true,
+                    icon: <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>,
+                    icon2: null,
                   },
                 ] as const).map(stat => (
                   <div
                     key={stat.label}
                     style={{
-                      background: stat.highlight
-                        ? 'rgba(255,255,255,0.15)'
-                        : 'rgba(255,255,255,0.1)',
-                      borderRadius: 8,
-                      padding: '8px 10px',
-                      textAlign: 'center',
-                      border: stat.highlight
-                        ? '1px solid rgba(255,255,255,0.2)'
-                        : 'none',
+                      border: '1px solid var(--border-line)',
+                      borderRadius: 14,
+                      padding: '9px 8px',
                     }}
                   >
                     <div style={{
-                      fontSize: 20,
-                      fontWeight: 700,
-                      color: 'white',
+                      display: 'flex', alignItems: 'center', gap: 4,
+                      fontSize: 10, color: 'var(--text-mid)',
+                    }}>
+                      <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                        {stat.icon}{stat.icon2}
+                      </svg>
+                      {stat.label}
+                    </div>
+                    <div style={{
+                      marginTop: 4,
+                      fontSize: 18,
+                      fontWeight: 800,
+                      color: 'var(--indigo-deep)',
                       lineHeight: 1,
-                      fontFamily: 'var(--f-mono)',
+                      fontFamily: 'var(--f-heading)',
                     }}>
                       {stat.value}
                       {stat.total !== null && (
-                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 400 }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-mid)', fontWeight: 400 }}>
                           /{stat.total}
                         </span>
                       )}
-                    </div>
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', marginTop: 3 }}>
-                      {stat.label}
                     </div>
                   </div>
                 ))}
@@ -817,8 +813,8 @@ export default function ReportPage() {
                 disabled={generatingAI || !docReady}
                 style={{
                   width: '100%',
-                  background: generatingAI ? 'var(--paper)' : 'var(--marigold)',
-                  color: generatingAI ? 'var(--text-mid)' : 'var(--indigo-deep)',
+                  background: generatingAI ? 'var(--paper)' : 'var(--indigo)',
+                  color: generatingAI ? 'var(--text-mid)' : 'white',
                   border: 'none',
                   borderRadius: 'var(--radius-pill)',
                   padding: '10px 14px',
@@ -832,15 +828,14 @@ export default function ReportPage() {
                   gap: 7,
                   transition: 'all 0.15s',
                   opacity: !docReady ? 0.5 : 1,
-                  boxShadow: generatingAI ? 'none' : 'var(--shadow-glow-v3)',
                 }}
               >
                 {generatingAI ? (
                   <>
                     <div style={{
                       width: 13, height: 13,
-                      border: '2px solid var(--border-line)',
-                      borderTopColor: 'var(--indigo)',
+                      border: '2px solid rgba(255,255,255,0.4)',
+                      borderTopColor: 'white',
                       borderRadius: '50%',
                       animation: 'spin 0.7s linear infinite',
                     }} />
@@ -883,26 +878,29 @@ export default function ReportPage() {
                       justifyContent: 'space-between', marginBottom: 10,
                     }}>
                       <div style={{
-                        fontFamily: 'var(--f-heading)', fontSize: 11,
-                        fontWeight: 700, textTransform: 'uppercase',
-                        letterSpacing: '1.2px', color: 'var(--text-mid)',
-                        display: 'flex', alignItems: 'center', gap: 6,
+                        fontFamily: 'var(--f-heading)', fontSize: 13,
+                        fontWeight: 700, color: 'var(--indigo-deep)',
                       }}>
-                        <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                          <polyline points="14,2 14,8 20,8"/>
-                        </svg>
                         Drawings
                       </div>
                     </div>
 
                     {drawings.length === 0 ? (
                       <div style={{
-                        background: 'var(--paper)', borderRadius: 'var(--radius-sm)',
-                        padding: '16px 14px', textAlign: 'center',
-                        fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5,
+                        border: '1px solid var(--border-line)', borderRadius: 'var(--radius-md)',
+                        padding: '26px 16px', textAlign: 'center',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
                       }}>
-                        No drawings were marked up during this inspection
+                        <svg width="22" height="22" fill="none" stroke="var(--text-mid)" strokeWidth="1.6" viewBox="0 0 24 24">
+                          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                          <polyline points="14,2 14,8 20,8"/>
+                        </svg>
+                        <div style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>
+                          No drawings marked up
+                        </div>
+                        <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5 }}>
+                          Markups made on mobile will show here.
+                        </div>
                       </div>
                     ) : drawings.map(d => (
                       <div
@@ -1004,32 +1002,26 @@ export default function ReportPage() {
                       justifyContent: 'space-between', marginBottom: 10,
                     }}>
                       <div style={{
-                        fontFamily: 'var(--f-heading)', fontSize: 11,
-                        fontWeight: 700, textTransform: 'uppercase',
-                        letterSpacing: '1.2px', color: 'var(--text-mid)',
-                        display: 'flex', alignItems: 'center', gap: 6,
+                        fontFamily: 'var(--f-heading)', fontSize: 13,
+                        fontWeight: 700, color: 'var(--indigo-deep)',
                       }}>
-                        <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                          <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
-                          <circle cx="12" cy="13" r="4"/>
-                        </svg>
-                        Photos ({selPhotoCount}/{selectedPhotos.length})
+                        Photos
                       </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <button
                           onClick={() => setSelectedPhotos(prev => prev.map(p => ({ ...p, selected: true })))}
                           style={{
                             background: 'none', border: 'none', cursor: 'pointer',
                             fontSize: 11, color: 'var(--indigo)', fontWeight: 700,
-                            fontFamily: 'var(--f-heading)', padding: '2px 4px',
+                            fontFamily: 'var(--f-heading)', padding: '4px 8px', borderRadius: 99,
                           }}
-                        >All</button>
+                        >Select all</button>
                         <button
                           onClick={() => setSelectedPhotos(prev => prev.map(p => ({ ...p, selected: false })))}
                           style={{
                             background: 'none', border: 'none', cursor: 'pointer',
                             fontSize: 11, color: 'var(--text-mid)',
-                            fontFamily: 'var(--f-heading)', fontWeight: 700, padding: '2px 4px',
+                            fontFamily: 'var(--f-heading)', fontWeight: 700, padding: '4px 8px', borderRadius: 99,
                           }}
                         >None</button>
                       </div>
@@ -1037,11 +1029,20 @@ export default function ReportPage() {
 
                     {selectedPhotos.length === 0 ? (
                       <div style={{
-                        background: 'var(--paper)', borderRadius: 'var(--radius-sm)',
-                        padding: '16px 14px', textAlign: 'center',
-                        fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5,
+                        border: '1px solid var(--border-line)', borderRadius: 'var(--radius-md)',
+                        padding: '26px 16px', textAlign: 'center',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
                       }}>
-                        No photos were taken during this inspection
+                        <svg width="22" height="22" fill="none" stroke="var(--text-mid)" strokeWidth="1.6" viewBox="0 0 24 24">
+                          <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+                          <circle cx="12" cy="13" r="4"/>
+                        </svg>
+                        <div style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>
+                          No photos taken
+                        </div>
+                        <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5 }}>
+                          Photos taken on mobile will show here.
+                        </div>
                       </div>
                     ) : (
                       Object.entries(
@@ -1107,11 +1108,11 @@ export default function ReportPage() {
                                   cursor: 'pointer',
                                   borderRadius: 'var(--radius-md)',
                                   overflow: 'hidden',
-                                  border: `2px solid ${photo.selected ? 'var(--sage)' : 'transparent'}`,
-                                  opacity: photo.selected ? 1 : 0.35,
-                                  transition: 'all 0.15s',
-                                  transform: photo.selected ? 'scale(1)' : 'scale(0.97)',
+                                  border: `2px solid ${photo.selected ? 'var(--sage)' : 'var(--border-line)'}`,
+                                  transition: 'border-color 0.15s',
                                 }}
+                                onMouseEnter={e => { if (!photo.selected) e.currentTarget.style.borderColor = 'var(--indigo)' }}
+                                onMouseLeave={e => { if (!photo.selected) e.currentTarget.style.borderColor = 'var(--border-line)' }}
                               >
                                 <img
                                   src={photo.url}
@@ -1356,6 +1357,59 @@ export default function ReportPage() {
 
         </div>
       </div>
+
+      {/* Finalise confirmation */}
+      {showFinaliseConfirm && (
+        <div
+          onClick={() => setShowFinaliseConfirm(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: 20,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 440,
+              background: 'var(--surface)', border: '1px solid var(--border-line)',
+              borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card-v3)',
+              padding: 24,
+            }}
+          >
+            <div style={{ fontFamily: 'var(--f-heading)', fontSize: 18, fontWeight: 800, color: 'var(--indigo-deep)' }}>
+              Finalise report #{reportNo}?
+            </div>
+            <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.5, marginTop: 10 }}>
+              The report moves to Completed and becomes the client copy. You can still reopen it for editing later if needed.
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button
+                onClick={() => setShowFinaliseConfirm(false)}
+                style={{
+                  flex: 1, background: 'var(--surface)', color: 'var(--text-ink)',
+                  border: '1px solid var(--border-line)', borderRadius: 'var(--radius-pill)',
+                  padding: '10px 16px', fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Keep editing
+              </button>
+              <button
+                onClick={finaliseReport}
+                style={{
+                  flex: 1, background: 'var(--sage)', color: 'white',
+                  border: 'none', borderRadius: 'var(--radius-pill)',
+                  padding: '10px 16px', fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Finalise report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
