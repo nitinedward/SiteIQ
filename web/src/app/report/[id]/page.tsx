@@ -174,13 +174,30 @@ export default function ReportPage() {
     return () => window.removeEventListener('message', handler)
   }, [])
 
-  const sendToRewordPlugin = (data: Record<string, any>): Promise<any> => {
+  // Autostart plugin registration happens after OnlyOffice's internal
+  // "document content ready" event, which can land a couple of seconds
+  // after our own onReady fires (worse on a large, photo-heavy report) —
+  // so instead of failing the instant the window ref isn't there yet,
+  // wait for it to show up (up to ~8s) before giving up for real.
+  const waitForRewordPlugin = (timeoutMs = 8000): Promise<Window> => {
     return new Promise((resolve, reject) => {
-      const pluginWindow = rewordPluginWindowRef.current
-      if (!pluginWindow) {
-        reject(new Error('The reword plugin has not announced itself yet — wait a moment for the document to finish loading, then try again. If this persists after reloading, the plugin failed to start.'))
-        return
-      }
+      if (rewordPluginWindowRef.current) { resolve(rewordPluginWindowRef.current); return }
+      const start = Date.now()
+      const intervalId = setInterval(() => {
+        if (rewordPluginWindowRef.current) {
+          clearInterval(intervalId)
+          resolve(rewordPluginWindowRef.current)
+        } else if (Date.now() - start > timeoutMs) {
+          clearInterval(intervalId)
+          reject(new Error('The reword plugin never started (waited 8s) — try reloading the page. If this persists, the plugin failed to load.'))
+        }
+      }, 200)
+    })
+  }
+
+  const sendToRewordPlugin = async (data: Record<string, any>): Promise<any> => {
+    const pluginWindow = await waitForRewordPlugin()
+    return new Promise((resolve, reject) => {
       const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
       const timeoutId = setTimeout(() => {
         pendingRewordRequests.current.delete(requestId)
