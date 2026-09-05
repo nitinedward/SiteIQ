@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import { captureDrawingWithMarkup } from '@/lib/captureDrawing'
@@ -53,6 +53,18 @@ export default function ReportPage() {
   const [showFinaliseConfirm, setShowFinaliseConfirm] = useState(false)
   const [frozenPdfUrl,       setFrozenPdfUrl]         = useState<string | null>(null)
   const [loadingFrozenPdf,   setLoadingFrozenPdf]     = useState(false)
+
+  // ── AI REWORD ────────────────────────────────────────────────────────────
+  const editorInstanceRef = useRef<any>(null)
+  const connectorRef       = useRef<any>(null)
+  const [showRewritePanel, setShowRewritePanel] = useState(false)
+  const [rewriteSource,    setRewriteSource]    = useState('')
+  const [rewriteTone,      setRewriteTone]      = useState<string | null>(null)
+  const [rewriteInstruction, setRewriteInstruction] = useState('')
+  const [rewritePreview,   setRewritePreview]   = useState<string | null>(null)
+  const [rewriting,        setRewriting]        = useState(false)
+  const [rewriteError,     setRewriteError]     = useState('')
+  const [acceptingRewrite, setAcceptingRewrite] = useState(false)
 
   // ── LOAD DATA ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -123,6 +135,120 @@ export default function ReportPage() {
       setLoadingFrozenPdf(false)
     }
   }, [])
+
+  // ── AI REWORD (via OnlyOffice connector) ──────────────────────────────────────
+  // NOTE: the connector/callCommand API below is OnlyOffice's documented
+  // mechanism for reading/writing the current selection from outside the
+  // editor iframe, but its exact behaviour against this specific
+  // self-hosted Document Server version is unverified — this may need
+  // adjustment based on real browser testing.
+  const getConnector = () => {
+    if (!connectorRef.current && editorInstanceRef.current) {
+      connectorRef.current = editorInstanceRef.current.createConnector()
+    }
+    return connectorRef.current
+  }
+
+  const getSelectedTextFromEditor = (): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const connector = getConnector()
+      if (!connector) { reject(new Error('Editor is not ready yet')); return }
+      try {
+        // `Api` only exists inside the document's own sandboxed context at
+        // runtime (not in this app's scope) — built via new Function(...)
+        // rather than a literal function referencing `Api`, same as
+        // replaceSelectedTextInEditor below, so TS doesn't try to resolve it.
+        // eslint-disable-next-line no-new-func
+        const fn = new Function(
+          `var oDocument = Api.GetDocument();` +
+          `var oRange = oDocument.GetRangeBySelect();` +
+          `return oRange ? oRange.GetText() : '';`
+        )
+        connector.callCommand(fn, function (result: string) { resolve(result || '') })
+      } catch (err) {
+        reject(err)
+      }
+    })
+  }
+
+  const replaceSelectedTextInEditor = (newText: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const connector = getConnector()
+      if (!connector) { reject(new Error('Editor is not ready yet')); return }
+      try {
+        // The function passed to callCommand runs inside the document's own
+        // sandboxed context and does NOT have closure access to outer
+        // variables — the replacement text is baked directly into the
+        // generated function's source via JSON.stringify (safely escaped)
+        // rather than relied on as a closure.
+        // eslint-disable-next-line no-new-func
+        const fn = new Function(
+          `var oDocument = Api.GetDocument();` +
+          `var oRange = oDocument.GetRangeBySelect();` +
+          `if (oRange) { oRange.SetText(${JSON.stringify(newText)}); }`
+        )
+        connector.callCommand(fn, function () { resolve() })
+      } catch (err) {
+        reject(err)
+      }
+    })
+  }
+
+  const openRewritePanel = async () => {
+    try {
+      const text = await getSelectedTextFromEditor()
+      if (!text || !text.trim()) {
+        alert('Select some text in the document first.')
+        return
+      }
+      setRewriteSource(text)
+      setRewriteTone(null)
+      setRewriteInstruction('')
+      setRewritePreview(null)
+      setRewriteError('')
+      setShowRewritePanel(true)
+    } catch (err: any) {
+      console.error('[rewrite] getSelectedText error:', err)
+      alert('Could not read the current selection. Make sure the document has fully loaded and try again.')
+    }
+  }
+
+  const doRewrite = async () => {
+    setRewriting(true)
+    setRewriteError('')
+    try {
+      const res = await fetch('/api/docs/rewrite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedText: rewriteSource,
+          tone: rewriteTone || undefined,
+          instruction: rewriteInstruction.trim() || undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Rewrite failed')
+      setRewritePreview(data.rewrite)
+    } catch (err: any) {
+      setRewriteError(err.message || 'Rewrite failed')
+    } finally {
+      setRewriting(false)
+    }
+  }
+
+  const acceptRewrite = async () => {
+    if (!rewritePreview) return
+    setAcceptingRewrite(true)
+    try {
+      await replaceSelectedTextInEditor(rewritePreview)
+      setShowRewritePanel(false)
+    } catch (err: any) {
+      console.error('[rewrite] replace error:', err)
+      alert('Could not apply the rewrite to the document: ' + (err.message || 'unknown error'))
+    } finally {
+      setAcceptingRewrite(false)
+    }
+  }
 
   // ── GENERATE DOC ─────────────────────────────────────────────────────────────
   const generateDoc = useCallback(async () => {
@@ -1384,10 +1510,28 @@ export default function ReportPage() {
                 <div style={{
                   flex: 1,
                   overflow: 'hidden',
+                  position: 'relative',
                   borderRadius: 'var(--radius-md)',
                   boxShadow: 'var(--shadow-card-v3)',
                   border: '1px solid var(--border-line)',
                 }}>
+                  {reportStatus !== 'finalised' && (
+                    <button
+                      onClick={openRewritePanel}
+                      title="Select text in the document first, then click this to reword it with AI"
+                      style={{
+                        position: 'absolute', top: 12, right: 12, zIndex: 15,
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        background: 'var(--marigold)', color: 'var(--indigo-deep)',
+                        border: 'none', borderRadius: 'var(--radius-pill)',
+                        padding: '8px 16px', fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 800,
+                        cursor: 'pointer', boxShadow: 'var(--shadow-card-v3)',
+                      }}
+                    >
+                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/></svg>
+                      Reword with AI
+                    </button>
+                  )}
                   <OnlyOfficeEditor
                     key={editorKey}
                     sessionKey={editorKey}
@@ -1396,6 +1540,10 @@ export default function ReportPage() {
                     editable={reportStatus !== 'finalised'}
                     onReady={() => { console.log('[OnlyOffice] editor ready'); setEditorError(false) }}
                     onError={() => setEditorError(true)}
+                    onEditorInstance={editor => {
+                      editorInstanceRef.current = editor
+                      connectorRef.current = null // stale after a remount — recreated lazily
+                    }}
                   />
                 </div>
               </div>
@@ -1484,6 +1632,175 @@ export default function ReportPage() {
                 Finalise report
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Reword panel */}
+      {showRewritePanel && (
+        <div
+          onClick={() => { if (!rewriting && !acceptingRewrite) setShowRewritePanel(false) }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: 20,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 520, maxHeight: '85vh', overflowY: 'auto',
+              background: 'var(--surface)', border: '1px solid var(--border-line)',
+              borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card-v3)',
+              padding: 24,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--f-heading)', fontSize: 18, fontWeight: 800, color: 'var(--indigo-deep)' }}>
+                <svg width="16" height="16" fill="none" stroke="var(--marigold-ink)" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/></svg>
+                Reword with AI
+              </div>
+              <button
+                onClick={() => setShowRewritePanel(false)}
+                disabled={rewriting || acceptingRewrite}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--text-mid)', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Selected passage (read-only) */}
+            <div style={{
+              marginTop: 14, padding: '12px 14px',
+              background: 'var(--paper)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-md)',
+              fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.6,
+              maxHeight: 120, overflowY: 'auto',
+            }}>
+              {rewriteSource}
+            </div>
+
+            {!rewritePreview && (
+              <>
+                {/* Tone chips */}
+                <div style={{ marginTop: 16, fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, color: 'var(--text-mid)', marginBottom: 8 }}>
+                  Tone (optional)
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {['More formal', 'More concise', 'Plainer language', 'More detailed', 'Neutral/technical'].map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setRewriteTone(prev => prev === t ? null : t)}
+                      style={{
+                        background: rewriteTone === t ? 'var(--indigo)' : 'var(--paper)',
+                        color: rewriteTone === t ? 'white' : 'var(--text-ink)',
+                        border: `1px solid ${rewriteTone === t ? 'var(--indigo)' : 'var(--border-line)'}`,
+                        borderRadius: 'var(--radius-pill)', padding: '6px 14px',
+                        fontFamily: 'var(--f-text)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Instruction */}
+                <div style={{ marginTop: 16, fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, color: 'var(--text-mid)', marginBottom: 8 }}>
+                  Instruction (optional)
+                </div>
+                <textarea
+                  value={rewriteInstruction}
+                  onChange={e => setRewriteInstruction(e.target.value)}
+                  placeholder="e.g. 'flag this as needs monitoring' or 'soften this'"
+                  rows={2}
+                  style={{
+                    width: '100%', boxSizing: 'border-box', padding: '10px 12px',
+                    background: 'var(--paper)', border: '1px solid var(--border-line)',
+                    borderRadius: 'var(--radius-md)', fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-ink)',
+                    resize: 'vertical', outline: 'none',
+                  }}
+                />
+
+                {rewriteError && (
+                  <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--clay-soft)', color: 'var(--clay-ink)', borderRadius: 'var(--radius-md)', fontSize: 13 }}>
+                    {rewriteError}
+                  </div>
+                )}
+
+                <button
+                  onClick={doRewrite}
+                  disabled={rewriting}
+                  style={{
+                    width: '100%', marginTop: 16,
+                    background: rewriting ? 'var(--paper)' : 'var(--marigold)',
+                    color: rewriting ? 'var(--text-mid)' : 'var(--indigo-deep)',
+                    border: 'none', borderRadius: 'var(--radius-pill)',
+                    padding: '11px 14px', fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 800,
+                    cursor: rewriting ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                  }}
+                >
+                  {rewriting ? (
+                    <>
+                      <div style={{ width: 13, height: 13, border: '2px solid var(--border-line)', borderTopColor: 'var(--indigo)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                      Rewriting…
+                    </>
+                  ) : 'Rewrite'}
+                </button>
+              </>
+            )}
+
+            {rewritePreview && (
+              <>
+                <div style={{ marginTop: 16, fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, color: 'var(--sage-ink)', marginBottom: 8 }}>
+                  Preview
+                </div>
+                <div style={{
+                  padding: '12px 14px',
+                  background: 'var(--sage-soft)', border: '1px solid rgba(91,146,121,.3)', borderRadius: 'var(--radius-md)',
+                  fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-ink)', lineHeight: 1.6,
+                  maxHeight: 220, overflowY: 'auto',
+                }}>
+                  {rewritePreview}
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                  <button
+                    onClick={() => setRewritePreview(null)}
+                    disabled={acceptingRewrite}
+                    style={{
+                      flex: 1, background: 'var(--surface)', color: 'var(--text-ink)',
+                      border: '1px solid var(--border-line)', borderRadius: 'var(--radius-pill)',
+                      padding: '10px 16px', fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
+                    Discard
+                  </button>
+                  <button
+                    onClick={doRewrite}
+                    disabled={acceptingRewrite || rewriting}
+                    style={{
+                      flex: 1, background: 'var(--surface)', color: 'var(--indigo)',
+                      border: '1px solid var(--indigo)', borderRadius: 'var(--radius-pill)',
+                      padding: '10px 16px', fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
+                    Rewrite again
+                  </button>
+                  <button
+                    onClick={acceptRewrite}
+                    disabled={acceptingRewrite}
+                    style={{
+                      flex: 1, background: 'var(--indigo)', color: 'white',
+                      border: 'none', borderRadius: 'var(--radius-pill)',
+                      padding: '10px 16px', fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700,
+                      cursor: acceptingRewrite ? 'not-allowed' : 'pointer', opacity: acceptingRewrite ? 0.6 : 1,
+                    }}
+                  >
+                    {acceptingRewrite ? 'Applying…' : 'Accept'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

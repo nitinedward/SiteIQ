@@ -8,6 +8,11 @@ interface OnlyOfficeEditorProps {
   sessionKey: number
   onReady?: () => void
   onError?: () => void
+  // Hands the raw DocsAPI.DocEditor instance up to the parent once created,
+  // so it can build a connector (createConnector()) for reading/replacing
+  // the current selection — needed for the AI reword feature. Previously
+  // this instance never left the component.
+  onEditorInstance?: (editor: any) => void
 }
 
 export default function OnlyOfficeEditor({
@@ -17,6 +22,7 @@ export default function OnlyOfficeEditor({
   sessionKey,
   onReady,
   onError,
+  onEditorInstance,
 }: OnlyOfficeEditorProps) {
   const containerRef  = useRef<HTMLDivElement>(null)
   const editorRef     = useRef<any>(null)
@@ -157,6 +163,7 @@ export default function OnlyOfficeEditor({
         editorRef.current = editor
         setLoading(false)
         onReady?.()
+        onEditorInstance?.(editor)
       } catch (err: any) {
         console.error('[OnlyOfficeEditor] init error:', err)
         setError(err?.message ?? 'Failed to initialize editor')
