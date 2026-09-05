@@ -86,7 +86,13 @@ export async function convertDocxToPdf(inspectionId: string, appUrl: string): Pr
   const conversionKey = `convert-${inspectionId}-${Date.now()}`
 
   const payload = {
-    async: false,
+    // async: true — a large, photo-heavy report can take 15s+ to convert on
+    // this single-CPU server (confirmed by direct testing: 14.25s for a
+    // 13MB docx with async:false, which blocks the whole request for that
+    // long per attempt). async:true makes the server queue the job and
+    // return immediately every time, so each poll below is fast — we
+    // supply our own, much more generous, overall wait budget instead.
+    async: true,
     filetype: 'docx',
     outputtype: 'pdf',
     key: conversionKey,
@@ -96,9 +102,9 @@ export async function convertDocxToPdf(inspectionId: string, appUrl: string): Pr
   const token = jwt.sign(payload, secret, { algorithm: 'HS256' })
 
   let fileUrl: string | null = null
-  // ConvertService can still report "still converting" even with async:
-  // false on a busy server — poll the same key a few times before giving up.
-  for (let attempt = 0; attempt < 5 && !fileUrl; attempt++) {
+  // Up to ~90s total — generous headroom for a large, image-heavy report
+  // on a single-CPU conversion server.
+  for (let attempt = 0; attempt < 30 && !fileUrl; attempt++) {
     const res = await fetch(`${getOoUrl()}/ConvertService.ashx`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -111,9 +117,9 @@ export async function convertDocxToPdf(inspectionId: string, appUrl: string): Pr
 
     // OnlyOffice's actual response is XML by default
     // (<FileResult><Error>N</Error></FileResult> or
-    // <FileResult><FileUrl>...</FileUrl><EndConvert>true</EndConvert></FileResult>),
-    // not the JSON the docs imply — confirmed by direct testing against
-    // this deployment. Handle both rather than assuming one.
+    // <FileResult><FileUrl>...</FileUrl><EndConvert>True</EndConvert></FileResult>
+    // — capitalised "True", confirmed by direct testing), not the JSON the
+    // docs imply. Handle both rather than assuming one.
     const parsed = parseConvertResponse(rawText)
     if (parsed.error) {
       const message = CONVERT_ERROR_MESSAGES[parsed.error] ?? `OnlyOffice conversion error code ${parsed.error}`
@@ -123,7 +129,7 @@ export async function convertDocxToPdf(inspectionId: string, appUrl: string): Pr
       fileUrl = parsed.fileUrl
       break
     }
-    await new Promise(r => setTimeout(r, 1500))
+    await new Promise(r => setTimeout(r, 3000))
   }
 
   if (!fileUrl) throw new Error('OnlyOffice conversion did not complete in time')
@@ -143,11 +149,14 @@ function parseConvertResponse(text: string): { error?: number; fileUrl?: string;
 
   const errorMatch      = text.match(/<Error>(-?\d+)<\/Error>/)
   const fileUrlMatch    = text.match(/<FileUrl>([^<]+)<\/FileUrl>/)
-  const endConvertMatch = text.match(/<EndConvert>(true|false)<\/EndConvert>/)
+  // Case-insensitive — the real response capitalises it as "True"/"False".
+  const endConvertMatch = text.match(/<EndConvert>(true|false)<\/EndConvert>/i)
   return {
     error: errorMatch ? Number(errorMatch[1]) : undefined,
-    fileUrl: fileUrlMatch ? fileUrlMatch[1] : undefined,
-    endConvert: endConvertMatch ? endConvertMatch[1] === 'true' : undefined,
+    // XML-unescape — the real response entity-encodes the query string
+    // (e.g. "&amp;" for "&").
+    fileUrl: fileUrlMatch ? fileUrlMatch[1].replace(/&amp;/g, '&') : undefined,
+    endConvert: endConvertMatch ? endConvertMatch[1].toLowerCase() === 'true' : undefined,
   }
 }
 

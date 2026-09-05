@@ -3,6 +3,11 @@ import { savePdf } from '@/lib/docStorage'
 import { forceSaveAndWait, convertDocxToPdf } from '@/lib/onlyofficeConvert'
 
 export const dynamic = 'force-dynamic'
+// Force-save (~10s) + conversion polling (~90s worst case for a large,
+// photo-heavy report) can exceed the platform's default function timeout.
+// Vercel caps this to whatever the account's plan actually allows, but
+// declaring it costs nothing and gets us the full budget where possible.
+export const maxDuration = 120
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
