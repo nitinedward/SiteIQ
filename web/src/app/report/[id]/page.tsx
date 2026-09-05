@@ -162,7 +162,11 @@ export default function ReportPage() {
 
   const sendToRewordPlugin = (data: Record<string, any>): Promise<any> => {
     return new Promise((resolve, reject) => {
-      const editorIframe = document.querySelector<HTMLIFrameElement>('#onlyoffice-editor iframe')
+      // OnlyOffice's DocsAPI.DocEditor replaces the #onlyoffice-editor
+      // placeholder div with its iframe on init (the div itself stops
+      // existing), so the iframe has to be found via the stable wrapper
+      // around it instead of by the placeholder's own id.
+      const editorIframe = document.querySelector<HTMLIFrameElement>('#onlyoffice-editor-wrapper iframe')
       if (!editorIframe || !editorIframe.contentWindow) {
         reject(new Error('Document editor iframe not found — wait for the document to finish loading and try again'))
         return
@@ -177,7 +181,13 @@ export default function ReportPage() {
         reject: (e: any) => { clearTimeout(timeoutId); reject(e) },
       })
       editorIframe.contentWindow.postMessage(JSON.stringify({
-        frameEditorId: editorIframe.id || 'onlyoffice-editor-frame',
+        // Must equal the placeholderId DocsAPI.DocEditor was constructed
+        // with ("onlyoffice-editor" — see OnlyOfficeEditor.tsx) — this is
+        // compared internally as `msg.frameEditorId == placeholderId`,
+        // confirmed by reading the Document Server's own api.js. The
+        // iframe element itself has no id (only name="frameEditor"), so
+        // this can't be read off the DOM — it has to be this literal.
+        frameEditorId: 'onlyoffice-editor',
         guid: REWORD_PLUGIN_GUID,
         type: 'onExternalPluginMessage',
         data: { ...data, requestId },

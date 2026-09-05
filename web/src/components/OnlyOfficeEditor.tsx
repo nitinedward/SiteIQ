@@ -241,7 +241,13 @@ export default function OnlyOfficeEditor({
   }
 
   return (
-    <div style={{ position: 'relative', height: '100%', width: '100%' }}>
+    // Stable wrapper — OnlyOffice's DocsAPI.DocEditor replaces the
+    // #onlyoffice-editor placeholder div below with its iframe entirely
+    // (target.parentNode.replaceChild(iframe, target)), so that id stops
+    // existing in the DOM once the editor loads. This outer div is never
+    // touched by that swap, so it's the stable anchor for finding the
+    // iframe afterward (see report page's sendToRewordPlugin).
+    <div id="onlyoffice-editor-wrapper" style={{ position: 'relative', height: '100%', width: '100%' }}>
       {loading && (
         <div style={{
           position: 'absolute', inset: 0,
