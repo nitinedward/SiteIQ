@@ -3,7 +3,6 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import { captureDrawingWithMarkup } from '@/lib/captureDrawing'
-import { REWORD_PLUGIN_GUID } from '@/lib/rewordPlugin'
 import dynamic from 'next/dynamic'
 
 const OnlyOfficeEditor = dynamic(() => import('@/components/OnlyOfficeEditor'), { ssr: false })
@@ -135,21 +134,36 @@ export default function ReportPage() {
     }
   }, [])
 
-  // ── AI REWORD (via OnlyOffice connector) ──────────────────────────────────────
+  // ── AI REWORD (direct postMessage to the plugin's own window) ──────────────
   // This Document Server build exposes no createConnector()/selection API
-  // on the DocEditor JS instance at all (confirmed by enumerating its full
-  // prototype chain against a live editor — only mail-merge/sharing/etc.
-  // methods exist). Reading/replacing the current selection instead goes
-  // through a real OnlyOffice plugin (public/oo-plugins/siteiq-reword/)
-  // running inside the editor iframe, reached via postMessage — see
-  // src/lib/rewordPlugin.ts for the shared guid/URL.
+  // on the DocEditor JS instance (confirmed by enumerating its full
+  // prototype chain against a live editor). The next attempt routed
+  // through OnlyOffice's documented "onExternalPluginMessage" relay
+  // (posting into the main editor iframe, addressed by the plugin's
+  // guid) — reading the Document Server's own sdk-all.js directly showed
+  // its top-level message dispatcher has no case that forwards that
+  // message type to a specific plugin sub-iframe on this build/version,
+  // so it was silently dropped every time.
+  //
+  // Instead: the plugin (public/oo-plugins/siteiq-reword/) announces
+  // itself directly to this page via window.top.postMessage the moment it
+  // loads. MessageEvent.source on that announcement is a live reference to
+  // the plugin's own window — this works across cross-origin nested
+  // iframes by design — so once captured, this page talks to the plugin
+  // directly from then on, with no OnlyOffice relay involved at all.
   const pendingRewordRequests = useRef(new Map<string, { resolve: (v: any) => void; reject: (e: any) => void }>())
+  const rewordPluginWindowRef = useRef<Window | null>(null)
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       let msg: any
       try { msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data } catch { return }
-      if (!msg || msg.source !== 'siteiq-reword-plugin' || !msg.requestId) return
+      if (!msg || msg.source !== 'siteiq-reword-plugin') return
+      if (msg.type === 'plugin-ready') {
+        rewordPluginWindowRef.current = event.source as Window
+        return
+      }
+      if (!msg.requestId) return
       const pending = pendingRewordRequests.current.get(msg.requestId)
       if (!pending) return
       pendingRewordRequests.current.delete(msg.requestId)
@@ -162,35 +176,24 @@ export default function ReportPage() {
 
   const sendToRewordPlugin = (data: Record<string, any>): Promise<any> => {
     return new Promise((resolve, reject) => {
-      // OnlyOffice's DocsAPI.DocEditor replaces the #onlyoffice-editor
-      // placeholder div with its iframe on init (the div itself stops
-      // existing), so the iframe has to be found via the stable wrapper
-      // around it instead of by the placeholder's own id.
-      const editorIframe = document.querySelector<HTMLIFrameElement>('#onlyoffice-editor-wrapper iframe')
-      if (!editorIframe || !editorIframe.contentWindow) {
-        reject(new Error('Document editor iframe not found — wait for the document to finish loading and try again'))
+      const pluginWindow = rewordPluginWindowRef.current
+      if (!pluginWindow) {
+        reject(new Error('The reword plugin has not announced itself yet — wait a moment for the document to finish loading, then try again. If this persists after reloading, the plugin failed to start.'))
         return
       }
       const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
       const timeoutId = setTimeout(() => {
         pendingRewordRequests.current.delete(requestId)
-        reject(new Error('No response from the reword plugin (10s timeout) — it may not have loaded. Try reloading the page.'))
+        reject(new Error('No response from the reword plugin (10s timeout) after it was reachable — the document API call inside it may have failed.'))
       }, 10000)
       pendingRewordRequests.current.set(requestId, {
         resolve: (v: any) => { clearTimeout(timeoutId); resolve(v) },
         reject: (e: any) => { clearTimeout(timeoutId); reject(e) },
       })
-      editorIframe.contentWindow.postMessage(JSON.stringify({
-        // Must equal the placeholderId DocsAPI.DocEditor was constructed
-        // with ("onlyoffice-editor" — see OnlyOfficeEditor.tsx) — this is
-        // compared internally as `msg.frameEditorId == placeholderId`,
-        // confirmed by reading the Document Server's own api.js. The
-        // iframe element itself has no id (only name="frameEditor"), so
-        // this can't be read off the DOM — it has to be this literal.
-        frameEditorId: 'onlyoffice-editor',
-        guid: REWORD_PLUGIN_GUID,
-        type: 'onExternalPluginMessage',
-        data: { ...data, requestId },
+      pluginWindow.postMessage(JSON.stringify({
+        source: 'siteiq-reword-host',
+        ...data,
+        requestId,
       }), '*')
     })
   }

@@ -5,21 +5,25 @@
  * of its own. It exists purely so the outer SiteIQ page (which cannot read
  * or replace the current selection directly — this Document Server build
  * exposes no createConnector()/selection API on the DocEditor JS instance)
- * can reach into the document via postMessage:
+ * can reach into the document.
  *
- *   editorIframe.contentWindow.postMessage(JSON.stringify({
- *     frameEditorId: editorIframe.id,
- *     guid: "asc.{7A2E9C41-6B8A-4F0D-9E43-2B7B6C9D41F0}",
- *     type: "onExternalPluginMessage",
- *     data: { type: "getSelection" | "replaceSelection", requestId, text? }
- *   }), "*")
- *
- * The result is posted back with window.top.postMessage(...) (window.top
- * because this script runs two iframes deep: SiteIQ page -> OnlyOffice
- * editor iframe -> this plugin's iframe).
+ * IMPORTANT: this does NOT use OnlyOffice's "onExternalPluginMessage"
+ * relay (posting {type:"onExternalPluginMessage", guid, data} into the
+ * main editor iframe). That was the original design, but reading this
+ * Document Server's own sdk-all.js directly showed its top-level message
+ * dispatcher (the "h" function handling messages arriving at the main
+ * editor iframe) has no case for that message type at all — it's simply
+ * dropped, silently, for this build/version. Instead, this plugin
+ * announces itself directly to the top page via window.top.postMessage on
+ * load; the top page captures the live window reference from
+ * MessageEvent.source (which works across cross-origin nested iframes by
+ * design) and talks to this plugin directly from then on — no OnlyOffice
+ * relay involved at all, only Asc.plugin.callCommand/Asc.scope (the
+ * genuine, stable bridge into the document API) once a request arrives.
  */
 (function (window, undefined) {
   var RESULT_SOURCE = 'siteiq-reword-plugin'
+  var HOST_SOURCE = 'siteiq-reword-host'
 
   function respond(requestId, payload) {
     try {
@@ -32,11 +36,14 @@
     }
   }
 
-  window.Asc.plugin.init = function () {}
+  window.Asc.plugin.init = function () {
+    // Announce readiness so the top page can capture event.source and
+    // reach this window directly for every future request.
+    respond(null, { type: 'plugin-ready' })
+  }
   window.Asc.plugin.button = function () {}
 
-  window.Asc.plugin.onExternalPluginMessage = function (data) {
-    if (!data || !data.type) return
+  function handleRequest(data) {
     var requestId = data.requestId
 
     if (data.type === 'ping') {
@@ -98,4 +105,20 @@
       return
     }
   }
+
+  // Direct channel from our own top page — bypasses OnlyOffice's plugin
+  // message relay entirely, since it doesn't support what we need on this
+  // build. The host page replies to exactly the event.source window it
+  // captured from our "plugin-ready" announcement above, so this listener
+  // only needs to trust messages carrying our own host marker.
+  window.addEventListener('message', function (event) {
+    var msg
+    try {
+      msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+    } catch (err) {
+      return
+    }
+    if (!msg || msg.source !== HOST_SOURCE || !msg.type) return
+    handleRequest(msg)
+  })
 })(window, undefined)
