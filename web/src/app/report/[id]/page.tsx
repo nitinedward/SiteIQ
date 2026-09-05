@@ -142,6 +142,27 @@ export default function ReportPage() {
   // editor iframe, but its exact behaviour against this specific
   // self-hosted Document Server version is unverified — this may need
   // adjustment based on real browser testing.
+  // Walks the full prototype chain (methods are often non-enumerable /
+  // on the prototype, so Object.keys() alone would miss them) to report
+  // exactly what IS callable on the editor instance when createConnector
+  // turns out not to exist — lets us adapt to the real API surface instead
+  // of guessing blindly.
+  const listInstanceMethods = (obj: any): string => {
+    const names = new Set<string>()
+    let cur = obj
+    let depth = 0
+    while (cur && depth < 6) {
+      for (const name of Object.getOwnPropertyNames(cur)) {
+        if (name === 'constructor') continue
+        try { if (typeof obj[name] === 'function') names.add(name) } catch { /* ignore getter throws */ }
+      }
+      cur = Object.getPrototypeOf(cur)
+      depth++
+    }
+    const list = [...names].sort()
+    return list.length ? list.join(', ') : '(none found — object may be a plain data holder, not a class instance)'
+  }
+
   // Diagnostic-heavy on purpose — the connector API's behaviour against
   // this specific self-hosted Document Server version was unverified going
   // in, so every failure mode here throws a SPECIFIC message rather than a
@@ -153,7 +174,10 @@ export default function ReportPage() {
       throw new Error('Editor instance not available yet (onEditorInstance has not fired) — wait for the document to finish loading')
     }
     if (typeof editorInstanceRef.current.createConnector !== 'function') {
-      throw new Error('This OnlyOffice version/build does not expose createConnector() on the editor instance')
+      throw new Error(
+        'This OnlyOffice version/build does not expose createConnector() on the editor instance. ' +
+        'Available methods: ' + listInstanceMethods(editorInstanceRef.current)
+      )
     }
     const connector = editorInstanceRef.current.createConnector()
     if (!connector) {
