@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { forceSaveAndWait } from '@/lib/onlyofficeConvert'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,24 +15,18 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { key } = await request.json()
-    if (!key) {
-      return NextResponse.json({ error: 'Missing key' }, { status: 400, headers: cors })
+    const { key, inspectionId } = await request.json()
+    if (!key || !inspectionId) {
+      return NextResponse.json({ error: 'Missing key or inspectionId' }, { status: 400, headers: cors })
     }
 
-    const ooUrl = process.env.ONLYOFFICE_SERVER_URL ?? 'http://localhost'
-    console.log('[forcesave] Requesting force save, key:', key)
+    // Was previously unsigned — OnlyOffice's local.json has
+    // token.enable.request.inbox: true, meaning the Document Server
+    // rejects inbound API calls (CommandService.ashx included) without a
+    // valid JWT. This was silently failing before.
+    const result = await forceSaveAndWait(inspectionId, key)
 
-    const res = await fetch(`${ooUrl}/coauthoring/CommandService.ashx`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ c: 'forcesave', key }),
-    })
-
-    const data = await res.json().catch(() => ({}))
-    console.log('[forcesave] OO response:', JSON.stringify(data))
-
-    return NextResponse.json({ success: true, ooResponse: data }, { headers: cors })
+    return NextResponse.json({ success: true, ...result }, { headers: cors })
   } catch (err: any) {
     console.error('[forcesave] Error:', err)
     return NextResponse.json({ error: err.message }, { status: 500, headers: cors })

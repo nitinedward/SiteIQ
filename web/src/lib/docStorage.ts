@@ -62,3 +62,47 @@ export async function deleteDoc(
     .remove([`${inspectionId}.docx`])
   console.log('[storage] Deleted:', inspectionId)
 }
+
+// ── FROZEN PDF (finalised reports) ──────────────────────────────────────────
+// Same bucket/pattern as the docx — private storage, signed URLs on read so
+// a CDN can never serve a stale cached copy.
+
+export async function savePdf(
+  inspectionId: string,
+  buffer: Buffer
+): Promise<void> {
+  const supabase = getSupabase()
+  const { error } = await supabase.storage
+    .from('reports')
+    .upload(`${inspectionId}.pdf`, buffer, {
+      contentType: 'application/pdf',
+      upsert: true,
+    })
+  if (error) throw new Error('Failed to save PDF: ' + error.message)
+  console.log('[storage] Saved PDF:', inspectionId, 'size:', buffer.length)
+}
+
+/** Returns a signed URL for the frozen PDF, or null if none exists yet
+ *  (e.g. a report finalised before this feature existed). Never throws for
+ *  a missing file — callers should treat null as "no frozen PDF". */
+export async function getPdfSignedUrl(
+  inspectionId: string,
+  expiresInSeconds = 3600
+): Promise<string | null> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase.storage
+    .from('reports')
+    .createSignedUrl(`${inspectionId}.pdf`, expiresInSeconds)
+  if (error || !data?.signedUrl) return null
+  return data.signedUrl
+}
+
+export async function loadPdf(
+  inspectionId: string
+): Promise<Buffer> {
+  const url = await getPdfSignedUrl(inspectionId, 60)
+  if (!url) throw new Error('PDF not found')
+  const res = await fetch(`${url}&t=${Date.now()}`, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`Storage download failed: ${res.status}`)
+  return Buffer.from(await res.arrayBuffer())
+}

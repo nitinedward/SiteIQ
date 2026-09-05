@@ -51,6 +51,8 @@ export default function ReportPage() {
   const [reloadingEditor,    setReloadingEditor]     = useState(false)
   const [mobileTab,          setMobileTab]            = useState<'document' | 'attachments'>('document')
   const [showFinaliseConfirm, setShowFinaliseConfirm] = useState(false)
+  const [frozenPdfUrl,       setFrozenPdfUrl]         = useState<string | null>(null)
+  const [loadingFrozenPdf,   setLoadingFrozenPdf]     = useState(false)
 
   // ── LOAD DATA ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -68,11 +70,13 @@ export default function ReportPage() {
         project:     (inspRes.data as any)?.projects ?? null,
         engineerName: memberRes.data?.full_name ?? '',
       })
-      setReportStatus((inspRes.data as any)?.report_status ?? 'pending')
+      const status = (inspRes.data as any)?.report_status ?? 'pending'
+      setReportStatus(status)
       setLoading(false)
 
       loadAttachments(id)
       generateDoc()
+      if (status === 'finalised') loadFrozenPdf(id)
 
       checkOnlyOffice().then(running => {
         if (!running) {
@@ -97,6 +101,28 @@ export default function ReportPage() {
       return false
     }
   }
+
+  // ── FROZEN PDF (finalised reports) ────────────────────────────────────────────
+  // A report finalised before this feature existed has no stored PDF — in
+  // that case frozenPdfUrl stays null and the page falls back to the
+  // read-only editor view instead of erroring.
+  const loadFrozenPdf = useCallback(async (inspId: string) => {
+    setLoadingFrozenPdf(true)
+    try {
+      const res = await fetch(`/api/docs/pdf-url?inspectionId=${inspId}`, { cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        setFrozenPdfUrl(data.url)
+      } else {
+        setFrozenPdfUrl(null)
+      }
+    } catch (err) {
+      console.error('[loadFrozenPdf] error:', err)
+      setFrozenPdfUrl(null)
+    } finally {
+      setLoadingFrozenPdf(false)
+    }
+  }, [])
 
   // ── GENERATE DOC ─────────────────────────────────────────────────────────────
   const generateDoc = useCallback(async () => {
@@ -161,6 +187,23 @@ export default function ReportPage() {
   const downloadDoc = async () => {
     try {
       setDownloading(true)
+
+      // Finalised reports are frozen — download the stored PDF directly
+      // rather than re-touching the (now read-only) docx.
+      if (reportStatus === 'finalised' && frozenPdfUrl) {
+        const res = await fetch(frozenPdfUrl, { cache: 'no-store' })
+        if (!res.ok) throw new Error('Could not download the finalised PDF')
+        const blob = await res.blob()
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `SiteReport_${reportNo || inspectionId}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        return
+      }
 
       const selectedPhotosList = selectedPhotos
         .filter(p => p.selected)
@@ -286,30 +329,24 @@ export default function ReportPage() {
   }
 
   // ── FINALISE / REOPEN ─────────────────────────────────────────────────────────
+  // Order matters: the PDF must exist BEFORE the report is marked
+  // 'finalised' — if force-save/conversion fails, report_status is never
+  // touched, so a report can never end up "finalised" without a valid
+  // frozen PDF.
   const finaliseReport = async () => {
     setShowFinaliseConfirm(false)
     setFinalisingReport(true)
     try {
-      // Force-save the OO document before updating status.
-      // Without this, edits in OO memory may not yet be in Supabase.
       const docKey = `doc-${inspectionId}-${editorKey}`
-      console.log('[finalise] Force saving OO doc, key:', docKey)
-      try {
-        const fsRes = await fetch('/api/docs/forcesave', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: docKey }),
-        })
-        const fsData = await fsRes.json().catch(() => ({}))
-        console.log('[finalise] Force save response:', JSON.stringify(fsData))
-        // Wait for OO to call our callback AND for Supabase upload to complete.
-        // error:0 = success, error:6 = no active session (OO already closed the
-        // doc and sent status-2 callback earlier, so Supabase already has it).
-        console.log('[finalise] Waiting for callback to complete...')
-        await new Promise(r => setTimeout(r, 8000))
-      } catch (fsErr) {
-        console.warn('[finalise] Force save failed, continuing:', fsErr)
-      }
+      console.log('[finalise] Force-saving and converting to PDF, key:', docKey)
+      const res = await fetch('/api/docs/finalise-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inspectionId, docKey }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Could not generate the frozen PDF')
+      console.log('[finalise] PDF stored, size:', data.pdfSize)
 
       const { data: { user } } = await supabase.auth.getUser()
       const { error } = await supabase
@@ -319,6 +356,7 @@ export default function ReportPage() {
       if (error) throw error
 
       setReportStatus('finalised')
+      await loadFrozenPdf(inspectionId)
       console.log('[finalise] Done')
     } catch (err: any) {
       console.error('[finalise] Error:', err)
@@ -334,6 +372,10 @@ export default function ReportPage() {
       .from('inspections')
       .update({ report_status: 'pending', finalised_at: null, finalised_by: null })
       .eq('id', id)
+    // The frozen PDF is now stale relative to future edits — stop showing
+    // it. The stored file itself is left alone; it'll be overwritten the
+    // next time this report is finalised again.
+    setFrozenPdfUrl(null)
     setReportStatus('pending')
   }
 
@@ -596,7 +638,7 @@ export default function ReportPage() {
                 {finalisingReport ? (
                   <>
                     <div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
-                    <span className="report-btn-text">Finalising…</span>
+                    <span className="report-btn-text">Finalising & generating PDF…</span>
                   </>
                 ) : (
                   <>
@@ -810,7 +852,7 @@ export default function ReportPage() {
             }}>
               <button
                 onClick={generateAIReport}
-                disabled={generatingAI || !docReady}
+                disabled={generatingAI || !docReady || reportStatus === 'finalised'}
                 style={{
                   width: '100%',
                   background: generatingAI ? 'var(--paper)' : 'var(--indigo)',
@@ -821,13 +863,13 @@ export default function ReportPage() {
                   fontFamily: 'var(--f-heading)',
                   fontSize: 13,
                   fontWeight: 800,
-                  cursor: generatingAI || !docReady ? 'not-allowed' : 'pointer',
+                  cursor: generatingAI || !docReady || reportStatus === 'finalised' ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 7,
                   transition: 'all 0.15s',
-                  opacity: !docReady ? 0.5 : 1,
+                  opacity: !docReady || reportStatus === 'finalised' ? 0.5 : 1,
                 }}
               >
                 {generatingAI ? (
@@ -1197,8 +1239,10 @@ export default function ReportPage() {
                   it from the document instead of only ever adding more. */}
               <button
                 onClick={insertAttachments}
-                disabled={inserting || !docReady}
-                title="Adds newly-selected photos/drawings and removes any you've deselected"
+                disabled={inserting || !docReady || reportStatus === 'finalised'}
+                title={reportStatus === 'finalised'
+                  ? 'This report is finalised and frozen — reopen it to make changes'
+                  : "Adds newly-selected photos/drawings and removes any you've deselected"}
                 style={{
                   width: '100%',
                   background: inserting ? 'var(--paper)' : 'var(--indigo)',
@@ -1209,13 +1253,13 @@ export default function ReportPage() {
                   fontFamily: 'var(--f-heading)',
                   fontSize: 13,
                   fontWeight: 700,
-                  cursor: 'pointer',
+                  cursor: reportStatus === 'finalised' ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 7,
                   marginBottom: 8,
-                  opacity: !docReady ? 0.5 : 1,
+                  opacity: !docReady || reportStatus === 'finalised' ? 0.5 : 1,
                 }}
               >
                 {inserting ? (
@@ -1275,9 +1319,42 @@ export default function ReportPage() {
             </div>
           </div>
 
-          {/* ── ONLYOFFICE EDITOR ────────────────────────────────────────── */}
+          {/* ── ONLYOFFICE EDITOR / FROZEN PDF ──────────────────────────────── */}
           <div className="report-editor-area" style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--paper)' }}>
-            {generating ? (
+            {reportStatus === 'finalised' && loadingFrozenPdf ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                height: '100%', flexDirection: 'column', gap: 16,
+                background: 'var(--paper)',
+              }}>
+                <div style={{
+                  width: 40, height: 40, border: '3px solid var(--border-line)',
+                  borderTopColor: 'var(--indigo)', borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
+                <div style={{ fontSize: 14, color: 'var(--text-mid)', fontFamily: 'var(--f-text)' }}>
+                  Loading finalised report…
+                </div>
+              </div>
+            ) : reportStatus === 'finalised' && frozenPdfUrl ? (
+              <div style={{
+                height: '100%', padding: '16px 20px',
+                display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              }}>
+                <div style={{
+                  flex: 1, overflow: 'hidden',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: 'var(--shadow-card-v3)',
+                  border: '1px solid var(--border-line)',
+                }}>
+                  <iframe
+                    src={frozenPdfUrl}
+                    title="Finalised report"
+                    style={{ width: '100%', height: '100%', border: 'none', background: 'white' }}
+                  />
+                </div>
+              </div>
+            ) : generating ? (
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 height: '100%', flexDirection: 'column', gap: 16,
@@ -1381,7 +1458,7 @@ export default function ReportPage() {
               Finalise report #{reportNo}?
             </div>
             <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.5, marginTop: 10 }}>
-              The report moves to Completed and becomes the client copy. You can still reopen it for editing later if needed.
+              Finalising locks this report as a PDF — you won't be able to edit it after. The report moves to Completed and becomes the client copy. You can still reopen it later if you need to make changes.
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
               <button
