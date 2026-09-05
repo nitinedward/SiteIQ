@@ -85,7 +85,15 @@
           Asc.scope.error = 'Document API error: ' + (e && e.message ? e.message : String(e))
           Asc.scope.result = null
         }
-      }, true)
+        // false here — NOT "isAsync" (that was a wrong assumption from a
+        // generic docs paraphrase). Reading the actual implementation
+        // shows this second argument means "close the plugin after
+        // running this command" (executeCommand("close"/"command", ...)).
+        // Passing true was destroying this plugin's own iframe the
+        // instant the command was sent — before the document finished
+        // processing it and could post onCommandCallback back to it,
+        // which is exactly why the callback never fired.
+      }, false)
       return
     }
 
@@ -114,7 +122,7 @@
         } catch (e) {
           Asc.scope.error = 'Document API error: ' + (e && e.message ? e.message : String(e))
         }
-      }, true)
+      }, false)
       return
     }
   }

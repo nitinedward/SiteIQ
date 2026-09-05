@@ -94,19 +94,15 @@ export default function OnlyOfficeEditor({
               plugins: true,
               macros: false,
             },
-            // DIAGNOSTIC STATE, round 2: manually launching the plugin via
-            // the Plugins tab proved the plugin's own logic works fine —
-            // it loaded, initialized, and announced itself correctly. The
-            // isSystem:true auto-launch path (register() calling Xv()
-            // immediately) is confirmed broken on this Document Server
-            // build/version. This tests the OTHER, separate auto-launch
-            // mechanism instead — the declared `autostart` guid list,
-            // consumed by a different function (runAutoStartPlugins in the
-            // web-apps controller) — with the plugin kept non-system
-            // (isSystem:false, so it's a "normal" plugin autostart can
-            // legally target) but isVisual:false (so it still shows no
-            // popup even if launched). If this also doesn't fire, autostart
-            // itself is broken here, not just isSystem.
+            // Loads the "siteiq-reword" plugin (public/oo-plugins/
+            // siteiq-reword/) invisibly (isVisual:false, no popup) and
+            // auto-launches it via the declared `autostart` guid list —
+            // NOT via config.json's `isSystem:true` shortcut, which is
+            // confirmed broken on this Document Server build/version
+            // (register() never calls Xv() for it, so it never loads at
+            // all). `autostart` is consumed by a separate code path
+            // (runAutoStartPlugins in the web-apps controller) that does
+            // work correctly here. See src/lib/rewordPlugin.ts.
             plugins: {
               autostart: [REWORD_PLUGIN_GUID],
               pluginsData: [rewordPluginConfigUrl(appUrl)],
