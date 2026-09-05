@@ -81,7 +81,17 @@ export default function OnlyOfficeEditor({
                 www: '',
                 logo: '',
               },
-              plugins: false,
+              // customization.plugins must NOT be false — reading the
+              // Document Server's own controller source
+              // (setApi: this.appOptions.customization.plugins===false ||
+              // (this.api.asc_registerCallback("asc_onPluginsInit", ...), ...))
+              // shows `false` here short-circuits registration of the
+              // ENTIRE plugin subsystem, not just the toolbar tab — which
+              // silently no-ops editorConfig.plugins.pluginsData/autostart
+              // below (confirmed as the actual cause of the reword plugin
+              // never loading: no error, just a dead timeout, because
+              // nothing ever received the message).
+              plugins: true,
               macros: false,
             },
             // Loads the "siteiq-reword" system plugin (public/oo-plugins/
