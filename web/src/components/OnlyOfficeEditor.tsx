@@ -94,13 +94,14 @@ export default function OnlyOfficeEditor({
               plugins: true,
               macros: false,
             },
-            // Loads the "siteiq-reword" system plugin (public/oo-plugins/
-            // siteiq-reword/) invisibly — it has no UI (isVisual:false) and
-            // exists only to bridge selection-read/replace commands from
-            // the outer SiteIQ page via postMessage. See
-            // src/lib/rewordPlugin.ts.
+            // DIAGNOSTIC STATE: autostart temporarily removed and the
+            // plugin's own config.json temporarily made visible/clickable
+            // (isSystem:false, isVisual:true) — isolating whether the
+            // isSystem-auto-launch path itself is what's broken on this
+            // build, separately from the plugin's own callCommand logic.
+            // Restore `autostart: [REWORD_PLUGIN_GUID]` and isSystem:true
+            // in config.json once that's confirmed either way.
             plugins: {
-              autostart: [REWORD_PLUGIN_GUID],
               pluginsData: [rewordPluginConfigUrl(appUrl)],
             },
           },

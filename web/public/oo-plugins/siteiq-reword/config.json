@@ -9,14 +9,14 @@
             "icons"               : [],
             "isViewer"            : false,
             "EditorsSupport"      : ["word"],
-            "isVisual"            : false,
+            "isVisual"            : true,
             "isModal"             : true,
             "isInsideMode"        : false,
-            "isSystem"            : true,
             "initDataType"        : "none",
             "initData"            : "",
             "isUpdateOleOnResize" : true,
-            "buttons"             : []
+            "buttons"             : [{ "text": "Close", "primary": true }],
+            "size"                : [360, 160]
         }
     ]
 }

@@ -46,7 +46,10 @@
     // reach this window directly for every future request.
     respond(null, { type: 'plugin-ready' })
   }
-  window.Asc.plugin.button = function () {}
+  window.Asc.plugin.button = function () {
+    console.log(LOG, 'button clicked, closing')
+    this.executeCommand('close', '')
+  }
 
   function handleRequest(data) {
     console.log(LOG, 'handleRequest', data)
