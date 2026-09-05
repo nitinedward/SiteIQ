@@ -104,16 +104,23 @@ export async function convertDocxToPdf(inspectionId: string, appUrl: string): Pr
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...payload, token }),
     })
+    const rawText = await res.text().catch(() => '')
     if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new Error(`OnlyOffice conversion request failed (${res.status}): ${text}`)
+      throw new Error(`OnlyOffice conversion request failed (${res.status}): ${rawText}`)
     }
-    const data = await res.json().catch(() => ({}))
-    if (data.error) {
-      throw new Error(`OnlyOffice conversion error code ${data.error}`)
+
+    // OnlyOffice's actual response is XML by default
+    // (<FileResult><Error>N</Error></FileResult> or
+    // <FileResult><FileUrl>...</FileUrl><EndConvert>true</EndConvert></FileResult>),
+    // not the JSON the docs imply — confirmed by direct testing against
+    // this deployment. Handle both rather than assuming one.
+    const parsed = parseConvertResponse(rawText)
+    if (parsed.error) {
+      const message = CONVERT_ERROR_MESSAGES[parsed.error] ?? `OnlyOffice conversion error code ${parsed.error}`
+      throw new Error(message)
     }
-    if (data.endConvert && data.fileUrl) {
-      fileUrl = data.fileUrl
+    if (parsed.endConvert && parsed.fileUrl) {
+      fileUrl = parsed.fileUrl
       break
     }
     await new Promise(r => setTimeout(r, 1500))
@@ -124,4 +131,34 @@ export async function convertDocxToPdf(inspectionId: string, appUrl: string): Pr
   const pdfRes = await fetch(fileUrl)
   if (!pdfRes.ok) throw new Error(`Failed to fetch converted PDF (${pdfRes.status})`)
   return Buffer.from(await pdfRes.arrayBuffer())
+}
+
+function parseConvertResponse(text: string): { error?: number; fileUrl?: string; endConvert?: boolean } {
+  // Try JSON first in case a different OnlyOffice version/config responds
+  // that way, then fall back to the XML shape actually observed.
+  try {
+    const data = JSON.parse(text)
+    return { error: data.error, fileUrl: data.fileUrl, endConvert: data.endConvert }
+  } catch { /* not JSON — parse as XML below */ }
+
+  const errorMatch      = text.match(/<Error>(-?\d+)<\/Error>/)
+  const fileUrlMatch    = text.match(/<FileUrl>([^<]+)<\/FileUrl>/)
+  const endConvertMatch = text.match(/<EndConvert>(true|false)<\/EndConvert>/)
+  return {
+    error: errorMatch ? Number(errorMatch[1]) : undefined,
+    fileUrl: fileUrlMatch ? fileUrlMatch[1] : undefined,
+    endConvert: endConvertMatch ? endConvertMatch[1] === 'true' : undefined,
+  }
+}
+
+// Empirically confirmed against this deployment: an invalid/mismatched JWT
+// signature surfaces here as -8, not a generic auth code. Mapped explicitly
+// so a future secret mismatch produces a message that actually points at
+// the cause instead of a generic timeout.
+const CONVERT_ERROR_MESSAGES: Record<number, string> = {
+  [-8]: "Authentication failed — ONLYOFFICE_JWT_SECRET does not match the Document Server's configured secret",
+  [-4]: 'OnlyOffice could not download the source document',
+  [-3]: 'OnlyOffice conversion error (unsupported or corrupt document)',
+  [-2]: 'OnlyOffice conversion timed out',
+  [-1]: 'Unknown OnlyOffice conversion error',
 }
