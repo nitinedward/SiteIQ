@@ -142,30 +142,54 @@ export default function ReportPage() {
   // editor iframe, but its exact behaviour against this specific
   // self-hosted Document Server version is unverified — this may need
   // adjustment based on real browser testing.
-  const getConnector = () => {
-    if (!connectorRef.current && editorInstanceRef.current) {
-      connectorRef.current = editorInstanceRef.current.createConnector()
+  // Diagnostic-heavy on purpose — the connector API's behaviour against
+  // this specific self-hosted Document Server version was unverified going
+  // in, so every failure mode here throws a SPECIFIC message rather than a
+  // generic one, to pinpoint exactly where it breaks from the first
+  // real-world failure report.
+  const getConnector = (): any => {
+    if (connectorRef.current) return connectorRef.current
+    if (!editorInstanceRef.current) {
+      throw new Error('Editor instance not available yet (onEditorInstance has not fired) — wait for the document to finish loading')
     }
-    return connectorRef.current
+    if (typeof editorInstanceRef.current.createConnector !== 'function') {
+      throw new Error('This OnlyOffice version/build does not expose createConnector() on the editor instance')
+    }
+    const connector = editorInstanceRef.current.createConnector()
+    if (!connector) {
+      throw new Error('createConnector() returned nothing')
+    }
+    if (typeof connector.callCommand !== 'function') {
+      throw new Error('The connector does not expose callCommand()')
+    }
+    connectorRef.current = connector
+    return connector
   }
 
   const getSelectedTextFromEditor = (): Promise<string> => {
     return new Promise((resolve, reject) => {
-      const connector = getConnector()
-      if (!connector) { reject(new Error('Editor is not ready yet')); return }
+      let connector: any
+      try {
+        connector = getConnector()
+      } catch (err) { reject(err); return }
+      const timeoutId = setTimeout(() => reject(new Error('callCommand callback never fired (10s timeout) — GetRangeBySelect may not exist in this API version')), 10000)
       try {
         // `Api` only exists inside the document's own sandboxed context at
         // runtime (not in this app's scope) — built via new Function(...)
-        // rather than a literal function referencing `Api`, same as
-        // replaceSelectedTextInEditor below, so TS doesn't try to resolve it.
+        // rather than a literal function referencing `Api`, so TS doesn't
+        // try to resolve it.
         // eslint-disable-next-line no-new-func
         const fn = new Function(
           `var oDocument = Api.GetDocument();` +
           `var oRange = oDocument.GetRangeBySelect();` +
           `return oRange ? oRange.GetText() : '';`
         )
-        connector.callCommand(fn, function (result: string) { resolve(result || '') })
+        connector.callCommand(fn, function (result: string) {
+          clearTimeout(timeoutId)
+          resolve(result || '')
+        })
       } catch (err) {
+        clearTimeout(timeoutId)
         reject(err)
       }
     })
@@ -173,8 +197,11 @@ export default function ReportPage() {
 
   const replaceSelectedTextInEditor = (newText: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const connector = getConnector()
-      if (!connector) { reject(new Error('Editor is not ready yet')); return }
+      let connector: any
+      try {
+        connector = getConnector()
+      } catch (err) { reject(err); return }
+      const timeoutId = setTimeout(() => reject(new Error('callCommand callback never fired (10s timeout) while replacing text')), 10000)
       try {
         // The function passed to callCommand runs inside the document's own
         // sandboxed context and does NOT have closure access to outer
@@ -187,8 +214,12 @@ export default function ReportPage() {
           `var oRange = oDocument.GetRangeBySelect();` +
           `if (oRange) { oRange.SetText(${JSON.stringify(newText)}); }`
         )
-        connector.callCommand(fn, function () { resolve() })
+        connector.callCommand(fn, function () {
+          clearTimeout(timeoutId)
+          resolve()
+        })
       } catch (err) {
+        clearTimeout(timeoutId)
         reject(err)
       }
     })
@@ -209,7 +240,7 @@ export default function ReportPage() {
       setShowRewritePanel(true)
     } catch (err: any) {
       console.error('[rewrite] getSelectedText error:', err)
-      alert('Could not read the current selection. Make sure the document has fully loaded and try again.')
+      alert('Could not read the current selection:\n\n' + (err?.message || String(err)))
     }
   }
 
