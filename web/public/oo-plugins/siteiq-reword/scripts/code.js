@@ -24,19 +24,24 @@
 (function (window, undefined) {
   var RESULT_SOURCE = 'siteiq-reword-plugin'
   var HOST_SOURCE = 'siteiq-reword-host'
+  var LOG = '[siteiq-reword-plugin]'
+
+  console.log(LOG, 'code.js loaded, typeof Asc.plugin.callCommand =', typeof (window.Asc && window.Asc.plugin && window.Asc.plugin.callCommand))
 
   function respond(requestId, payload) {
+    console.log(LOG, 'responding', requestId, payload)
     try {
       window.top.postMessage(
         JSON.stringify(Object.assign({ source: RESULT_SOURCE, requestId: requestId }, payload)),
         '*'
       )
     } catch (err) {
-      // Nothing more we can do if even the postMessage itself throws.
+      console.error(LOG, 'respond() postMessage threw', err)
     }
   }
 
   window.Asc.plugin.init = function () {
+    console.log(LOG, 'Asc.plugin.init fired, typeof callCommand =', typeof window.Asc.plugin.callCommand)
     // Announce readiness so the top page can capture event.source and
     // reach this window directly for every future request.
     respond(null, { type: 'plugin-ready' })
@@ -44,6 +49,7 @@
   window.Asc.plugin.button = function () {}
 
   function handleRequest(data) {
+    console.log(LOG, 'handleRequest', data)
     var requestId = data.requestId
 
     if (data.type === 'ping') {
@@ -52,13 +58,15 @@
     }
 
     if (data.type === 'getSelection') {
-      window.Asc.plugin.onCommandCallback = function () {
+      window.Asc.plugin.onCommandCallback = function (result) {
+        console.log(LOG, 'onCommandCallback fired for getSelection, result=', result, 'Asc.scope=', Asc.scope)
         if (Asc.scope.error) {
           respond(requestId, { type: 'selectionResult', error: Asc.scope.error })
         } else {
           respond(requestId, { type: 'selectionResult', text: Asc.scope.result || '' })
         }
       }
+      console.log(LOG, 'calling callCommand for getSelection')
       window.Asc.plugin.callCommand(function () {
         try {
           var oDocument = Api.GetDocument()
@@ -81,12 +89,14 @@
     if (data.type === 'replaceSelection') {
       Asc.scope.newText = data.text || ''
       window.Asc.plugin.onCommandCallback = function () {
+        console.log(LOG, 'onCommandCallback fired for replaceSelection, Asc.scope=', Asc.scope)
         if (Asc.scope.error) {
           respond(requestId, { type: 'replaceResult', error: Asc.scope.error })
         } else {
           respond(requestId, { type: 'replaceResult', ok: true })
         }
       }
+      console.log(LOG, 'calling callCommand for replaceSelection')
       window.Asc.plugin.callCommand(function () {
         try {
           var oDocument = Api.GetDocument()
@@ -117,6 +127,9 @@
       msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
     } catch (err) {
       return
+    }
+    if (msg && typeof msg === 'object') {
+      console.log(LOG, 'raw message event, origin=', event.origin, 'data=', msg)
     }
     if (!msg || msg.source !== HOST_SOURCE || !msg.type) return
     handleRequest(msg)
