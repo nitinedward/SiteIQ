@@ -94,14 +94,21 @@ export default function OnlyOfficeEditor({
               plugins: true,
               macros: false,
             },
-            // DIAGNOSTIC STATE: autostart temporarily removed and the
-            // plugin's own config.json temporarily made visible/clickable
-            // (isSystem:false, isVisual:true) — isolating whether the
-            // isSystem-auto-launch path itself is what's broken on this
-            // build, separately from the plugin's own callCommand logic.
-            // Restore `autostart: [REWORD_PLUGIN_GUID]` and isSystem:true
-            // in config.json once that's confirmed either way.
+            // DIAGNOSTIC STATE, round 2: manually launching the plugin via
+            // the Plugins tab proved the plugin's own logic works fine —
+            // it loaded, initialized, and announced itself correctly. The
+            // isSystem:true auto-launch path (register() calling Xv()
+            // immediately) is confirmed broken on this Document Server
+            // build/version. This tests the OTHER, separate auto-launch
+            // mechanism instead — the declared `autostart` guid list,
+            // consumed by a different function (runAutoStartPlugins in the
+            // web-apps controller) — with the plugin kept non-system
+            // (isSystem:false, so it's a "normal" plugin autostart can
+            // legally target) but isVisual:false (so it still shows no
+            // popup even if launched). If this also doesn't fire, autostart
+            // itself is broken here, not just isSystem.
             plugins: {
+              autostart: [REWORD_PLUGIN_GUID],
               pluginsData: [rewordPluginConfigUrl(appUrl)],
             },
           },
