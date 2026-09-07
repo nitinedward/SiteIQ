@@ -38,6 +38,15 @@
   var MIN_SIZE = [360, 320]
   var MAX_SIZE = [1000, 900]
 
+  // Must be absolute. A variation's `url` in config.json is resolved
+  // against the plugin's baseUrl, but ShowWindow's is not: PluginWindow
+  // .show() only appends the windowID, and onPluginWindowShow hands the
+  // string straight to the dialog's iframe — so a relative "window.html"
+  // resolves against the editor's own origin
+  // (onlyoffice.../web-apps/apps/documenteditor/main/) and 404s.
+  var WINDOW_URL = window.location.origin +
+    window.location.pathname.replace(/[^/]*$/, '') + 'window.html'
+
   var win = null
   var selection = ''
 
@@ -67,8 +76,9 @@
       closeWindow()
     })
 
+    console.log(LOG, 'opening window at', WINDOW_URL)
     win.show({
-      url: 'window.html',
+      url: WINDOW_URL,
       description: 'Reword with AI',
       isVisual: true,
       EditorsSupport: ['word'],
