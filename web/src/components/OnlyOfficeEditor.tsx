@@ -90,7 +90,12 @@ export default function OnlyOfficeEditor({
               compactToolbar: true,
               statusBar: false,
               hideRightMenu: true,
-              uiTheme: 'theme-light',
+              // Custom theme installed on the Document Server — see
+              // onlyoffice/themes/siteiq.json and the OnlyOffice section of
+              // CLAUDE.md. If it's ever missing (e.g. the container was
+              // rebuilt) the editor falls back to its default theme rather
+              // than breaking.
+              uiTheme: 'theme-siteiq',
               compactHeader: true,
               // Quieten the editor chrome so it reads as part of the page.
               // These four are read straight from customization — unlike

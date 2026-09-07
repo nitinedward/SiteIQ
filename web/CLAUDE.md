@@ -68,6 +68,35 @@ Runs on a DigitalOcean VPS, not locally.
   BOM from the env var before use — a mismatched-looking-but-identical
   secret has bitten this project before.
 
+### OnlyOffice editor theme
+The editor's toolbar/canvas colours come from a custom theme installed on
+the Document Server, referenced as `uiTheme: 'theme-siteiq'` in
+`src/components/OnlyOfficeEditor.tsx`.
+
+Source of truth is `onlyoffice/themes/siteiq.json` in this repo. It is
+installed **inside the container**, so a container rebuild wipes it — the
+editor then silently falls back to its default theme. To reinstall:
+
+```bash
+scp onlyoffice/themes/siteiq.json root@170.64.219.210:/tmp/siteiq.json
+ssh root@170.64.219.210 'D=/var/www/onlyoffice/documentserver/web-apps/apps/common/main/resources/themes; \
+  docker exec b37cbcd5605d sh -c "[ -f $D/themes.json.orig ] || cp $D/themes.json $D/themes.json.orig"; \
+  docker cp /tmp/siteiq.json b37cbcd5605d:$D/themes.json; \
+  docker exec b37cbcd5605d sh -c "mv $D/themes.json.gz $D/themes.json.gz.orig 2>/dev/null"'
+```
+
+How it works: `default.json` sets `themes.uri` to that directory;
+DocService aggregates it into `https://onlyoffice.site-iq.co.nz/themes.json`,
+and the editor registers any entry carrying an `id`, injecting
+`:root .<id>{--var:value}`. Only `themes.json` in that directory is read —
+adding extra files there does nothing. The originals are kept alongside as
+`themes.json.orig` / `themes.json.gz.orig`; restore them to revert.
+
+Not themeable without a licence: the ONLYOFFICE logo and product text.
+`customization.logo` / `customization.customer` are gated behind
+`asc_getCanBranding()`, which is why `logo: { visible: false }` in the
+config has no effect on this server.
+
 ### OnlyOffice plugins
 The "Reword with AI" plugins live in `public/oo-plugins/` and are served
 from this app (Vercel), registered via `editorConfig.plugins.pluginsData`

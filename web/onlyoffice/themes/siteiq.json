@@ -1,0 +1,43 @@
+{
+  "id": "theme-siteiq",
+  "name": "SiteIQ",
+  "type": "light",
+  "colors": {
+    "toolbar-header-document": "#3A4A63",
+    "text-toolbar-header-on-background-document": "#FFFFFF",
+    "text-toolbar-header": "#FFFFFF",
+    "icon-toolbar-header": "#FFFFFF",
+    "highlight-header-button-hover": "#2C3950",
+    "highlight-header-button-pressed": "#2C3950",
+
+    "background-normal": "#FFFFFF",
+    "background-toolbar": "#FAF8F4",
+    "background-toolbar-additional": "#F3F0EA",
+    "background-primary-dialog-button": "#3A4A63",
+    "background-accent-button": "#F5A524",
+    "background-tab-underline": "#3A4A63",
+    "highlight-toolbar-tab-underline": "#3A4A63",
+    "highlight-text-select": "#EEF1F6",
+
+    "border-toolbar": "#ECE8E1",
+    "border-divider": "#ECE8E1",
+    "border-regular-control": "#ECE8E1",
+    "border-toolbar-button-hover": "#D9D3C8",
+    "border-control-focus": "#3A4A63",
+    "border-preview-select": "#3A4A63",
+
+    "text-normal": "#2A2E37",
+    "text-secondary": "#7A8290",
+    "text-tertiary": "#7A8290",
+    "text-link": "#3A4A63",
+    "text-link-hover": "#2C3950",
+    "text-link-active": "#2C3950",
+    "text-inverse": "#FFFFFF",
+
+    "canvas-background": "#FAF8F4",
+    "canvas-content-background": "#FFFFFF",
+    "canvas-page-border": "#ECE8E1",
+    "canvas-scroll-thumb-border": "#ECE8E1",
+    "canvas-scroll-thumb-border-hover": "#D9D3C8"
+  }
+}
