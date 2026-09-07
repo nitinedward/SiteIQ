@@ -169,8 +169,15 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
         overflowY: 'auto',
       }}>
 
-        {/* Brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '22px 20px 18px' }}>
+        {/* Brand — doubles as a link home, which is what people try first */}
+        <div
+          onClick={() => router.push('/dashboard')}
+          role="link"
+          tabIndex={0}
+          title="Go to dashboard"
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push('/dashboard') } }}
+          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '22px 20px 18px', cursor: 'pointer' }}
+        >
           <div style={{
             width: 38, height: 38, borderRadius: 'var(--radius-sm)',
             background: 'var(--marigold)',
@@ -241,7 +248,14 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
         zIndex: 50,
       }}>
         {/* LEFT — breadcrumb (+ brand mark on mobile, where the sidebar is hidden) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div
+          onClick={() => router.push('/dashboard')}
+          role="link"
+          tabIndex={0}
+          title="Go to dashboard"
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push('/dashboard') } }}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+        >
           <div className="mobile-only" style={{
             width: 28, height: 28, borderRadius: 'var(--radius-sm)',
             background: 'var(--marigold)', boxSizing: 'border-box', padding: 7,

@@ -979,8 +979,15 @@ export default function ReportPage() {
           padding: '0 20px', gap: 12, background: 'var(--surface)',
           borderBottom: '1px solid var(--border-line)', flexShrink: 0, zIndex: 20,
         }}>
-          {/* Brand */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {/* Brand — doubles as a link home, which is what people try first */}
+          <div
+            onClick={() => router.push('/dashboard')}
+            role="link"
+            tabIndex={0}
+            title="Go to dashboard"
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push('/dashboard') } }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, cursor: 'pointer' }}
+          >
             <div style={{ width: 24, height: 24, background: 'var(--marigold)', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="12" height="12" fill="none" stroke="#fff" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             </div>
