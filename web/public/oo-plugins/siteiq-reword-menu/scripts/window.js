@@ -28,6 +28,16 @@
 
   function $(id) { return document.getElementById(id) }
 
+  /** Ask the parent to shrink/grow the window to exactly this content, so
+   *  the panel stays compact with no empty strip under the buttons and
+   *  nothing to scroll. Measured after layout has settled. */
+  function fitToContent() {
+    window.setTimeout(function () {
+      var h = Math.ceil(document.body.scrollHeight)
+      window.Asc.plugin.sendToPlugin('siteiq_resize', { height: h })
+    }, 0)
+  }
+
   function showError(msg) {
     if (!msg) { els.err.className = 'err hidden'; els.err.textContent = ''; return }
     els.err.className = 'err'
@@ -51,6 +61,8 @@
     els.btnAccept.disabled = state.busy
     var chips = els.chips.getElementsByTagName('button')
     for (var i = 0; i < chips.length; i++) chips[i].disabled = state.busy || !state.original
+
+    fitToContent()
   }
 
   function buildChips() {

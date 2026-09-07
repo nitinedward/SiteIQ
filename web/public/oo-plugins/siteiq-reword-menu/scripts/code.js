@@ -34,9 +34,12 @@
   var ITEM_ID = 'siteiq_rwm_open'
   var LOG = '[reword-menu]'
 
-  var SIZE = [460, 470]
-  var MIN_SIZE = [360, 320]
-  var MAX_SIZE = [1000, 900]
+  var WIDTH = 460
+  var MIN_H = 200
+  var MAX_H = 860
+  var SIZE = [WIDTH, 430]
+  var MIN_SIZE = [360, MIN_H]
+  var MAX_SIZE = [1000, MAX_H]
 
   // Must be absolute. A variation's `url` in config.json is resolved
   // against the plugin's baseUrl, but ShowWindow's is not: PluginWindow
@@ -49,6 +52,7 @@
 
   var win = null
   var selection = ''
+  var lastHeight = 0
 
   function api() { return window.Asc.plugin }
 
@@ -56,6 +60,7 @@
     if (!win) return
     try { win.close() } catch (e) { /* already gone */ }
     win = null
+    lastHeight = 0
   }
 
   function openWindow() {
@@ -75,6 +80,20 @@
     win.attachEvent('siteiq_close', function () {
       closeWindow()
     })
+    // The panel measures its own content and asks to be fitted to it, so
+    // the window stays compact instead of leaving a strip of empty space
+    // under the buttons or forcing the user to scroll.
+    win.attachEvent('siteiq_resize', function (data) {
+      if (!win || !data || !data.height) return
+      var h = Math.max(MIN_H, Math.min(MAX_H, Math.ceil(data.height)))
+      if (h === lastHeight) return
+      lastHeight = h
+      try {
+        api().executeMethod('ResizeWindow', [win.id, [WIDTH, h], MIN_SIZE, MAX_SIZE])
+      } catch (e) {
+        console.log(LOG, 'ResizeWindow failed', e)
+      }
+    })
 
     console.log(LOG, 'opening window at', WINDOW_URL)
     win.show({
@@ -86,16 +105,10 @@
       size: SIZE,
       buttons: [],
     })
-
-    // Giving a max larger than the min is what flips PluginDlg into a
-    // user-resizable window (onPluginWindowResize -> setResizable).
-    window.setTimeout(function () {
-      try {
-        api().executeMethod('ResizeWindow', [win.id, SIZE, MIN_SIZE, MAX_SIZE])
-      } catch (e) {
-        console.log(LOG, 'ResizeWindow not available', e)
-      }
-    }, 300)
+    // No initial ResizeWindow here — the panel fits itself as soon as it
+    // renders, and that call passes a max larger than the min, which is
+    // also what flips PluginDlg into a user-resizable window
+    // (onPluginWindowResize -> setResizable).
   }
 
   function startFlow() {

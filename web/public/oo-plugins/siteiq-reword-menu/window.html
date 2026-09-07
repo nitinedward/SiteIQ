@@ -35,17 +35,16 @@
             --f-text:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         }
         * { box-sizing: border-box; }
-        html, body { height: 100%; margin: 0; padding: 0; }
+        html, body { margin: 0; padding: 0; }
         body {
             font-family: var(--f-text);
             font-size: 13px;
             color: var(--text-ink);
             background: var(--surface);
-            /* Fills whatever size the user drags the panel to — no fixed
-               block left over at the bottom. */
-            display: flex;
-            flex-direction: column;
             padding: 14px;
+            /* Height is content-driven: after every change the panel asks
+               the editor to resize to exactly this content, so there is no
+               empty space below and nothing to scroll. */
             overflow: hidden;
         }
 
@@ -62,7 +61,7 @@
             padding: 9px 11px;
             background: var(--paper);
             border-radius: var(--radius-sm);
-            max-height: 76px; overflow-y: auto;
+            max-height: 88px; overflow-y: auto;
             white-space: pre-wrap; word-break: break-word;
         }
 
@@ -100,16 +99,16 @@
         .go:hover:not(:disabled) { background: var(--marigold-deep); }
         .go:disabled { background: var(--paper); color: var(--text-mid); cursor: default; }
 
-        /* Result grows into the free space so the panel never has an empty
-           block below it at any size. */
-        #out { display: flex; flex-direction: column; flex: 1; min-height: 0; margin-top: 13px; }
+        #out { margin-top: 13px; }
         .result {
-            flex: 1; min-height: 60px;
             padding: 11px 12px;
             background: var(--sage-soft);
             border: 1px solid rgba(91,146,121,.28);
             border-radius: var(--radius-sm);
-            line-height: 1.55; overflow-y: auto;
+            line-height: 1.55;
+            /* Tall enough for a long rewrite before it needs to scroll; the
+               panel grows to fit rather than clipping. */
+            max-height: 420px; overflow-y: auto;
             white-space: pre-wrap; word-break: break-word;
         }
         .row { display: flex; gap: 6px; margin-top: 10px; }
