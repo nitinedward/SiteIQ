@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { rewordPluginConfigUrl } from '@/lib/rewordPlugin'
+import { rewordPanelConfigUrl, rewordMenuConfigUrl } from '@/lib/rewordPlugin'
 
 interface OnlyOfficeEditorProps {
   inspectionId: string
@@ -91,18 +91,17 @@ export default function OnlyOfficeEditor({
               plugins: true,
               macros: false,
             },
-            // Makes the "Reword with AI" plugin (public/oo-plugins/
-            // siteiq-reword/) available in the editor's Plugins tab, where
-            // the user opens it as a side panel.
-            //
-            // Deliberately NOT autostarted: runAutoStartPlugins() fires
-            // exactly once and shift()s the guid off its list, so when it
-            // races ahead of the editor's plugin registry the plugin is
-            // dropped for good — which made loading depend on whether
-            // config.json was a CDN cache hit. Launching from the Plugins
-            // tab has no such race.
+            // Two plugins, neither autostarted — see src/lib/rewordPlugin.ts
+            // for why autostart is unreliable here and registration isn't:
+            //  - the panel, opened from the Plugins tab
+            //  - the menu plugin, an invisible system plugin that register()
+            //    starts on its own, giving the right-click item on every
+            //    document without the user opening anything first
             plugins: {
-              pluginsData: [rewordPluginConfigUrl(appUrl)],
+              pluginsData: [
+                rewordPanelConfigUrl(appUrl),
+                rewordMenuConfigUrl(appUrl),
+              ],
             },
           },
         }

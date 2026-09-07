@@ -1,23 +1,23 @@
 {
-    "name"       : "Reword with AI",
-    "guid"       : "asc.{7A2E9C41-6B8A-4F0D-9E43-2B7B6C9D41F0}",
+    "name"       : "SiteIQ Reword Menu",
+    "guid"       : "asc.{3F1B7C22-9D64-4A18-8E52-1C6A0B93D7E4}",
     "baseUrl"    : "",
     "variations" : [
         {
-            "description"         : "Rewrite the selected passage with Claude",
+            "description"         : "Adds Reword with AI to the right-click menu",
             "url"                 : "index.html",
             "icons"               : [],
             "isViewer"            : false,
             "EditorsSupport"      : ["word"],
-            "isVisual"            : true,
+            "isVisual"            : false,
+            "isSystem"            : true,
             "isModal"             : false,
-            "isInsideMode"        : true,
+            "isInsideMode"        : false,
             "initDataType"        : "none",
             "initData"            : "",
             "isUpdateOleOnResize" : true,
             "buttons"             : [],
-            "initOnSelectionChanged" : true,
-            "size"                : [320, 500]
+            "events"              : ["onContextMenuShow"]
         }
     ]
 }
