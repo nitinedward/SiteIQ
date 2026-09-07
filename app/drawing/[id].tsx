@@ -349,8 +349,54 @@ export default function DrawingViewerScreen() {
   };
 
   const deleteZone = async (zone: Zone) => {
+    // Unlink any observations FIRST. Deleting the zone on its own used to
+    // leave every photo taken there pointing at a row that no longer
+    // exists — the photos survived but nothing said where they were taken,
+    // and nothing in the database prevented it.
+    await supabase.from('observations').update({ zone_id: null }).eq('zone_id', zone.id);
     await supabase.from('zones').delete().eq('id', zone.id);
     setZonesAndRef(zonesRef.current.filter(z => z.id !== zone.id));
+  };
+
+  /** Confirms a zone deletion, spelling out what is attached to it. The
+   *  pin's position can't be recovered once it's gone, so the count of
+   *  photos about to lose their location is worth showing up front. */
+  const confirmDeleteZone = async (zone: Zone, after?: () => void) => {
+    const { data: obs } = await supabase
+      .from('observations')
+      .select('id, photos')
+      .eq('zone_id', zone.id);
+
+    const obsCount = obs?.length ?? 0;
+    const photoCount = (obs ?? []).reduce((n: number, o: any) => {
+      let photos: any[] = [];
+      if (Array.isArray(o.photos)) photos = o.photos;
+      else if (typeof o.photos === 'string') { try { photos = JSON.parse(o.photos); } catch { photos = []; } }
+      return n + photos.length;
+    }, 0);
+
+    const run = async () => { await deleteZone(zone); after?.(); };
+
+    if (obsCount === 0) {
+      Alert.alert('Delete Zone', `Delete "${zone.label}"? This cannot be undone.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: run },
+      ]);
+      return;
+    }
+
+    Alert.alert(
+      'Delete Zone',
+      `"${zone.label}" has ${obsCount} observation${obsCount === 1 ? '' : 's'}` +
+      (photoCount > 0 ? ` with ${photoCount} photo${photoCount === 1 ? '' : 's'}` : '') + `.\n\n` +
+      `The ${photoCount === 1 ? 'photo stays' : 'photos stay'} in the report, but ` +
+      `${photoCount === 1 ? 'it is' : 'they are'} unlinked from this drawing — ` +
+      `the marked position is lost and cannot be recovered.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete zone, keep photos', style: 'destructive', onPress: run },
+      ]
+    );
   };
 
   const renderSvg = (h: number) => (
@@ -477,10 +523,7 @@ export default function DrawingViewerScreen() {
                     {editingZones && (
                       <TouchableOpacity
                         style={S.chipDeleteBadge}
-                        onPress={() => Alert.alert('Delete Zone', `Delete "${zone.label}"? This cannot be undone.`, [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Delete', style: 'destructive', onPress: () => { deleteZone(zone); setEditingZones(false); } },
-                        ])}>
+                        onPress={() => confirmDeleteZone(zone, () => setEditingZones(false))}>
                         <Ionicons name="remove" size={14} color="#FFFFFF" />
                       </TouchableOpacity>
                     )}
@@ -531,10 +574,7 @@ export default function DrawingViewerScreen() {
                   renderRightActions={() => (
                     <TouchableOpacity
                       style={S.swipeDeleteBtn}
-                      onPress={() => Alert.alert('Delete Zone', `Delete "${zone.label}"? This cannot be undone.`, [
-                        { text: 'Cancel', style: 'cancel' },
-                        { text: 'Delete', style: 'destructive', onPress: () => deleteZone(zone) },
-                      ])}>
+                      onPress={() => confirmDeleteZone(zone)}>
                       <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
                     </TouchableOpacity>
                   )}>
