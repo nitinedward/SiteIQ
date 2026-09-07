@@ -73,6 +73,38 @@ export async function forceSaveAndWait(inspectionId: string, docKey: string): Pr
   return { saved: false, commandOk, commandResponse }
 }
 
+/** Pushes a new title into a live editing session via the Document
+ *  Server's `meta` command.
+ *
+ *  Without this, renaming from the editor's own title bar appears to work
+ *  and then snaps back: onRequestRename only tells the integrator what the
+ *  user typed, it does not change the open document, so the editor keeps
+ *  showing the title it was opened with. (Verified against this build:
+ *  CommandService accepts c:"meta" — it answers error 0 where the known
+ *  c:"info" answers error 1 for the same key.)
+ *
+ *  Non-fatal by design: the name is already persisted by the caller, so a
+ *  failure here only means the tab keeps the old label until reload. */
+export async function setDocumentMeta(docKey: string, title: string): Promise<{ ok: boolean; response: any }> {
+  const secret = getSecret()
+  if (!secret) return { ok: false, response: { error: 'ONLYOFFICE_JWT_SECRET not configured' } }
+
+  const payload = { c: 'meta', key: docKey, meta: { title } }
+  try {
+    const token = jwt.sign(payload, secret, { algorithm: 'HS256' })
+    const res = await fetch(`${getOoUrl()}/coauthoring/CommandService.ashx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, token }),
+    })
+    const response = await res.json().catch(() => ({}))
+    return { ok: response?.error === 0, response }
+  } catch (err: any) {
+    console.error('[setDocumentMeta] failed:', err)
+    return { ok: false, response: { error: err.message } }
+  }
+}
+
 /** Converts the currently-stored .docx for an inspection to PDF via
  *  OnlyOffice's ConvertService.ashx, and returns the PDF as a Buffer.
  *  Throws on failure — callers must not treat a thrown error as success. */

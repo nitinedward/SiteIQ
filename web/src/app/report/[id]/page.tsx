@@ -224,6 +224,26 @@ export default function ReportPage() {
   /** Persists a name typed into the editor's own title bar. OnlyOffice
    *  sends the bare name, but a user may still type an extension — strip it
    *  so it isn't doubled up when we append .docx/.pdf. */
+  /** Tells the open editing session about a new title. onRequestRename only
+   *  reports what the user typed — it doesn't change the open document — so
+   *  without this the title snaps back to whatever the editor was opened
+   *  with. Best-effort: the name is already saved, so a failure here just
+   *  means the tab keeps the old label until the page is reloaded. */
+  const pushTitleToEditor = useCallback(async (name: string) => {
+    try {
+      await fetch('/api/docs/meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          docKey: `doc-${inspectionId}-${editorKey}`,
+          title: `${name}.docx`,
+        }),
+      })
+    } catch (err) {
+      console.warn('[rename] could not refresh the editor title:', err)
+    }
+  }, [inspectionId, editorKey])
+
   const renameFromEditor = useCallback(async (newName: string) => {
     const clean = newName.replace(/\.(docx|pdf)$/i, '').trim()
     if (!clean) return
@@ -237,7 +257,8 @@ export default function ReportPage() {
       return
     }
     setCustomFileName(clean)
-  }, [inspectionId])
+    await pushTitleToEditor(clean)
+  }, [inspectionId, pushTitleToEditor])
 
   const saveFileName = async () => {
     const next = fileNameDraft.trim()
@@ -251,6 +272,7 @@ export default function ReportPage() {
       if (error) throw error
       setCustomFileName(next || null)
       setShowDownloadMenu(false)
+      await pushTitleToEditor(next || derivedFileName())
     } catch (err: any) {
       console.error('[fileName] save failed:', err)
       const missingColumn = /report_file_name/i.test(err?.message ?? '')
