@@ -84,6 +84,27 @@
     })
   }
 
+  /** Re-reads the selection from the document and then rewrites it. Used by
+   *  the right-click menu, where the panel's cached selection may be stale
+   *  (or empty, if the panel was never looked at). */
+  function rewriteFromContextMenu(tone) {
+    if (state.busy) return
+    state.tone = tone || null
+    buildToneChips()
+    window.Asc.plugin.executeMethod('GetSelectedText', [], function (text) {
+      var selected = (text || '').trim()
+      if (!selected) {
+        state.preview = null
+        showError('Select some text in the document first.')
+        render()
+        return
+      }
+      state.selection = selected
+      state.preview = null
+      doRewrite()
+    })
+  }
+
   function doRewrite() {
     if (!state.selection || state.busy) return
     state.busy = true
@@ -182,4 +203,33 @@
   window.Asc.plugin.button = function () {
     this.executeCommand('close', '')
   }
+
+  // ── RIGHT-CLICK MENU ──────────────────────────────────────────────────
+  // Adds "Reword with AI" (with a tone submenu) to the editor's own context
+  // menu whenever text is selected. Declared in config.json's `events` so
+  // the editor actually dispatches onContextMenuShow to this plugin.
+  var CONTEXT_ITEM_PREFIX = 'siteiq_reword_'
+
+  window.Asc.plugin.event_onContextMenuShow = function (options) {
+    if (!options || options.type !== 'Selection') return
+
+    var items = [{ id: CONTEXT_ITEM_PREFIX + 'default', text: 'Rewrite' }]
+    TONES.forEach(function (tone) {
+      items.push({ id: CONTEXT_ITEM_PREFIX + tone, text: tone })
+    })
+
+    this.executeMethod('AddContextMenuItem', [{
+      guid: this.guid,
+      items: [{ id: CONTEXT_ITEM_PREFIX + 'root', text: 'Reword with AI', items: items }],
+    }])
+  }
+
+  window.Asc.plugin.attachContextMenuClickEvent(CONTEXT_ITEM_PREFIX + 'default', function () {
+    rewriteFromContextMenu(null)
+  })
+  TONES.forEach(function (tone) {
+    window.Asc.plugin.attachContextMenuClickEvent(CONTEXT_ITEM_PREFIX + tone, function () {
+      rewriteFromContextMenu(tone)
+    })
+  })
 })(window, undefined)

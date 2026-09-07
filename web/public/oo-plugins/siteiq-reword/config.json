@@ -17,6 +17,7 @@
             "isUpdateOleOnResize" : true,
             "buttons"             : [],
             "initOnSelectionChanged" : true,
+            "events"              : ["onContextMenuShow"],
             "size"                : [320, 500]
         }
     ]
