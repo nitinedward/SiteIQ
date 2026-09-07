@@ -92,6 +92,14 @@ export default function OnlyOfficeEditor({
               hideRightMenu: true,
               uiTheme: 'theme-light',
               compactHeader: true,
+              // Quieten the editor chrome so it reads as part of the page.
+              // These four are read straight from customization — unlike
+              // leftMenu/toolbar/layout, which this build gates behind
+              // canBrandingExt (a licensed feature) and would ignore.
+              hideRulers: true,
+              comments: false,
+              chat: false,
+              spellcheck: false,
               customer: {
                 name: 'SiteIQ',
                 www: '',
@@ -232,29 +240,29 @@ export default function OnlyOfficeEditor({
     return (
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        height: '100%', background: '#e8e4de',
+        height: '100%', background: 'var(--paper)',
       }}>
         <div style={{
-          background: '#ffffff', border: '1px solid #e4e0d9',
+          background: 'var(--surface)', border: '1px solid var(--border-line)',
           borderRadius: 14, padding: '32px 36px',
           maxWidth: 480, width: '90%', textAlign: 'center',
           boxShadow: '0 4px 12px rgba(0,0,0,.08)',
         }}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
           <div style={{
-            fontFamily: "'Cormorant',serif", fontSize: 22,
-            fontWeight: 600, color: '#1a1917', marginBottom: 10,
+            fontFamily: 'var(--f-heading)', fontSize: 18,
+            fontWeight: 800, color: 'var(--indigo-deep)', marginBottom: 10,
           }}>
             Document Editor Unavailable
           </div>
-          <div style={{ fontSize: 13, color: '#9b968d', lineHeight: 1.6 }}>
+          <div style={{ fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.6 }}>
             The OnlyOffice Document Server is not running. Please start it and refresh.
           </div>
 
           <div style={{
-            background: '#f0ede8', borderRadius: 10,
+            background: 'var(--paper)', borderRadius: 14,
             padding: '16px 20px', marginTop: 16,
-            fontSize: 13, color: '#9b968d', lineHeight: 1.6,
+            fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.6,
           }}>
             OnlyOffice Document Server is temporarily unavailable.
             Please contact your administrator or try again in a few minutes.
@@ -264,10 +272,10 @@ export default function OnlyOfficeEditor({
             onClick={handleRetry}
             style={{
               marginTop: 20,
-              background: '#2c5282', color: '#ffffff',
+              background: 'var(--indigo)', color: 'white',
               border: 'none', borderRadius: 10,
               padding: '10px 24px', fontSize: 14, fontWeight: 600,
-              cursor: 'pointer', fontFamily: "'Outfit',sans-serif",
+              cursor: 'pointer', fontFamily: 'var(--f-heading)',
             }}
           >
             Retry
@@ -290,16 +298,16 @@ export default function OnlyOfficeEditor({
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexDirection: 'column', gap: 12,
-          background: '#e8e4de', zIndex: 10,
+          background: 'var(--paper)', zIndex: 10,
         }}>
           <div style={{
             width: 36, height: 36,
-            border: '3px solid #e4e0d9', borderTopColor: '#2c5282',
+            border: '3px solid var(--border-line)', borderTopColor: 'var(--indigo)',
             borderRadius: '50%', animation: 'spin 0.8s linear infinite',
           }} />
           <div style={{
-            fontSize: 14, color: '#9b968d',
-            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 14, color: 'var(--text-mid)',
+            fontFamily: 'var(--f-text)',
             textTransform: 'uppercase', letterSpacing: '1px',
           }}>
             {loadingMessage}
