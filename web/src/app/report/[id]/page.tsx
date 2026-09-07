@@ -54,6 +54,7 @@ export default function ReportPage() {
   const [customFileName,     setCustomFileName]       = useState<string | null>(null)
   const [fileNameDraft,      setFileNameDraft]        = useState('')
   const [savingFileName,     setSavingFileName]       = useState(false)
+  const [zipProgress,        setZipProgress]          = useState<{ done: number; total: number } | null>(null)
   const [editorError,        setEditorError]         = useState(false)
   const [inserting,          setInserting]           = useState(false)
   const [reloadingEditor,    setReloadingEditor]     = useState(false)
@@ -348,6 +349,67 @@ export default function ReportPage() {
     }
   }
 
+  /** Zips every photo captured for this inspection — not just the ones
+   *  selected for the document — one folder per zone.
+   *
+   *  Done in the browser rather than server-side on purpose: a hundred
+   *  photos at a few MB each would blow a serverless function's time and
+   *  memory budget, and the photos are public Supabase URLs the browser can
+   *  fetch directly, so nothing has to be proxied. Stored rather than
+   *  deflated because JPEGs don't compress — it only costs CPU. */
+  const downloadAllPhotos = async () => {
+    const photos = selectedPhotos
+    if (photos.length === 0) {
+      alert('There are no photos on this inspection yet.')
+      return
+    }
+
+    const JSZip = (await import('jszip')).default
+    const zip = new JSZip()
+    const used = new Set<string>()
+    const failed: string[] = []
+
+    for (let i = 0; i < photos.length; i++) {
+      const photo = photos[i]
+      setZipProgress({ done: i, total: photos.length })
+      try {
+        const res = await fetch(photo.url, { cache: 'no-store' })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const blob = await res.blob()
+
+        const zoneFolder = (photo.zoneLabel || 'General').replace(/[\/\\:*?"<>|]/g, '')
+        const rawName = decodeURIComponent(photo.url.split('/').pop() ?? `photo-${i + 1}.jpg`)
+          .split('?')[0]
+        // Storage names can repeat across zones — keep them distinct so the
+        // zip doesn't silently drop one.
+        let name = `${zoneFolder}/${rawName}`
+        let n = 2
+        while (used.has(name)) {
+          name = `${zoneFolder}/${rawName.replace(/(\.[^.]+)?$/, `-${n}$1`)}`
+          n++
+        }
+        used.add(name)
+
+        zip.file(name, blob)
+      } catch (err) {
+        console.error('[photos] could not fetch', photo.url, err)
+        failed.push(photo.url)
+      }
+    }
+
+    setZipProgress({ done: photos.length, total: photos.length })
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' })
+    saveBlob(blob, `${baseFileName()} - Photos.zip`)
+    setZipProgress(null)
+
+    if (failed.length) {
+      alert(
+        `${photos.length - failed.length} of ${photos.length} photos were included.\n\n` +
+        `${failed.length} could not be downloaded and were skipped.`
+      )
+    }
+  }
+
   const downloadWord = async () => {
     const res = await fetch(
       `/api/docs/${inspectionId}?download=true&t=${Date.now()}`,
@@ -382,10 +444,17 @@ export default function ReportPage() {
     saveBlob(await res.blob(), `${baseFileName()}.pdf`)
   }
 
-  const downloadDoc = async (format: 'docx' | 'pdf' | 'both') => {
+  const downloadDoc = async (format: 'docx' | 'pdf' | 'both' | 'photos') => {
     setShowDownloadMenu(false)
     try {
       setDownloading(true)
+
+      // Photos come straight from storage — no document involved, so none
+      // of the rebuild/force-save preparation applies.
+      if (format === 'photos') {
+        await downloadAllPhotos()
+        return
+      }
 
       const finalised = reportStatus === 'finalised'
 
@@ -400,6 +469,7 @@ export default function ReportPage() {
       alert('Download failed: ' + err.message)
     } finally {
       setDownloading(false)
+      setZipProgress(null)
     }
   }
 
@@ -414,10 +484,17 @@ export default function ReportPage() {
    *  `align` decides which edge it hangs from so it stays on screen. */
   const renderDownloadMenu = (align: 'left' | 'right') => {
     if (!showDownloadMenu) return null
-    const options: { format: 'docx' | 'pdf' | 'both'; label: string; hint: string }[] = [
+    const options: { format: 'docx' | 'pdf' | 'both' | 'photos'; label: string; hint: string }[] = [
       { format: 'docx', label: 'Word',     hint: '.docx — editable' },
       { format: 'pdf',  label: 'PDF',      hint: '.pdf — final layout' },
       { format: 'both', label: 'Both',     hint: 'Word and PDF' },
+      {
+        format: 'photos',
+        label: 'All site photos',
+        hint: selectedPhotos.length
+          ? `.zip — all ${selectedPhotos.length}, not just selected`
+          : '.zip — no photos on this inspection',
+      },
     ]
     return (
       <div
@@ -933,7 +1010,11 @@ export default function ReportPage() {
                     animation: 'spin 0.7s linear infinite',
                     flexShrink: 0,
                   }} />
-                  <span className="report-btn-text">Preparing...</span>
+                  <span className="report-btn-text">
+                    {zipProgress
+                      ? `Photos ${zipProgress.done}/${zipProgress.total}`
+                      : 'Preparing...'}
+                  </span>
                 </>
               ) : totalAttachments > 0 ? (
                 <>
