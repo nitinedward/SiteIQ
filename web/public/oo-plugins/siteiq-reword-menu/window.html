@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>Reword with AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="text/javascript" src="https://onlyoffice.site-iq.co.nz/sdkjs-plugins/v1/plugins.js"></script>
+    <script type="text/javascript" src="https://onlyoffice.site-iq.co.nz/sdkjs-plugins/v1/plugins-ui.js"></script>
+    <style>
+        /* Mirrors the SiteIQ v3 tokens from src/app/globals.css so the panel
+           reads as part of the app rather than as editor chrome. */
+        :root {
+            --indigo:        #3A4A63;
+            --indigo-deep:   #2C3950;
+            --indigo-soft:   #EEF1F6;
+            --marigold:      #F5A524;
+            --marigold-deep: #E08D0B;
+            --marigold-ink:  #8A5A0E;
+            --sage:          #5B9279;
+            --sage-soft:     #E7F0EB;
+            --sage-ink:      #33684C;
+            --paper:         #FAF8F4;
+            --surface:       #FFFFFF;
+            --text-ink:      #2A2E37;
+            --text-mid:      #7A8290;
+            --border-line:   #ECE8E1;
+            --clay:          #E5735B;
+            --clay-soft:     #FBE5E0;
+            --clay-ink:      #B23D24;
+            --radius-sm:     14px;
+            --radius-pill:   999px;
+            --f-heading: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --f-text:    'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; padding: 0; }
+        body {
+            font-family: var(--f-text);
+            font-size: 13px;
+            color: var(--text-ink);
+            background: var(--surface);
+            /* Fills whatever size the user drags the panel to — no fixed
+               block left over at the bottom. */
+            display: flex;
+            flex-direction: column;
+            padding: 14px;
+            overflow: hidden;
+        }
+
+        .lbl {
+            font-family: var(--f-heading);
+            font-size: 10.5px; font-weight: 700; letter-spacing: .5px;
+            text-transform: uppercase; color: var(--text-mid);
+            margin-bottom: 7px;
+        }
+        .lbl.mt { margin-top: 13px; }
+
+        .orig {
+            font-size: 12px; color: var(--text-mid); line-height: 1.5;
+            padding: 9px 11px;
+            background: var(--paper);
+            border-radius: var(--radius-sm);
+            max-height: 76px; overflow-y: auto;
+            white-space: pre-wrap; word-break: break-word;
+        }
+
+        .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+        .chip {
+            background: var(--surface);
+            border: 1px solid var(--border-line);
+            border-radius: var(--radius-pill);
+            padding: 5px 12px;
+            font-family: var(--f-text); font-size: 12px; font-weight: 600;
+            color: var(--text-ink); cursor: pointer;
+            transition: background .12s, border-color .12s;
+        }
+        .chip:hover:not(:disabled) { background: var(--indigo-soft); border-color: var(--indigo); }
+        .chip:disabled { opacity: .5; cursor: default; }
+
+        input[type=text] {
+            width: 100%; padding: 9px 12px;
+            border: 1px solid var(--border-line);
+            border-radius: var(--radius-sm);
+            font-family: var(--f-text); font-size: 12.5px; color: var(--text-ink);
+            outline: none; background: var(--surface);
+        }
+        input[type=text]::placeholder { color: var(--text-mid); }
+        input[type=text]:focus { border-color: var(--indigo); }
+
+        .go {
+            width: 100%; margin-top: 9px;
+            background: var(--marigold); color: var(--indigo-deep);
+            border: none; border-radius: var(--radius-pill);
+            padding: 10px;
+            font-family: var(--f-heading); font-size: 13px; font-weight: 800;
+            cursor: pointer;
+        }
+        .go:hover:not(:disabled) { background: var(--marigold-deep); }
+        .go:disabled { background: var(--paper); color: var(--text-mid); cursor: default; }
+
+        /* Result grows into the free space so the panel never has an empty
+           block below it at any size. */
+        #out { display: flex; flex-direction: column; flex: 1; min-height: 0; margin-top: 13px; }
+        .result {
+            flex: 1; min-height: 60px;
+            padding: 11px 12px;
+            background: var(--sage-soft);
+            border: 1px solid rgba(91,146,121,.28);
+            border-radius: var(--radius-sm);
+            line-height: 1.55; overflow-y: auto;
+            white-space: pre-wrap; word-break: break-word;
+        }
+        .row { display: flex; gap: 6px; margin-top: 10px; }
+        .row button {
+            flex: 1; border-radius: var(--radius-pill); padding: 9px 6px;
+            font-family: var(--f-heading); font-size: 12px; font-weight: 700;
+            cursor: pointer;
+        }
+        .ghost { background: var(--surface); border: 1px solid var(--border-line); color: var(--text-ink); }
+        .ghost:hover { background: var(--paper); }
+        .danger { background: var(--surface); border: 1px solid var(--border-line); color: var(--clay-ink); }
+        .danger:hover { background: var(--clay-soft); border-color: var(--clay); }
+        .accept { background: var(--sage); border: none; color: #fff; }
+        .accept:hover { background: var(--sage-ink); }
+
+        .err {
+            margin-top: 10px; padding: 9px 11px;
+            background: var(--clay-soft); color: var(--clay-ink);
+            border-radius: var(--radius-sm); font-size: 12px; line-height: 1.45;
+        }
+        .hidden { display: none !important; }
+        .spin {
+            display: inline-block; width: 11px; height: 11px; vertical-align: -1px;
+            border: 2px solid rgba(44,57,80,.25); border-top-color: var(--indigo-deep);
+            border-radius: 50%; animation: sp .7s linear infinite; margin-right: 7px;
+        }
+        @keyframes sp { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="lbl">Selected text</div>
+    <div id="orig" class="orig"></div>
+
+    <div id="ask">
+        <div class="lbl mt">Quick options</div>
+        <div class="chips" id="chips"></div>
+
+        <div class="lbl mt">Or describe the tone</div>
+        <input type="text" id="tone" placeholder="e.g. more cautious, flag for monitoring…" autocomplete="off" />
+        <button class="go" id="btnGo">Rewrite</button>
+    </div>
+
+    <div id="out" class="hidden">
+        <div class="lbl">Suggested rewrite</div>
+        <div class="result" id="result"></div>
+        <div class="row">
+            <button class="ghost" id="btnRetry">Try again</button>
+            <button class="danger" id="btnDiscard">Delete</button>
+            <button class="accept" id="btnAccept">Accept</button>
+        </div>
+    </div>
+
+    <div id="err" class="err hidden"></div>
+
+    <script type="text/javascript" src="scripts/window.js"></script>
+</body>
+</html>
