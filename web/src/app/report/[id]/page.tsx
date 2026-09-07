@@ -46,6 +46,7 @@ export default function ReportPage() {
   const [drawings,           setDrawings]            = useState<DrawingInfo[]>([])
   const [loadingAttachments, setLoadingAttachments]  = useState(false)
   const [downloading,        setDownloading]         = useState(false)
+  const [showDownloadMenu,   setShowDownloadMenu]     = useState(false)
   const [editorError,        setEditorError]         = useState(false)
   const [inserting,          setInserting]           = useState(false)
   const [reloadingEditor,    setReloadingEditor]     = useState(false)
@@ -190,92 +191,189 @@ export default function ReportPage() {
   }
 
   // ── DOWNLOAD DOC (appends selected attachments at download time) ──────────────
-  const downloadDoc = async () => {
+  const saveBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob)
+    const a   = document.createElement('a')
+    a.href     = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const baseFileName = () => `SiteReport_${reportNo || inspectionId}`
+
+  /** Rebuilds the managed attachments section from the current selection,
+   *  then force-saves the live editing session — so whichever format is
+   *  downloaded reflects what's actually on screen rather than the last
+   *  autosave. Skipped for finalised reports, which are frozen. */
+  const prepareForDownload = async () => {
+    const selectedPhotosList = selectedPhotos
+      .filter(p => p.selected)
+      .map(p => ({ url: p.url, zoneLabel: p.zoneLabel }))
+
+    const selectedDrawingsList = drawings
+      .filter(d => d.selected && d.captured && d.capturedBlob)
+
+    const hasAttachments =
+      selectedPhotosList.length > 0 ||
+      selectedDrawingsList.length > 0
+
+    if (hasAttachments) {
+      const drawingsWithData = await Promise.all(
+        selectedDrawingsList.map(async d => {
+          if (!d.capturedBlob) return null
+          const buf    = await d.capturedBlob.arrayBuffer()
+          const base64 = Buffer.from(buf).toString('base64')
+          return {
+            title:    d.title,
+            number:   d.number,
+            revision: d.revision,
+            dataUrl:  `data:image/png;base64,${base64}`,
+          }
+        })
+      )
+      const validDrawings = drawingsWithData.filter(Boolean)
+
+      const appendRes = await fetch('/api/docs/append', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          inspectionId,
+          photos:   selectedPhotosList,
+          drawings: validDrawings,
+        }),
+      })
+
+      if (!appendRes.ok) {
+        const err = await appendRes.json()
+        throw new Error('Could not attach photos: ' + (err.error || 'Unknown error'))
+      }
+    }
+
+    // Best-effort: a report with no open editing session has nothing to
+    // force-save, which isn't a failure worth blocking the download on.
+    try {
+      await fetch('/api/docs/forcesave', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ inspectionId, key: `doc-${inspectionId}-${editorKey}` }),
+      })
+    } catch (err) {
+      console.warn('[download] force-save skipped:', err)
+    }
+  }
+
+  const downloadWord = async () => {
+    const res = await fetch(
+      `/api/docs/${inspectionId}?download=true&t=${Date.now()}`,
+      { cache: 'no-store' }
+    )
+    if (!res.ok) throw new Error('Document not ready. Generate the report first.')
+    saveBlob(await res.blob(), `${baseFileName()}.docx`)
+  }
+
+  const downloadPdf = async () => {
+    // A finalised report already has its frozen PDF stored — serve that
+    // rather than re-converting, so the download matches what was signed off.
+    if (reportStatus === 'finalised' && frozenPdfUrl) {
+      const res = await fetch(frozenPdfUrl, { cache: 'no-store' })
+      if (!res.ok) throw new Error('Could not download the finalised PDF')
+      saveBlob(await res.blob(), `${baseFileName()}.pdf`)
+      return
+    }
+
+    const res = await fetch('/api/docs/export-pdf', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        inspectionId,
+        docKey: `doc-${inspectionId}-${editorKey}`,
+      }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || 'Could not convert the report to PDF')
+    }
+    saveBlob(await res.blob(), `${baseFileName()}.pdf`)
+  }
+
+  const downloadDoc = async (format: 'docx' | 'pdf' | 'both') => {
+    setShowDownloadMenu(false)
     try {
       setDownloading(true)
 
-      // Finalised reports are frozen — download the stored PDF directly
-      // rather than re-touching the (now read-only) docx.
-      if (reportStatus === 'finalised' && frozenPdfUrl) {
-        const res = await fetch(frozenPdfUrl, { cache: 'no-store' })
-        if (!res.ok) throw new Error('Could not download the finalised PDF')
-        const blob = await res.blob()
-        const url  = URL.createObjectURL(blob)
-        const a    = document.createElement('a')
-        a.href     = url
-        a.download = `SiteReport_${reportNo || inspectionId}.pdf`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-        return
-      }
+      const finalised = reportStatus === 'finalised'
 
-      const selectedPhotosList = selectedPhotos
-        .filter(p => p.selected)
-        .map(p => ({ url: p.url, zoneLabel: p.zoneLabel }))
+      // Finalised reports are frozen — nothing to rebuild or re-save. The
+      // .docx is still downloadable, it just isn't touched.
+      if (!finalised) await prepareForDownload()
 
-      const selectedDrawingsList = drawings
-        .filter(d => d.selected && d.captured && d.capturedBlob)
-
-      const hasAttachments =
-        selectedPhotosList.length > 0 ||
-        selectedDrawingsList.length > 0
-
-      if (hasAttachments) {
-        const drawingsWithData = await Promise.all(
-          selectedDrawingsList.map(async d => {
-            if (!d.capturedBlob) return null
-            const buf    = await d.capturedBlob.arrayBuffer()
-            const base64 = Buffer.from(buf).toString('base64')
-            return {
-              title:    d.title,
-              number:   d.number,
-              revision: d.revision,
-              dataUrl:  `data:image/png;base64,${base64}`,
-            }
-          })
-        )
-        const validDrawings = drawingsWithData.filter(Boolean)
-
-        const appendRes = await fetch('/api/docs/append', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            inspectionId,
-            photos:   selectedPhotosList,
-            drawings: validDrawings,
-          }),
-        })
-
-        if (!appendRes.ok) {
-          const err = await appendRes.json()
-          throw new Error('Could not attach photos: ' + (err.error || 'Unknown error'))
-        }
-      }
-
-      const res = await fetch(
-        `/api/docs/${inspectionId}?download=true&t=${Date.now()}`,
-        { cache: 'no-store' }
-      )
-      if (!res.ok) throw new Error('Document not ready. Generate the report first.')
-
-      const blob = await res.blob()
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href     = url
-      a.download = `SiteReport_${reportNo || inspectionId}.docx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-
+      if (format === 'docx' || format === 'both') await downloadWord()
+      if (format === 'pdf'  || format === 'both') await downloadPdf()
     } catch (err: any) {
       console.error('Download error:', err)
       alert('Download failed: ' + err.message)
     } finally {
       setDownloading(false)
     }
+  }
+
+  useEffect(() => {
+    if (!showDownloadMenu) return
+    const close = () => setShowDownloadMenu(false)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [showDownloadMenu])
+
+  /** Shared menu body for the two Download buttons (header and sidebar).
+   *  `align` decides which edge it hangs from so it stays on screen. */
+  const renderDownloadMenu = (align: 'left' | 'right') => {
+    if (!showDownloadMenu) return null
+    const options: { format: 'docx' | 'pdf' | 'both'; label: string; hint: string }[] = [
+      { format: 'docx', label: 'Word',     hint: '.docx — editable' },
+      { format: 'pdf',  label: 'PDF',      hint: '.pdf — final layout' },
+      { format: 'both', label: 'Both',     hint: 'Word and PDF' },
+    ]
+    return (
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: 'absolute', top: 'calc(100% + 6px)',
+          [align]: 0,
+          zIndex: 40, minWidth: 208,
+          background: 'var(--surface)',
+          border: '1px solid var(--border-line)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--shadow-card-v3)',
+          padding: 6,
+        } as React.CSSProperties}
+      >
+        {options.map(opt => (
+          <button
+            key={opt.format}
+            onClick={() => downloadDoc(opt.format)}
+            style={{
+              width: '100%', textAlign: 'left',
+              background: 'none', border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              padding: '9px 11px', cursor: 'pointer',
+              display: 'block',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--paper)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+          >
+            <div style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>
+              {opt.label}
+            </div>
+            <div style={{ fontFamily: 'var(--f-text)', fontSize: 11.5, color: 'var(--text-mid)', marginTop: 1 }}>
+              {opt.hint}
+            </div>
+          </button>
+        ))}
+      </div>
+    )
   }
 
   // ── INSERT ATTACHMENTS INTO EDITOR ───────────────────────────────────────────
@@ -668,8 +766,9 @@ export default function ReportPage() {
                 <span className="report-btn-text">Edit Report</span>
               </button>
             )}
+            <div style={{ position: 'relative' }}>
             <button
-              onClick={downloadDoc}
+              onClick={e => { e.stopPropagation(); setShowDownloadMenu(v => !v) }}
               disabled={downloading || !docReady}
               style={{
                 background: 'var(--surface)',
@@ -704,14 +803,18 @@ export default function ReportPage() {
                 <>
                   <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   <span className="report-btn-text">Download</span>
+                  <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.4" viewBox="0 0 24 24" style={{ marginLeft: -1 }}><polyline points="6 9 12 15 18 9"/></svg>
                 </>
               ) : (
                 <>
                   <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   <span className="report-btn-text">Download</span>
+                  <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.4" viewBox="0 0 24 24" style={{ marginLeft: -1 }}><polyline points="6 9 12 15 18 9"/></svg>
                 </>
               )}
             </button>
+            {renderDownloadMenu('right')}
+            </div>
           </div>
         </header>
 
@@ -1282,8 +1385,9 @@ export default function ReportPage() {
               </button>
 
               {/* Download button */}
+              <div style={{ position: 'relative' }}>
               <button
-                onClick={downloadDoc}
+                onClick={e => { e.stopPropagation(); setShowDownloadMenu(v => !v) }}
                 disabled={downloading || !docReady}
                 style={{
                   width: '100%',
@@ -1319,9 +1423,12 @@ export default function ReportPage() {
                   <>
                     <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     Download
+                    <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.4" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
                   </>
                 )}
               </button>
+              {renderDownloadMenu('left')}
+              </div>
             </div>
           </div>
 
