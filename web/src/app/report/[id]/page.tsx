@@ -12,6 +12,8 @@ const OnlyOfficeEditor = dynamic(() => import('@/components/OnlyOfficeEditor'), 
 type Inspection = {
   id: string; date: string; report_no: string; weather: string
   site_contact: string; contact_phone: string; purpose: string
+  // Optional: only present once the report_file_name column exists.
+  report_file_name?: string | null
 }
 type PageData = {
   inspection: Inspection
@@ -49,6 +51,9 @@ export default function ReportPage() {
   const [notesCount,         setNotesCount]          = useState(0)
   const [downloading,        setDownloading]         = useState(false)
   const [showDownloadMenu,   setShowDownloadMenu]     = useState(false)
+  const [customFileName,     setCustomFileName]       = useState<string | null>(null)
+  const [fileNameDraft,      setFileNameDraft]        = useState('')
+  const [savingFileName,     setSavingFileName]       = useState(false)
   const [editorError,        setEditorError]         = useState(false)
   const [inserting,          setInserting]           = useState(false)
   const [reloadingEditor,    setReloadingEditor]     = useState(false)
@@ -80,6 +85,9 @@ export default function ReportPage() {
       })
       const status = (inspRes.data as any)?.report_status ?? 'pending'
       setReportStatus(status)
+      // undefined until the report_file_name column exists; null/'' means
+      // "use the derived name".
+      setCustomFileName((inspRes.data as any)?.report_file_name ?? null)
       setLoading(false)
 
       loadAttachments(id)
@@ -207,8 +215,37 @@ export default function ReportPage() {
     URL.revokeObjectURL(url)
   }
 
-  const baseFileName = () =>
+  const derivedFileName = () =>
     reportFileName(pageData?.project?.name, reportNo, inspectionId)
+
+  /** The custom name if one has been saved, otherwise the derived one. */
+  const baseFileName = () => (customFileName?.trim() || derivedFileName())
+
+  const saveFileName = async () => {
+    const next = fileNameDraft.trim()
+    setSavingFileName(true)
+    try {
+      const { error } = await supabase
+        .from('inspections')
+        // Blank clears it, so the report falls back to the derived name.
+        .update({ report_file_name: next || null })
+        .eq('id', inspectionId)
+      if (error) throw error
+      setCustomFileName(next || null)
+      setShowDownloadMenu(false)
+    } catch (err: any) {
+      console.error('[fileName] save failed:', err)
+      const missingColumn = /report_file_name/i.test(err?.message ?? '')
+      alert(
+        missingColumn
+          ? 'Renaming needs a one-off database change. Run this in the Supabase SQL editor:\n\n' +
+            'ALTER TABLE inspections ADD COLUMN report_file_name text;'
+          : 'Could not save the file name: ' + (err?.message || 'unknown error')
+      )
+    } finally {
+      setSavingFileName(false)
+    }
+  }
 
   /** Rebuilds the managed attachments section from the current selection,
    *  then force-saves the live editing session — so whichever format is
@@ -356,6 +393,47 @@ export default function ReportPage() {
           padding: 6,
         } as React.CSSProperties}
       >
+        {/* File name — editable here, where you're about to use it. */}
+        <div style={{ padding: '8px 9px 10px', borderBottom: '1px solid var(--border-line)', marginBottom: 4 }}>
+          <div style={{
+            fontFamily: 'var(--f-heading)', fontSize: 10.5, fontWeight: 700,
+            letterSpacing: '.5px', textTransform: 'uppercase',
+            color: 'var(--text-mid)', marginBottom: 6,
+          }}>
+            File name
+          </div>
+          <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+            <input
+              type="text"
+              value={fileNameDraft}
+              placeholder={derivedFileName()}
+              onChange={e => setFileNameDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveFileName() } }}
+              style={{
+                flex: 1, minWidth: 0, padding: '7px 9px',
+                border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)',
+                fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-ink)',
+                outline: 'none', background: 'var(--surface)',
+              }}
+            />
+            <button
+              onClick={saveFileName}
+              disabled={savingFileName}
+              style={{
+                background: 'var(--indigo)', color: 'white', border: 'none',
+                borderRadius: 'var(--radius-pill)', padding: '7px 12px',
+                fontFamily: 'var(--f-heading)', fontSize: 11.5, fontWeight: 700,
+                cursor: savingFileName ? 'default' : 'pointer', flexShrink: 0,
+              }}
+            >
+              {savingFileName ? '…' : 'Save'}
+            </button>
+          </div>
+          <div style={{ fontFamily: 'var(--f-text)', fontSize: 10.5, color: 'var(--text-mid)', marginTop: 5 }}>
+            Saves as <span style={{ fontWeight: 600 }}>{(fileNameDraft.trim() || baseFileName())}.docx / .pdf</span>
+          </div>
+        </div>
+
         {options.map(opt => (
           <button
             key={opt.format}
@@ -780,7 +858,13 @@ export default function ReportPage() {
             )}
             <div style={{ position: 'relative' }}>
             <button
-              onClick={e => { e.stopPropagation(); setShowDownloadMenu(v => !v) }}
+              onClick={e => {
+                e.stopPropagation()
+                setShowDownloadMenu(v => {
+                  if (!v) setFileNameDraft(customFileName ?? '')
+                  return !v
+                })
+              }}
               disabled={downloading || !docReady}
               style={{
                 background: 'var(--surface)',
