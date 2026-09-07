@@ -261,11 +261,11 @@ export default function SettingsPage() {
           .settings-card > div { padding: 16px !important; }
         }
       `}</style>
-      <div className="settings-content" style={{ maxWidth: 680, margin: '0 auto', padding: '32px 24px 56px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div className="settings-content" style={{ maxWidth: 680, margin: '0 auto', padding: '28px 24px 48px', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
         {/* Page heading */}
         <div>
-          <h1 style={{ fontFamily: 'var(--f-heading)', fontSize: 32, fontWeight: 800, color: 'var(--indigo-deep)', lineHeight: 1 }}>Settings</h1>
+          <h1 style={{ fontFamily: 'var(--f-heading)', fontSize: 26, fontWeight: 800, color: 'var(--indigo-deep)', lineHeight: 1.1 }}>Settings</h1>
           <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)', marginTop: 8 }}>
             Firm details, report templates and integrations for {firm?.name}.
           </div>
@@ -281,10 +281,10 @@ export default function SettingsPage() {
 
         {/* ── CARD 1: Firm Details ─────────────────────────── */}
         <Card className="settings-card">
-          <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--border-line)' }}>
-            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 17, fontWeight: 800, color: 'var(--text-ink)' }}>Firm details</h2>
+          <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-line)' }}>
+            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 800, color: 'var(--text-ink)' }}>Firm details</h2>
           </div>
-          <div style={{ padding: 28, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div>
               <label style={labelStyle}>Firm Name</label>
               <div style={{ display: 'flex', gap: 10 }}>
@@ -307,7 +307,7 @@ export default function SettingsPage() {
               </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ background: 'var(--indigo-soft)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)', padding: '10px 18px', flex: 1 }}>
-                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 24, fontWeight: 600, color: 'var(--indigo)', letterSpacing: '0.3em' }}>
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 19, fontWeight: 600, color: 'var(--indigo)', letterSpacing: '0.22em' }}>
                     {firm?.join_code ?? '—'}
                   </span>
                 </div>
@@ -321,8 +321,8 @@ export default function SettingsPage() {
 
         {/* ── CARD 2: Report Template ──────────────────────── */}
         <Card className="settings-card">
-          <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--border-line)' }}>
-            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 18, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 4 }}>Report template</h2>
+          <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-line)' }}>
+            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 3 }}>Report template</h2>
             <p style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.6, marginBottom: 10 }}>
               Upload your firm's Word template (.docx). Use these placeholders where AI content is inserted:
             </p>
@@ -331,15 +331,14 @@ export default function SettingsPage() {
               {'{{site_contact}}  {{purpose}}  {{findings}}  {{recommendations}}'}
             </div>
           </div>
-          <div style={{ padding: 28 }}>
+          <div style={{ padding: 22 }}>
             {firm?.report_template_url ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--sage-soft)', border: '1px solid rgba(91,146,121,.3)', borderRadius: 'var(--radius-sm)', padding: '14px 18px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ fontSize: 28 }}>📄</div>
-                  <div>
-                    <div style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>Template uploaded</div>
-                    <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--sage-ink)', marginTop: 2 }}>AI reports are enabled for your firm</div>
-                  </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--sage)', flexShrink: 0 }} />
+                  <span style={{ fontFamily: 'var(--f-text)', fontSize: 13.5, color: 'var(--text-ink)' }}>
+                    Template uploaded — AI reports enabled
+                  </span>
                 </div>
                 <Btn variant="outline" small onClick={() => templateInputRef.current?.click()}>Replace</Btn>
               </div>
@@ -351,7 +350,7 @@ export default function SettingsPage() {
                 onClick={() => templateInputRef.current?.click()}
                 style={{
                   border: `2px dashed ${templateDragging ? 'var(--indigo)' : 'var(--border-line)'}`,
-                  borderRadius: 'var(--radius-lg)', padding: 36, textAlign: 'center', cursor: 'pointer',
+                  borderRadius: 'var(--radius-md)', padding: 28, textAlign: 'center', cursor: 'pointer',
                   background: templateDragging ? 'var(--indigo-soft)' : 'var(--paper)',
                   transition: 'all .15s',
                 }}
@@ -363,9 +362,8 @@ export default function SettingsPage() {
                   </div>
                 ) : (
                   <>
-                    <div style={{ fontSize: 32, marginBottom: 10 }}>📄</div>
                     <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}>Drop your Word template here</div>
-                    <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 4 }}>or click to browse · .docx files only</div>
+                    <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 4 }}>or click to browse · .docx only</div>
                   </>
                 )}
               </div>
@@ -377,9 +375,9 @@ export default function SettingsPage() {
 
         {/* ── CARD 3: Microsoft 365 ────────────────────────── */}
         <Card className="settings-card">
-          <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--border-line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 18, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 4 }}>
+              <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 3 }}>
                 Microsoft 365
               </h2>
               <p style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)' }}>
@@ -405,46 +403,24 @@ export default function SettingsPage() {
             )}
           </div>
 
-          <div style={{ padding: 28 }}>
+          <div style={{ padding: 22 }}>
             {msLoading ? (
               <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-mid)', fontSize: 14 }}>
                 <Spinner size={18} />
               </div>
             ) : msToken ? (
-              /* CONNECTED STATE */
+              /* CONNECTED STATE — the header already carries a "Connected"
+                 pill, so this only needs the account and its actions. */
               <div>
                 <div style={{
-                  background: 'var(--sage-soft)',
-                  border: '1px solid rgba(91,146,121,.3)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '16px 20px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  marginBottom: 16,
                   flexWrap: 'wrap',
                   gap: 12,
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{
-                      width: 40, height: 40,
-                      background: 'var(--indigo)',
-                      borderRadius: 'var(--radius-sm)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'white',
-                      fontSize: 18,
-                      fontWeight: 700,
-                    }}>⊞</div>
-                    <div>
-                      <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}>
-                        Connected
-                      </div>
-                      <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 2 }}>
-                        {msToken.connected_email}
-                      </div>
-                    </div>
+                  <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-ink)' }}>
+                    {msToken.connected_email}
                   </div>
                   <div style={{ display: 'flex', gap: 10 }}>
                     <a
@@ -486,53 +462,23 @@ export default function SettingsPage() {
                 </div>
 
                 <div style={{
-                  background: 'var(--indigo-soft)',
-                  border: '1px solid var(--border-line)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '12px 16px',
-                  fontFamily: 'var(--f-text)',
-                  fontSize: 13,
-                  color: 'var(--indigo)',
-                  lineHeight: 1.5,
+                  fontFamily: 'var(--f-text)', fontSize: 12.5,
+                  color: 'var(--text-mid)', lineHeight: 1.55, marginTop: 12,
                 }}>
-                  ✅ Reports will automatically open in Word Online for editing. Files are saved to your OneDrive under
-                  <strong> SiteIQ Reports/</strong>
+                  Reports open in Word Online and save to your OneDrive under <strong style={{ color: 'var(--text-ink)' }}>SiteIQ Reports/</strong>.
                 </div>
               </div>
             ) : (
               /* DISCONNECTED STATE */
               <div style={{
-                background: 'var(--indigo-soft)',
-                border: '1px solid var(--border-line)',
-                borderRadius: 'var(--radius-md)',
-                padding: '20px 24px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
                 gap: 16,
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{
-                    width: 44, height: 44,
-                    background: 'var(--indigo)',
-                    borderRadius: 'var(--radius-sm)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontSize: 20,
-                    fontWeight: 700,
-                    flexShrink: 0,
-                  }}>⊞</div>
-                  <div>
-                    <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>
-                      Not connected
-                    </div>
-                    <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 3 }}>
-                      Connect your Microsoft 365 work account to edit reports in Word Online
-                    </div>
-                  </div>
+                <div style={{ fontFamily: 'var(--f-text)', fontSize: 13.5, color: 'var(--text-mid)', lineHeight: 1.55 }}>
+                  Not connected. Connect a Microsoft 365 work account to edit reports in Word Online.
                 </div>
                 <button
                   onClick={connectMicrosoft}
@@ -549,31 +495,12 @@ export default function SettingsPage() {
                     flexShrink: 0,
                   }}
                 >
-                  Connect Microsoft 365
+                  Connect
                 </button>
               </div>
             )}
           </div>
         </Card>
-
-        {/* ── CARD 4: Danger Zone ──────────────────────────── */}
-        <div style={{ border: '1px solid var(--clay)', borderRadius: 'var(--radius-md)', overflow: 'hidden', boxShadow: 'var(--shadow-card-v3)' }}>
-          <div style={{ padding: '22px 28px', borderBottom: '1px solid var(--clay)', background: 'var(--clay-soft)' }}>
-            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 17, fontWeight: 800, color: 'var(--clay-ink)' }}>Danger zone</h2>
-            <p style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--clay-ink)', opacity: 0.85, marginTop: 2 }}>Irreversible actions — proceed with caution</p>
-          </div>
-          <div style={{ padding: 28, background: 'var(--surface)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0' }}>
-              <div>
-                <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>Delete Account</div>
-                <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 4 }}>Permanently delete your firm and all associated data</div>
-              </div>
-              <Btn variant="danger" onClick={() => { if (confirm('This will permanently delete your firm and all data. This cannot be undone. Are you sure?')) alert('Please contact support to delete your account.') }}>
-                Delete Account
-              </Btn>
-            </div>
-          </div>
-        </div>
 
       </div>
     </Shell>
