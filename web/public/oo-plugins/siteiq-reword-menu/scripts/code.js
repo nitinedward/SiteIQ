@@ -22,6 +22,9 @@
   var TONES = ['More formal', 'More concise', 'Plainer language', 'More detailed', 'Neutral/technical']
   var ITEM_PREFIX = 'siteiq_rwm_'
   var WINDOW_READY_TIMEOUT = 3000
+  var LOG = '[reword-menu]'
+
+  console.log(LOG, 'code.js loaded')
 
   var pending = null // { original, rewrite }
   var busy = false
@@ -78,6 +81,7 @@
 
   function showPreview() {
     if (!pending) return
+    console.log(LOG, 'showPreview, Asc.PluginWindow available =', !!window.Asc.PluginWindow)
 
     if (!window.Asc.PluginWindow) { confirmFallback(); return }
 
@@ -121,10 +125,12 @@
   }
 
   function runRewrite(tone) {
+    console.log(LOG, 'runRewrite tone=', tone, 'busy=', busy)
     if (busy) return
     busy = true
     api().executeMethod('GetSelectedText', [], function (text) {
       var selected = (text || '').trim()
+      console.log(LOG, 'GetSelectedText ->', JSON.stringify(selected.slice(0, 80)))
       if (!selected) {
         busy = false
         window.alert('Select some text in the document first.')
@@ -132,21 +138,26 @@
       }
       fetchRewrite(selected, tone)
         .then(function (rewrite) {
+          console.log(LOG, 'rewrite received, length', rewrite.length)
           pending = { original: selected, rewrite: rewrite, tone: tone || '' }
           showPreview()
         })
         .catch(function (err) {
           busy = false
           pending = null
+          console.error(LOG, 'rewrite failed', err)
           window.alert('Could not rewrite that passage:\n\n' + (err && err.message ? err.message : 'Unknown error'))
         })
     })
   }
 
-  window.Asc.plugin.init = function () { /* nothing to show — menu only */ }
+  window.Asc.plugin.init = function () {
+    console.log(LOG, 'init fired — menu plugin running')
+  }
   window.Asc.plugin.button = function () { this.executeCommand('close', '') }
 
   window.Asc.plugin.event_onContextMenuShow = function (options) {
+    console.log(LOG, 'onContextMenuShow type=', options && options.type)
     if (!options || options.type !== 'Selection') return
 
     var items = [{ id: ITEM_PREFIX + 'default', text: 'Rewrite' }]
@@ -158,13 +169,23 @@
       guid: this.guid,
       items: [{ id: ITEM_PREFIX + 'root', text: 'Reword with AI', items: items }],
     }])
+    console.log(LOG, 'context menu item added')
   }
 
+  // The root row is wired up too: on some builds a parent row with children
+  // is click-through rather than submenu-only, and picking it should do the
+  // sensible default rather than nothing.
+  window.Asc.plugin.attachContextMenuClickEvent(ITEM_PREFIX + 'root', function () {
+    console.log(LOG, 'context click: root')
+    runRewrite(null)
+  })
   window.Asc.plugin.attachContextMenuClickEvent(ITEM_PREFIX + 'default', function () {
+    console.log(LOG, 'context click: default')
     runRewrite(null)
   })
   TONES.forEach(function (tone) {
     window.Asc.plugin.attachContextMenuClickEvent(ITEM_PREFIX + tone, function () {
+      console.log(LOG, 'context click: ' + tone)
       runRewrite(tone)
     })
   })
