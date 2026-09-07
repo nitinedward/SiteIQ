@@ -30,12 +30,24 @@
 (function (window, undefined) {
   var ITEM_ID = 'siteiq_rwm_open'
   var LOG = '[reword-menu]'
-  var CARD_WIDTH = 380
+  var CARD_WIDTH = 392
+
+  // One-click presets. The label is what the user sees; the instruction is
+  // what Claude is told, so it can be more explicit than the chip allows.
+  var PRESETS = [
+    { label: 'More formal',   tone: 'more formal and professional' },
+    { label: 'More casual',   tone: 'more casual and conversational, while staying professional' },
+    { label: 'More concise',  tone: 'more concise — same meaning, fewer words' },
+    { label: 'More detailed', tone: 'more detailed and specific, without inventing any new facts' },
+    { label: 'Fix grammar',   tone: 'corrected for grammar, spelling and punctuation only — keep the wording and tone as close to the original as possible' },
+    { label: 'Plainer',       tone: 'in plainer language, easier for a non-engineer to read' },
+  ]
 
   var els = {}
   var state = {
     open: false,
     original: '',
+    lastTone: null,
     rewrite: null,
     busy: false,
   }
@@ -95,21 +107,34 @@
     els.btnAccept.disabled = state.busy
   }
 
+  function buildChips() {
+    els.chips.innerHTML = ''
+    PRESETS.forEach(function (preset) {
+      var b = document.createElement('button')
+      b.className = 'chip'
+      b.textContent = preset.label
+      // A preset is a complete instruction on its own — one click runs it,
+      // rather than making the user click a chip and then Rewrite.
+      b.onclick = function () { runRewrite(preset.tone) }
+      els.chips.appendChild(b)
+    })
+  }
+
   // ── REWRITE ───────────────────────────────────────────────────────────
-  function runRewrite() {
+  /** `tone` from a preset chip; otherwise whatever is typed in the box. */
+  function runRewrite(tone) {
     if (state.busy || !state.original) return
     state.busy = true
+    state.lastTone = tone || (els.tone.value || '').trim() || null
     showError('')
     render()
-
-    var custom = (els.tone.value || '').trim()
 
     fetch('/api/docs/rewrite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         selectedText: state.original,
-        tone: custom || undefined,
+        tone: state.lastTone || undefined,
       }),
     })
       .then(function (res) {
@@ -174,6 +199,7 @@
     els.card = $('card')
     els.orig = $('orig')
     els.ask = $('ask')
+    els.chips = $('chips')
     els.tone = $('tone')
     els.btnGo = $('btnGo')
     els.out = $('out')
@@ -184,7 +210,8 @@
     els.btnClose = $('btnClose')
     els.err = $('err')
 
-    els.btnGo.onclick = runRewrite
+    // Wrapped: a bare handler would pass the click event in as `tone`.
+    els.btnGo.onclick = function () { runRewrite() }
     els.btnAccept.onclick = acceptRewrite
     els.btnDiscard.onclick = closeAll
     els.btnClose.onclick = closeAll
@@ -202,6 +229,7 @@
       if (e.keyCode === 27) closeAll()
     }
 
+    buildChips()
     render()
   }
 
