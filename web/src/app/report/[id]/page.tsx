@@ -221,6 +221,24 @@ export default function ReportPage() {
   /** The custom name if one has been saved, otherwise the derived one. */
   const baseFileName = () => (customFileName?.trim() || derivedFileName())
 
+  /** Persists a name typed into the editor's own title bar. OnlyOffice
+   *  sends the bare name, but a user may still type an extension — strip it
+   *  so it isn't doubled up when we append .docx/.pdf. */
+  const renameFromEditor = useCallback(async (newName: string) => {
+    const clean = newName.replace(/\.(docx|pdf)$/i, '').trim()
+    if (!clean) return
+    const { error } = await supabase
+      .from('inspections')
+      .update({ report_file_name: clean })
+      .eq('id', inspectionId)
+    if (error) {
+      console.error('[rename] save failed:', error)
+      alert('Could not save the new file name: ' + error.message)
+      return
+    }
+    setCustomFileName(clean)
+  }, [inspectionId])
+
   const saveFileName = async () => {
     const next = fileNameDraft.trim()
     setSavingFileName(true)
@@ -1535,6 +1553,7 @@ export default function ReportPage() {
                     sessionKey={editorKey}
                     inspectionId={inspectionId}
                     fileName={`${baseFileName()}.docx`}
+                    onRename={renameFromEditor}
                     editable={reportStatus !== 'finalised'}
                     onReady={() => { console.log('[OnlyOffice] editor ready'); setEditorError(false) }}
                     onError={() => setEditorError(true)}

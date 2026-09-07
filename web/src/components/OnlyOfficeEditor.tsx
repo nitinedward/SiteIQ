@@ -9,6 +9,9 @@ interface OnlyOfficeEditorProps {
   sessionKey: number
   onReady?: () => void
   onError?: () => void
+  /** Enables renaming from the editor's own title in the top bar. Receives
+   *  the new name (no extension). Omit to leave the title read-only. */
+  onRename?: (newName: string) => void
 }
 
 export default function OnlyOfficeEditor({
@@ -18,7 +21,13 @@ export default function OnlyOfficeEditor({
   sessionKey,
   onReady,
   onError,
+  onRename,
 }: OnlyOfficeEditorProps) {
+  // Kept in a ref so the value used by the editor callback is always the
+  // current one — the editor is constructed once and never re-created when
+  // this prop changes identity.
+  const onRenameRef = useRef(onRename)
+  onRenameRef.current = onRename
   const containerRef  = useRef<HTMLDivElement>(null)
   const editorRef     = useRef<any>(null)
   const scriptLoaded  = useRef(false)
@@ -62,6 +71,13 @@ export default function OnlyOfficeEditor({
           editorConfig: {
             callbackUrl,
             mode: editable ? 'edit' : 'view',
+            // Makes the title in the editor's top bar click-to-rename.
+            // DocsAPI.DocEditor derives this from events.onRequestRename,
+            // which can't be in the signed payload (functions don't
+            // serialise) — so it is set here too, before signing, or the
+            // constructor would add a field the token doesn't cover and the
+            // config would no longer match it.
+            canRename: !!onRename && editable,
             user: {
               id: 'siteiq-user',
               name: 'SiteIQ Engineer',
@@ -128,6 +144,17 @@ export default function OnlyOfficeEditor({
         console.log('[editor] token received, length:', tokenData.token.length)
 
         config.token = tokenData.token
+
+        // Attached after signing: callbacks are client-side only and never
+        // reach the Document Server, so they are not part of the token.
+        if (onRename && editable) {
+          config.events = {
+            onRequestRename: (event: any) => {
+              const name = String(event?.data ?? '').trim()
+              if (name) onRenameRef.current?.(name)
+            },
+          }
+        }
 
         // Load script with auto-retry
         const MAX_RETRIES = 3
