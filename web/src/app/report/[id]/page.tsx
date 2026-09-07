@@ -45,6 +45,7 @@ export default function ReportPage() {
   const [selectedPhotos,     setSelectedPhotos]      = useState<SelectedPhoto[]>([])
   const [drawings,           setDrawings]            = useState<DrawingInfo[]>([])
   const [loadingAttachments, setLoadingAttachments]  = useState(false)
+  const [notesCount,         setNotesCount]          = useState(0)
   const [downloading,        setDownloading]         = useState(false)
   const [showDownloadMenu,   setShowDownloadMenu]     = useState(false)
   const [editorError,        setEditorError]         = useState(false)
@@ -510,6 +511,12 @@ export default function ReportPage() {
         })
       })
 
+      // Voice notes: an observation's transcript is the dictated note, so
+      // the count is observations that actually carry one.
+      setNotesCount(
+        (obsData ?? []).filter((ob: any) => typeof ob.transcript === 'string' && ob.transcript.trim()).length
+      )
+
       const allPhotos: SelectedPhoto[] = []
       ;(obsData ?? []).forEach((ob: any) => {
         let photos: string[] = []
@@ -888,7 +895,9 @@ export default function ReportPage() {
                 Attachments
               </div>
               <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 4 }}>
-                Included when you download
+                {pageData?.inspection?.date
+                  ? `Captured on site, ${new Date(pageData.inspection.date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                  : 'Included when you download'}
               </div>
 
               {/* 3 stat boxes */}
@@ -909,11 +918,11 @@ export default function ReportPage() {
                     icon2: <polyline points="14,2 14,8 20,8"/>,
                   },
                   {
-                    label: 'Total',
-                    value: totalAttachments,
+                    label: 'Notes',
+                    value: notesCount,
                     total: null as number | null,
-                    icon: <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>,
-                    icon2: null,
+                    icon: <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>,
+                    icon2: <path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/>,
                   },
                 ] as const).map(stat => (
                   <div
@@ -1302,44 +1311,19 @@ export default function ReportPage() {
               background: 'var(--paper)',
               flexShrink: 0,
             }}>
-              {/* Summary text */}
+              {/* Selection summary, per the mock. Drawings are appended only
+                  when some are selected, so the common photo-only case reads
+                  exactly as designed without hiding that drawings are going
+                  in too. */}
               <div style={{
-                fontSize: 11, color: 'var(--text-mid)',
-                textAlign: 'center', marginBottom: 10,
-                fontFamily: 'var(--f-mono)', lineHeight: 1.5,
+                fontSize: 12, textAlign: 'center', marginBottom: 10,
+                fontFamily: 'var(--f-text)', fontWeight: 600,
+                color: 'var(--sage-ink)', lineHeight: 1.5,
               }}>
-                {(() => {
-                  const pc = selPhotoCount
-                  const dc = selDrawingCount
-                  const zc = new Set(
-                    selectedPhotos.filter(p => p.selected).map(p => p.zoneLabel)
-                  ).size
-
-                  if (pc === 0 && dc === 0) {
-                    return (
-                      <span style={{ color: 'var(--text-mid)' }}>
-                        Select photos or drawings to include in report
-                      </span>
-                    )
-                  }
-
-                  const parts: string[] = []
-                  if (pc > 0) parts.push(
-                    `${pc} photo${pc !== 1 ? 's' : ''}` +
-                    (zc > 0 ? ` from ${zc} zone${zc !== 1 ? 's' : ''}` : '')
-                  )
-                  if (dc > 0) parts.push(`${dc} drawing${dc !== 1 ? 's' : ''}`)
-
-                  return (
-                    <span style={{ color: 'var(--text-ink)' }}>
-                      {parts.join(' · ')}
-                      <br />
-                      <span style={{ color: 'var(--sage-ink)', fontWeight: 700 }}>
-                        ✓ Will be included on download
-                      </span>
-                    </span>
-                  )
-                })()}
+                {selPhotoCount} of {selectedPhotos.length} photo{selectedPhotos.length !== 1 ? 's' : ''} selected
+                {selDrawingCount > 0 && (
+                  <> · {selDrawingCount} drawing{selDrawingCount !== 1 ? 's' : ''}</>
+                )}
               </div>
 
               {/* Update Document button — replaces the whole inserted
@@ -1379,56 +1363,11 @@ export default function ReportPage() {
                 ) : (
                   <>
                     <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                    Update Document
+                    Insert into Document
                   </>
                 )}
               </button>
 
-              {/* Download button */}
-              <div style={{ position: 'relative' }}>
-              <button
-                onClick={e => { e.stopPropagation(); setShowDownloadMenu(v => !v) }}
-                disabled={downloading || !docReady}
-                style={{
-                  width: '100%',
-                  background: downloading ? 'var(--paper)' : 'var(--indigo)',
-                  color: downloading ? 'var(--text-mid)' : 'white',
-                  border: 'none',
-                  borderRadius: 'var(--radius-pill)',
-                  padding: '11px 14px',
-                  fontFamily: 'var(--f-heading)',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: downloading || !docReady ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 7,
-                  transition: 'all 0.15s',
-                  opacity: !docReady ? 0.5 : 1,
-                }}
-              >
-                {downloading ? (
-                  <>
-                    <div style={{
-                      width: 13, height: 13,
-                      border: '2px solid var(--border-line)',
-                      borderTopColor: 'white',
-                      borderRadius: '50%',
-                      animation: 'spin 0.7s linear infinite',
-                    }} />
-                    Preparing download...
-                  </>
-                ) : (
-                  <>
-                    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    Download
-                    <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.4" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-                  </>
-                )}
-              </button>
-              {renderDownloadMenu('left')}
-              </div>
             </div>
           </div>
 
