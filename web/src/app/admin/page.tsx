@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { Shell, Badge, Btn, Spinner, Card, NewProjectModal } from '@/components/Shell'
+import { reportDisplayName } from '@/lib/reportFileName'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL ??
@@ -1196,7 +1197,9 @@ function AdminPageInner() {
                                       #{ins.report_no ?? '—'}
                                     </span>
                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                      <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>Site inspection report</div>
+                                      <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>
+                                        {reportDisplayName((ins as any).report_file_name, null, 'Site inspection report')}
+                                      </div>
                                       <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 2 }}>{ins.date ?? '—'}</div>
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>

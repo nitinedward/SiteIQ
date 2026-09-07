@@ -13,6 +13,18 @@ function sanitise(name: string): string {
     .trim()
 }
 
+/** What a report is called wherever it's listed — the report page header,
+ *  the dashboard, the admin project view. A custom name set on the report
+ *  wins; otherwise it falls back to the project name, which is what these
+ *  lists showed before renaming existed. */
+export function reportDisplayName(
+  customName: string | null | undefined,
+  projectName: string | null | undefined,
+  fallback = '—'
+): string {
+  return customName?.trim() || projectName?.trim() || fallback
+}
+
 export function reportFileName(
   projectName: string | null | undefined,
   reportNo: string | null | undefined,

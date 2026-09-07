@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { Shell, Spinner, Card, NewProjectModal } from '@/components/Shell'
+import { reportDisplayName } from '@/lib/reportFileName'
 
 // ── TYPES ─────────────────────────────────────────────────────────────────────
 type Project = {
@@ -485,7 +486,7 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
-                      {(ins.projects as any)?.name ?? '—'}
+                      {reportDisplayName((ins as any).report_file_name, (ins.projects as any)?.name)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
                       <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)' }}>{ins.date}</span>
@@ -568,7 +569,7 @@ export default function DashboardPage() {
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {(ins.projects as any)?.name ?? '—'}
+                          {reportDisplayName((ins as any).report_file_name, (ins.projects as any)?.name)}
                         </div>
                         <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 1 }}>{ins.date}</div>
                       </div>
