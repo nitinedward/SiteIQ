@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import { captureDrawingWithMarkup } from '@/lib/captureDrawing'
+import { reportFileName } from '@/lib/reportFileName'
 import dynamic from 'next/dynamic'
 
 const OnlyOfficeEditor = dynamic(() => import('@/components/OnlyOfficeEditor'), { ssr: false })
@@ -116,10 +117,13 @@ export default function ReportPage() {
   const loadFrozenPdf = useCallback(async (inspId: string) => {
     setLoadingFrozenPdf(true)
     try {
+      // pdf-url only tells us whether a frozen PDF exists; the viewer is
+      // pointed at our own route rather than the signed storage URL, whose
+      // object is named after the inspection UUID and would show that as
+      // the file name in the PDF viewer.
       const res = await fetch(`/api/docs/pdf-url?inspectionId=${inspId}`, { cache: 'no-store' })
       if (res.ok) {
-        const data = await res.json()
-        setFrozenPdfUrl(data.url)
+        setFrozenPdfUrl(`/api/docs/frozen-pdf?inspectionId=${inspId}&t=${Date.now()}`)
       } else {
         setFrozenPdfUrl(null)
       }
@@ -203,7 +207,8 @@ export default function ReportPage() {
     URL.revokeObjectURL(url)
   }
 
-  const baseFileName = () => `SiteReport_${reportNo || inspectionId}`
+  const baseFileName = () =>
+    reportFileName(pageData?.project?.name, reportNo, inspectionId)
 
   /** Rebuilds the managed attachments section from the current selection,
    *  then force-saves the live editing session — so whichever format is
@@ -1445,7 +1450,7 @@ export default function ReportPage() {
                     key={editorKey}
                     sessionKey={editorKey}
                     inspectionId={inspectionId}
-                    fileName={`Report_${reportNo || inspectionId}.docx`}
+                    fileName={`${baseFileName()}.docx`}
                     editable={reportStatus !== 'finalised'}
                     onReady={() => { console.log('[OnlyOffice] editor ready'); setEditorError(false) }}
                     onError={() => setEditorError(true)}
