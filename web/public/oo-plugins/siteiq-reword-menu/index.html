@@ -2,12 +2,128 @@
 <html>
 <head>
     <meta charset="UTF-8" />
-    <title>SiteIQ Reword Menu</title>
+    <title>Reword with AI</title>
     <script type="text/javascript" src="https://onlyoffice.site-iq.co.nz/sdkjs-plugins/v1/plugins.js"></script>
     <script type="text/javascript" src="https://onlyoffice.site-iq.co.nz/sdkjs-plugins/v1/plugins-ui.js"></script>
-    <link rel="stylesheet" href="https://onlyoffice.site-iq.co.nz/sdkjs-plugins/v1/plugins.css">
-    <script type="text/javascript" src="scripts/code.js"></script>
+    <style>
+        :root {
+            --accent: #2c5282;
+            --accent-soft: #edf2fb;
+            --ink: #1a1917;
+            --mid: #8a857c;
+            --line: #e4e0d9;
+            --paper: #f8f7f5;
+            --sage: #27705a;
+            --sage-soft: #eaf5f0;
+            --red: #c0392b;
+        }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; background: transparent; }
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 13px;
+            color: var(--ink);
+        }
+        /* The whole body is the floating card — the editor sizes this iframe
+           to us and parks it next to the caret. */
+        #card {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            box-shadow: 0 8px 28px rgba(0,0,0,.16), 0 2px 6px rgba(0,0,0,.08);
+            padding: 12px;
+        }
+        .head {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 13px; font-weight: 700; color: var(--accent);
+            margin-bottom: 9px;
+        }
+        .head .sp { flex: 1; }
+        .x {
+            background: none; border: none; cursor: pointer;
+            color: var(--mid); font-size: 17px; line-height: 1; padding: 0 2px;
+        }
+        .orig {
+            font-size: 12px; color: var(--mid); line-height: 1.45;
+            max-height: 44px; overflow: hidden;
+            padding-left: 8px; border-left: 2px solid var(--line);
+            margin-bottom: 10px;
+        }
+        .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+        .chip {
+            background: #fff; border: 1px solid var(--line); border-radius: 999px;
+            padding: 4px 10px; font-family: inherit; font-size: 11.5px;
+            font-weight: 600; color: var(--ink); cursor: pointer;
+        }
+        .chip:hover { border-color: var(--accent); }
+        .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+        input[type=text] {
+            width: 100%; padding: 8px 10px;
+            border: 1px solid var(--line); border-radius: 8px;
+            font-family: inherit; font-size: 12.5px; color: var(--ink);
+            outline: none;
+        }
+        input[type=text]:focus { border-color: var(--accent); }
+        .go {
+            width: 100%; margin-top: 8px;
+            background: var(--accent); color: #fff; border: none;
+            border-radius: 8px; padding: 9px;
+            font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+        }
+        .go:disabled { background: var(--line); color: var(--mid); cursor: default; }
+        .result {
+            margin-top: 10px; padding: 10px;
+            background: var(--sage-soft); border: 1px solid rgba(39,112,90,.25);
+            border-radius: 8px; line-height: 1.5;
+            max-height: 190px; overflow-y: auto;
+            white-space: pre-wrap; word-break: break-word;
+        }
+        .row { display: flex; gap: 6px; margin-top: 9px; }
+        .row button {
+            flex: 1; border-radius: 8px; padding: 8px;
+            font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer;
+        }
+        .ghost { background: #fff; border: 1px solid var(--line); color: var(--ink); }
+        .accept { background: var(--sage); border: none; color: #fff; }
+        .err { margin-top: 9px; color: var(--red); font-size: 12px; line-height: 1.45; }
+        .hidden { display: none !important; }
+        .spin {
+            display: inline-block; width: 11px; height: 11px; vertical-align: -1px;
+            border: 2px solid rgba(255,255,255,.45); border-top-color: #fff;
+            border-radius: 50%; animation: sp .7s linear infinite; margin-right: 6px;
+        }
+        @keyframes sp { to { transform: rotate(360deg); } }
+    </style>
 </head>
 <body>
+    <div id="card">
+        <div class="head">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/></svg>
+            <span>Reword with AI</span>
+            <span class="sp"></span>
+            <button class="x" id="btnClose" title="Close">&times;</button>
+        </div>
+
+        <div id="orig" class="orig"></div>
+
+        <div id="ask">
+            <div class="chips" id="chips"></div>
+            <input type="text" id="tone" placeholder="Or describe the tone you want…" autocomplete="off" />
+            <button class="go" id="btnGo">Rewrite</button>
+        </div>
+
+        <div id="out" class="hidden">
+            <div class="result" id="result"></div>
+            <div class="row">
+                <button class="ghost" id="btnRetry">Try again</button>
+                <button class="ghost" id="btnDiscard">Discard</button>
+                <button class="accept" id="btnAccept">Accept</button>
+            </div>
+        </div>
+
+        <div id="err" class="err hidden"></div>
+    </div>
+
+    <script type="text/javascript" src="scripts/code.js"></script>
 </body>
 </html>
