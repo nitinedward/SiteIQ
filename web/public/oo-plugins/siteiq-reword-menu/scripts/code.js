@@ -28,8 +28,7 @@
  * every click silently vanish.
  */
 (function (window, undefined) {
-  var TONES = ['More formal', 'More concise', 'Plainer language', 'More detailed', 'Neutral/technical']
-  var ITEM_PREFIX = 'siteiq_rwm_'
+  var ITEM_ID = 'siteiq_rwm_open'
   var LOG = '[reword-menu]'
   var CARD_WIDTH = 380
 
@@ -37,7 +36,6 @@
   var state = {
     open: false,
     original: '',
-    tone: null,
     rewrite: null,
     busy: false,
   }
@@ -49,13 +47,16 @@
   // ShowInputHelper(guid, width, height, takeKeyboard) parks this plugin's
   // iframe beside the caret and sizes it. Keyboard is taken so the custom
   // tone field is typeable.
-  function showCard() {
+  function showCard(focusInput) {
     state.open = true
     // Measure after the DOM has settled so the card is sized to its content.
     window.setTimeout(function () {
       var card = $('card')
-      var h = card ? Math.min(card.offsetHeight + 4, 460) : 260
+      var h = card ? Math.min(card.offsetHeight + 4, 460) : 240
       api().executeMethod('ShowInputHelper', [api().guid, CARD_WIDTH, h, true])
+      if (focusInput && els.tone) {
+        window.setTimeout(function () { try { els.tone.focus() } catch (e) {} }, 60)
+      }
     }, 0)
   }
 
@@ -94,20 +95,6 @@
     els.btnAccept.disabled = state.busy
   }
 
-  function buildChips() {
-    els.chips.innerHTML = ''
-    TONES.forEach(function (tone) {
-      var b = document.createElement('button')
-      b.className = state.tone === tone ? 'chip active' : 'chip'
-      b.textContent = tone
-      b.onclick = function () {
-        state.tone = (state.tone === tone) ? null : tone
-        buildChips()
-      }
-      els.chips.appendChild(b)
-    })
-  }
-
   // ── REWRITE ───────────────────────────────────────────────────────────
   function runRewrite() {
     if (state.busy || !state.original) return
@@ -122,8 +109,7 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         selectedText: state.original,
-        tone: state.tone || undefined,
-        instruction: custom || undefined,
+        tone: custom || undefined,
       }),
     })
       .then(function (res) {
@@ -160,8 +146,9 @@
     })
   }
 
-  /** Entry point from the right-click menu. */
-  function startFlow(tone) {
+  /** Entry point from the right-click menu: open the card with the tone box
+   *  focused and wait for the user to say how they want it read. */
+  function startFlow() {
     if (state.busy) return
     api().executeMethod('GetSelectedText', [], function (text) {
       var selected = (text || '').trim()
@@ -171,17 +158,12 @@
         return
       }
       state.original = selected
-      state.tone = tone || null
       state.rewrite = null
       state.busy = false
       if (els.tone) els.tone.value = ''
       showError('')
-      buildChips()
       render()
-      showCard()
-      // A tone picked straight from the menu means the user already said
-      // what they want — go, rather than making them click Rewrite too.
-      if (tone) runRewrite()
+      showCard(true)
     })
   }
 
@@ -192,7 +174,6 @@
     els.card = $('card')
     els.orig = $('orig')
     els.ask = $('ask')
-    els.chips = $('chips')
     els.tone = $('tone')
     els.btnGo = $('btnGo')
     els.out = $('out')
@@ -207,10 +188,12 @@
     els.btnAccept.onclick = acceptRewrite
     els.btnDiscard.onclick = closeAll
     els.btnClose.onclick = closeAll
+    // "Try again" returns to the tone box with what they typed still there,
+    // so it can be tweaked rather than retyped.
     els.btnRetry.onclick = function () {
       state.rewrite = null
       render()
-      showCard()
+      showCard(true)
     }
     els.tone.onkeydown = function (e) {
       if (e.keyCode === 13) { e.preventDefault(); runRewrite() }
@@ -219,38 +202,25 @@
       if (e.keyCode === 27) closeAll()
     }
 
-    buildChips()
     render()
   }
 
   window.Asc.plugin.button = function () { closeAll() }
 
   // ── RIGHT-CLICK MENU ──────────────────────────────────────────────────
+  // A single flat row, no submenu: picking it opens the card and the user
+  // says how they want it read there.
   window.Asc.plugin.event_onContextMenuShow = function (options) {
     if (!options || options.type !== 'Selection') return
 
-    var items = [{ id: ITEM_PREFIX + 'default', text: 'Rewrite…' }]
-    TONES.forEach(function (tone) {
-      items.push({ id: ITEM_PREFIX + tone, text: tone })
-    })
-
     this.executeMethod('AddContextMenuItem', [{
       guid: this.guid,
-      items: [{ id: ITEM_PREFIX + 'root', text: 'Reword with AI', items: items }],
+      items: [{ id: ITEM_ID, text: 'Reword with AI' }],
     }])
   }
 
-  // The root row is wired too: on some builds a parent row with children is
-  // click-through rather than submenu-only.
-  window.Asc.plugin.attachContextMenuClickEvent(ITEM_PREFIX + 'root', function () {
-    startFlow(null)
-  })
-  window.Asc.plugin.attachContextMenuClickEvent(ITEM_PREFIX + 'default', function () {
-    startFlow(null)
-  })
-  TONES.forEach(function (tone) {
-    window.Asc.plugin.attachContextMenuClickEvent(ITEM_PREFIX + tone, function () {
-      startFlow(tone)
-    })
+  window.Asc.plugin.attachContextMenuClickEvent(ITEM_ID, function () {
+    console.log(LOG, 'context click')
+    startFlow()
   })
 })(window, undefined)
