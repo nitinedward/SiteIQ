@@ -106,3 +106,35 @@ export async function loadPdf(
   if (!res.ok) throw new Error(`Storage download failed: ${res.status}`)
   return Buffer.from(await res.arrayBuffer())
 }
+
+// ── MARKUP PDF (drawing + linked photos) ────────────────────────────────────
+// Generated in the browser at finalise time and uploaded here, so it can be
+// re-opened later without rebuilding it.
+
+export async function saveMarkupPdf(
+  inspectionId: string,
+  buffer: Buffer
+): Promise<void> {
+  const supabase = getSupabase()
+  const { error } = await supabase.storage
+    .from('reports')
+    .upload(`${inspectionId}-markup.pdf`, buffer, {
+      contentType: 'application/pdf',
+      upsert: true,
+    })
+  if (error) throw new Error('Failed to save markup PDF: ' + error.message)
+  console.log('[storage] Saved markup PDF:', inspectionId, 'size:', buffer.length)
+}
+
+/** Null rather than throwing when absent — an inspection with no pins never
+ *  produces one, which is a normal state, not an error. */
+export async function loadMarkupPdf(inspectionId: string): Promise<Buffer | null> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase.storage
+    .from('reports')
+    .createSignedUrl(`${inspectionId}-markup.pdf`, 60)
+  if (error || !data?.signedUrl) return null
+  const res = await fetch(`${data.signedUrl}&t=${Date.now()}`, { cache: 'no-store' })
+  if (!res.ok) return null
+  return Buffer.from(await res.arrayBuffer())
+}

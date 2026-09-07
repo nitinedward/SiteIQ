@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import { captureDrawingWithMarkup } from '@/lib/captureDrawing'
 import { reportFileName } from '@/lib/reportFileName'
+import { buildMarkupPdf, type MarkupDrawing } from '@/lib/markupPdf'
 import dynamic from 'next/dynamic'
 
 const OnlyOfficeEditor = dynamic(() => import('@/components/OnlyOfficeEditor'), { ssr: false })
@@ -22,6 +23,8 @@ type PageData = {
 }
 type SelectedPhoto = {
   url: string; observationId: string; zoneLabel: string; selected: boolean
+  // Which markup pin this photo was taken at, when it still has one.
+  zoneId: string | null
 }
 type DrawingInfo = {
   id: string; title: string; number: string; revision: string
@@ -410,6 +413,87 @@ export default function ReportPage() {
     }
   }
 
+  /** Builds the marked-up drawing PDF for this inspection, or null when
+   *  there are no pins to show. Built in the browser because rendering the
+   *  drawing and downscaling the photos both need a canvas. */
+  const buildMarkup = async (): Promise<Blob | null> => {
+    const { data: zonesData, error } = await supabase
+      .from('zones')
+      .select('id, label, x_percent, y_percent, markup_type, shape_data, drawings (id, title, number, revision, file_url)')
+      .eq('inspection_id', inspectionId)
+    if (error) throw error
+    if (!zonesData?.length) return null
+
+    // Group pins under the drawing they belong to.
+    const byDrawing = new Map<string, MarkupDrawing>()
+    for (const z of zonesData as any[]) {
+      const d = z.drawings
+      if (!d?.file_url) continue
+      if (!byDrawing.has(d.id)) {
+        byDrawing.set(d.id, {
+          id: d.id, title: d.title || 'Untitled Drawing',
+          number: d.number, revision: d.revision, file_url: d.file_url,
+          zones: [],
+        })
+      }
+      byDrawing.get(d.id)!.zones.push({
+        id: z.id, label: z.label,
+        x_percent: z.x_percent, y_percent: z.y_percent,
+        markup_type: z.markup_type, shape_data: z.shape_data,
+      })
+    }
+
+    return buildMarkupPdf({
+      drawings: [...byDrawing.values()],
+      photos: selectedPhotos.map(p => ({ url: p.url, zoneId: p.zoneId, zoneLabel: p.zoneLabel })),
+      reportTitle: baseFileName(),
+      onProgress: (d, t) => setZipProgress({ done: d, total: t }),
+    })
+  }
+
+  /** Best-effort: a report with no pins simply has no markup PDF, and a
+   *  failure here must never block finalising. */
+  const generateAndStoreMarkup = async () => {
+    try {
+      const blob = await buildMarkup()
+      if (!blob) { console.log('[markup] no pins — nothing to generate'); return }
+      await fetch(`/api/docs/markup-pdf?inspectionId=${inspectionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/pdf' },
+        body: blob,
+      })
+      console.log('[markup] stored, size:', blob.size)
+    } catch (err) {
+      console.error('[markup] could not generate:', err)
+    } finally {
+      setZipProgress(null)
+    }
+  }
+
+  const downloadMarkup = async () => {
+    // Prefer the copy stored at finalise; otherwise build it now so the
+    // option still works on a report that hasn't been finalised yet.
+    const stored = await fetch(`/api/docs/markup-pdf?inspectionId=${inspectionId}`, { cache: 'no-store' })
+    if (stored.ok) {
+      saveBlob(await stored.blob(), `${baseFileName()} - Markup.pdf`)
+      return
+    }
+
+    const blob = await buildMarkup()
+    if (!blob) {
+      alert(
+        'This report has no drawing markups yet.\n\n' +
+        'Mark up a drawing on mobile and attach photos to a pin, then this will contain the drawing with each pin linked to its photos.'
+      )
+      return
+    }
+    saveBlob(blob, `${baseFileName()} - Markup.pdf`)
+    // Keep it for next time.
+    fetch(`/api/docs/markup-pdf?inspectionId=${inspectionId}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: blob,
+    }).catch(() => { /* caching only */ })
+  }
+
   const downloadWord = async () => {
     const res = await fetch(
       `/api/docs/${inspectionId}?download=true&t=${Date.now()}`,
@@ -444,7 +528,7 @@ export default function ReportPage() {
     saveBlob(await res.blob(), `${baseFileName()}.pdf`)
   }
 
-  const downloadDoc = async (format: 'docx' | 'pdf' | 'both' | 'photos') => {
+  const downloadDoc = async (format: 'docx' | 'pdf' | 'both' | 'photos' | 'markup') => {
     setShowDownloadMenu(false)
     try {
       setDownloading(true)
@@ -453,6 +537,10 @@ export default function ReportPage() {
       // of the rebuild/force-save preparation applies.
       if (format === 'photos') {
         await downloadAllPhotos()
+        return
+      }
+      if (format === 'markup') {
+        await downloadMarkup()
         return
       }
 
@@ -484,7 +572,7 @@ export default function ReportPage() {
    *  `align` decides which edge it hangs from so it stays on screen. */
   const renderDownloadMenu = (align: 'left' | 'right') => {
     if (!showDownloadMenu) return null
-    const options: { format: 'docx' | 'pdf' | 'both' | 'photos'; label: string; hint: string }[] = [
+    const options: { format: 'docx' | 'pdf' | 'both' | 'photos' | 'markup'; label: string; hint: string }[] = [
       { format: 'docx', label: 'Word',     hint: '.docx — editable' },
       { format: 'pdf',  label: 'PDF',      hint: '.pdf — final layout' },
       { format: 'both', label: 'Both',     hint: 'Word and PDF' },
@@ -494,6 +582,11 @@ export default function ReportPage() {
         hint: selectedPhotos.length
           ? `.zip — all ${selectedPhotos.length}, not just selected`
           : '.zip — no photos on this inspection',
+      },
+      {
+        format: 'markup',
+        label: 'Marked-up drawing',
+        hint: '.pdf — click a pin to see its photos',
       },
     ]
     return (
@@ -662,6 +755,12 @@ export default function ReportPage() {
 
       setReportStatus('finalised')
       await loadFrozenPdf(inspectionId)
+
+      // Marked-up drawing with each pin linked to its photos. Runs after the
+      // report is already finalised and never throws, so a drawing that
+      // fails to render can't undo a finalise that has otherwise succeeded.
+      await generateAndStoreMarkup()
+
       console.log('[finalise] Done')
     } catch (err: any) {
       console.error('[finalise] Error:', err)
@@ -733,6 +832,7 @@ export default function ReportPage() {
             allPhotos.push({
               url, observationId: ob.id,
               zoneLabel: ob.zone_label || 'General Observation',
+              zoneId: ob.zone_id ?? null,
               selected: true,
             })
           }
