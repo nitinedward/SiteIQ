@@ -43,12 +43,36 @@ Sidebar: 240px
 Topbar: 60px
 Grid: 240px 1fr / 60px 1fr
 
+## Domains
+- Canonical host: https://www.site-iq.co.nz
+- The apex (site-iq.co.nz) 308-redirects to www — both are aliased to the
+  same Vercel production deployment. When verifying a deploy with curl, hit
+  www: for a while the two pointed at *different* deployments, so the apex
+  looked fixed while the browser (on www) was serving a stale build.
+
 ## OnlyOffice
-- Docker container ID: 45b74ffc6322
-- Running at: http://localhost (port 80)
-- JWT Secret: stored in ONLYOFFICE_JWT_SECRET env var
-- Start command: docker start 45b74ffc6322
-- Check running: docker ps
-- Health check: http://localhost/healthcheck
-- If stopped: docker start 45b74ffc6322
-- Auto-restart: --restart=always flag set (starts with Docker Desktop automatically)
+Runs on a DigitalOcean VPS, not locally.
+- Host: root@170.64.219.210 (SSH)
+- Docker container: b37cbcd5605d (name `elegant_pare`, image
+  onlyoffice/documentserver:7.5.1), port 80 published on the host
+- Public URL: https://onlyoffice.site-iq.co.nz (Cloudflare-proxied) —
+  this is what ONLYOFFICE_SERVER_URL / NEXT_PUBLIC_ONLYOFFICE_SERVER_URL point at
+- Health check: https://onlyoffice.site-iq.co.nz/healthcheck (returns `true`)
+- Check running: `ssh root@170.64.219.210 'docker ps'`
+- If stopped: `ssh root@170.64.219.210 'docker start b37cbcd5605d'`
+- Auto-restart: policy is `always`, so it comes back with the Docker daemon
+- JWT secret: ONLYOFFICE_JWT_SECRET, and it must match the container's own
+  configured secret exactly. Inbound request signing is required
+  (`token.enable.request.inbox` in the container's local.json), so
+  CommandService/ConvertService calls must be JWT-signed. Strip a leading
+  BOM from the env var before use — a mismatched-looking-but-identical
+  secret has bitten this project before.
+
+### OnlyOffice plugins
+The "Reword with AI" plugins live in `public/oo-plugins/` and are served
+from this app (Vercel), registered via `editorConfig.plugins.pluginsData`
+in `src/components/OnlyOfficeEditor.tsx` — nothing is installed on the
+container, so rebuilding it won't break them. Behaviours of this Document
+Server build that cost real time to find are documented in comments in
+`public/oo-plugins/siteiq-reword-menu/scripts/code.js`; read those before
+changing plugin wiring.
