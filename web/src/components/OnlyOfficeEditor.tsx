@@ -12,6 +12,11 @@ interface OnlyOfficeEditorProps {
   /** Enables renaming from the editor's own title in the top bar. Receives
    *  the new name (no extension). Omit to leave the title read-only. */
   onRename?: (newName: string) => void
+  /** Reports load progress so the host can show one continuous indicator
+   *  across its own preparation and the editor's startup, instead of each
+   *  stage flashing up its own spinner. When provided, this component draws
+   *  no overlay of its own. */
+  onLoadingChange?: (loading: boolean, message: string) => void
 }
 
 export default function OnlyOfficeEditor({
@@ -22,6 +27,7 @@ export default function OnlyOfficeEditor({
   onReady,
   onError,
   onRename,
+  onLoadingChange,
 }: OnlyOfficeEditorProps) {
   // Kept in a ref so the value used by the editor callback is always the
   // current one — the editor is constructed once and never re-created when
@@ -33,10 +39,17 @@ export default function OnlyOfficeEditor({
   const scriptLoaded  = useRef(false)
   const [loading,        setLoading]        = useState(true)
   const [error,          setError]          = useState('')
-  const [loadingMessage, setLoadingMessage] = useState('Loading document editor...')
+  const [loadingMessage, setLoadingMessage] = useState('Opening editor')
   const [retryTrigger,   setRetryTrigger]   = useState(0)
 
   const ooUrl = process.env.NEXT_PUBLIC_ONLYOFFICE_SERVER_URL ?? 'http://localhost'
+
+  // Keep the host's indicator in step with this component's own state.
+  const onLoadingChangeRef = useRef(onLoadingChange)
+  onLoadingChangeRef.current = onLoadingChange
+  useEffect(() => {
+    onLoadingChangeRef.current?.(loading, loadingMessage)
+  }, [loading, loadingMessage])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -186,7 +199,7 @@ export default function OnlyOfficeEditor({
               if (retryCount < MAX_RETRIES) {
                 retryCount++
                 setLoadingMessage(
-                  `OnlyOffice not ready, retrying (${retryCount}/${MAX_RETRIES})…`
+                  `Retrying (${retryCount}/${MAX_RETRIES})`
                 )
                 setTimeout(attempt, RETRY_DELAY)
               } else {
@@ -298,7 +311,9 @@ export default function OnlyOfficeEditor({
     // touched by that swap, so it's the stable anchor for finding the
     // iframe afterward (see report page's sendToRewordPlugin).
     <div id="onlyoffice-editor-wrapper" style={{ position: 'relative', height: '100%', width: '100%' }}>
-      {loading && (
+      {/* Only drawn when the host isn't showing its own indicator — otherwise
+          two spinners would stack during startup. */}
+      {loading && !onLoadingChange && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',

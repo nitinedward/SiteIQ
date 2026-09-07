@@ -65,6 +65,9 @@ export default function ReportPage() {
   const [showFinaliseConfirm, setShowFinaliseConfirm] = useState(false)
   const [frozenPdfUrl,       setFrozenPdfUrl]         = useState<string | null>(null)
   const [loadingFrozenPdf,   setLoadingFrozenPdf]     = useState(false)
+  // Reported by the editor so one indicator can span preparation and startup.
+  const [editorLoading,      setEditorLoading]        = useState(true)
+  const [editorMessage,      setEditorMessage]        = useState('Opening editor')
 
   // AI reword now lives entirely inside the OnlyOffice side panel — see
   // public/oo-plugins/siteiq-reword/. It's opened from the editor's own
@@ -924,7 +927,7 @@ export default function ReportPage() {
         animation: 'spin .8s linear infinite',
       }} />
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--text-mid)' }}>Loading</div>
+      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '1.5px', color: 'var(--text-mid)' }}>Loading report</div>
     </div>
   )
   if (!pageData) return null
@@ -1725,26 +1728,7 @@ export default function ReportPage() {
                   />
                 </div>
               </div>
-            ) : generating ? (
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                height: '100%', flexDirection: 'column', gap: 16,
-                background: 'var(--paper)',
-              }}>
-                <div style={{
-                  width: 40, height: 40, border: '3px solid var(--border-line)',
-                  borderTopColor: 'var(--indigo)', borderRadius: '50%',
-                  animation: 'spin 0.8s linear infinite',
-                }} />
-                <div style={{
-                  fontSize: 14, color: 'var(--text-mid)',
-                  fontFamily: 'var(--f-mono)',
-                  textTransform: 'uppercase', letterSpacing: '1px',
-                }}>
-                  Preparing document…
-                </div>
-              </div>
-            ) : docReady ? (
+            ) : generating || docReady ? (
               <div style={{
                 height: '100%',
                 padding: '16px 20px',
@@ -1760,16 +1744,47 @@ export default function ReportPage() {
                   boxShadow: 'var(--shadow-card-v3)',
                   border: '1px solid var(--border-line)',
                 }}>
-                  <OnlyOfficeEditor
-                    key={editorKey}
-                    sessionKey={editorKey}
-                    inspectionId={inspectionId}
-                    fileName={`${baseFileName()}.docx`}
-                    onRename={renameFromEditor}
-                    editable={reportStatus !== 'finalised'}
-                    onReady={() => { console.log('[OnlyOffice] editor ready'); setEditorError(false) }}
-                    onError={() => setEditorError(true)}
-                  />
+                  {docReady && (
+                    <OnlyOfficeEditor
+                      key={editorKey}
+                      sessionKey={editorKey}
+                      inspectionId={inspectionId}
+                      fileName={`${baseFileName()}.docx`}
+                      onRename={renameFromEditor}
+                      editable={reportStatus !== 'finalised'}
+                      onReady={() => { console.log('[OnlyOffice] editor ready'); setEditorError(false) }}
+                      onError={() => setEditorError(true)}
+                      onLoadingChange={(isLoading, message) => {
+                        setEditorLoading(isLoading)
+                        if (message) setEditorMessage(message)
+                      }}
+                    />
+                  )}
+
+                  {/* One indicator for the whole startup: it stays put while
+                      the label moves from preparation to editor startup,
+                      rather than each stage mounting its own spinner. */}
+                  {(generating || editorLoading) && (
+                    <div style={{
+                      position: 'absolute', inset: 0, zIndex: 5,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexDirection: 'column', gap: 14,
+                      background: 'var(--paper)',
+                    }}>
+                      <div style={{
+                        width: 28, height: 28, border: '2px solid var(--indigo)',
+                        borderTopColor: 'transparent', borderRadius: '50%',
+                        animation: 'spin .8s linear infinite',
+                      }} />
+                      <div style={{
+                        fontFamily: 'var(--f-mono)', fontSize: 10,
+                        textTransform: 'uppercase', letterSpacing: '1.5px',
+                        color: 'var(--text-mid)',
+                      }}>
+                        {generating ? 'Preparing document' : editorMessage}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : null}
