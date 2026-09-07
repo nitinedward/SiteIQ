@@ -1009,7 +1009,6 @@ export default function ReportPage() {
             >
               {reportDisplayName(customFileName, projectName)}
             </span>
-            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--text-mid)' }}>#{reportNo}</span>
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 3,
               padding: '2px 8px', borderRadius: 99, fontFamily: 'var(--f-heading)', fontSize: 10, fontWeight: 700,
