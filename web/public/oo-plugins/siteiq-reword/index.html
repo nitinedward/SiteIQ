@@ -2,12 +2,152 @@
 <html>
 <head>
     <meta charset="UTF-8" />
-    <title>SiteIQ Reword</title>
-    <script type="text/javascript" src="https://onlyoffice.github.io/sdkjs-plugins/v1/plugins.js"></script>
-    <script type="text/javascript" src="https://onlyoffice.github.io/sdkjs-plugins/v1/plugins-ui.js"></script>
-    <link rel="stylesheet" href="https://onlyoffice.github.io/sdkjs-plugins/v1/plugins.css">
-    <script type="text/javascript" src="scripts/code.js"></script>
+    <title>Reword with AI</title>
+    <script type="text/javascript" src="https://onlyoffice.site-iq.co.nz/sdkjs-plugins/v1/plugins.js"></script>
+    <script type="text/javascript" src="https://onlyoffice.site-iq.co.nz/sdkjs-plugins/v1/plugins-ui.js"></script>
+    <link rel="stylesheet" href="https://onlyoffice.site-iq.co.nz/sdkjs-plugins/v1/plugins.css">
+    <style>
+        :root {
+            --accent: #2c5282;
+            --accent-soft: #edf2fb;
+            --ink: #1a1917;
+            --mid: #9b968d;
+            --line: #e4e0d9;
+            --paper: #f8f7f5;
+            --sage: #27705a;
+            --sage-soft: #e6f4ef;
+            --red: #c0392b;
+            --red-soft: #fdf0ef;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 12px;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 13px;
+            color: var(--ink);
+            background: #ffffff;
+        }
+        .label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            color: var(--mid);
+            margin: 14px 0 6px;
+        }
+        .label:first-child { margin-top: 0; }
+        .selection {
+            padding: 10px;
+            background: var(--paper);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            line-height: 1.55;
+            max-height: 120px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .selection.empty { color: var(--mid); font-style: italic; }
+        .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+        .chip {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 5px 11px;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--ink);
+            cursor: pointer;
+        }
+        .chip:hover { border-color: var(--accent); }
+        .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+        textarea {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 13px;
+            color: var(--ink);
+            resize: vertical;
+            outline: none;
+        }
+        textarea:focus { border-color: var(--accent); }
+        button.primary {
+            width: 100%;
+            margin-top: 14px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 999px;
+            padding: 10px 14px;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        button.primary:disabled { background: var(--line); color: var(--mid); cursor: not-allowed; }
+        .preview {
+            padding: 10px;
+            background: var(--sage-soft);
+            border: 1px solid rgba(39,112,90,.3);
+            border-radius: 8px;
+            line-height: 1.55;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .row { display: flex; gap: 6px; margin-top: 12px; }
+        .row button {
+            flex: 1;
+            border-radius: 999px;
+            padding: 9px 8px;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .btn-ghost { background: #fff; border: 1px solid var(--line); color: var(--ink); }
+        .btn-accept { background: var(--sage); border: none; color: #fff; }
+        .error {
+            margin-top: 12px;
+            padding: 9px 10px;
+            background: var(--red-soft);
+            color: var(--red);
+            border-radius: 8px;
+            line-height: 1.5;
+        }
+        .hidden { display: none !important; }
+    </style>
 </head>
 <body>
+    <div class="label">Selected text</div>
+    <div id="selection" class="selection empty">Select a passage in the document…</div>
+
+    <div id="controls">
+        <div class="label">Tone (optional)</div>
+        <div class="chips" id="chips"></div>
+
+        <div class="label">Instruction (optional)</div>
+        <textarea id="instruction" rows="2" placeholder="e.g. flag this as needs monitoring"></textarea>
+
+        <button class="primary" id="btnRewrite" disabled>Rewrite</button>
+    </div>
+
+    <div id="previewBox" class="hidden">
+        <div class="label">Suggested rewrite</div>
+        <div class="preview" id="preview"></div>
+        <div class="row">
+            <button class="btn-ghost" id="btnDiscard">Discard</button>
+            <button class="btn-accept" id="btnAccept">Accept</button>
+        </div>
+    </div>
+
+    <div id="error" class="error hidden"></div>
+
+    <script type="text/javascript" src="scripts/code.js"></script>
 </body>
 </html>

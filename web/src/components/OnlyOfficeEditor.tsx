@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { REWORD_PLUGIN_GUID, rewordPluginConfigUrl } from '@/lib/rewordPlugin'
+import { rewordPluginConfigUrl } from '@/lib/rewordPlugin'
 
 interface OnlyOfficeEditorProps {
   inspectionId: string
@@ -86,25 +86,22 @@ export default function OnlyOfficeEditor({
               // (setApi: this.appOptions.customization.plugins===false ||
               // (this.api.asc_registerCallback("asc_onPluginsInit", ...), ...))
               // shows `false` here short-circuits registration of the
-              // ENTIRE plugin subsystem, not just the toolbar tab — which
-              // silently no-ops editorConfig.plugins.pluginsData/autostart
-              // below (confirmed as the actual cause of the reword plugin
-              // never loading: no error, just a dead timeout, because
-              // nothing ever received the message).
+              // ENTIRE plugin subsystem, not just the toolbar tab, which
+              // silently no-ops editorConfig.plugins.pluginsData below.
               plugins: true,
               macros: false,
             },
-            // Loads the "siteiq-reword" plugin (public/oo-plugins/
-            // siteiq-reword/) invisibly (isVisual:false, no popup) and
-            // auto-launches it via the declared `autostart` guid list —
-            // NOT via config.json's `isSystem:true` shortcut, which is
-            // confirmed broken on this Document Server build/version
-            // (register() never calls Xv() for it, so it never loads at
-            // all). `autostart` is consumed by a separate code path
-            // (runAutoStartPlugins in the web-apps controller) that does
-            // work correctly here. See src/lib/rewordPlugin.ts.
+            // Makes the "Reword with AI" plugin (public/oo-plugins/
+            // siteiq-reword/) available in the editor's Plugins tab, where
+            // the user opens it as a side panel.
+            //
+            // Deliberately NOT autostarted: runAutoStartPlugins() fires
+            // exactly once and shift()s the guid off its list, so when it
+            // races ahead of the editor's plugin registry the plugin is
+            // dropped for good — which made loading depend on whether
+            // config.json was a CDN cache hit. Launching from the Plugins
+            // tab has no such race.
             plugins: {
-              autostart: [REWORD_PLUGIN_GUID],
               pluginsData: [rewordPluginConfigUrl(appUrl)],
             },
           },
