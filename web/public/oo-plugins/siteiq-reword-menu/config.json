@@ -17,7 +17,7 @@
             "initData"            : "",
             "isUpdateOleOnResize" : true,
             "buttons"             : [],
-            "events"              : ["onContextMenuShow"]
+            "events"              : ["onContextMenuShow", "onContextMenuClick"]
         }
     ]
 }
