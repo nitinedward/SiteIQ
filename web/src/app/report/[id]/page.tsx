@@ -747,9 +747,12 @@ export default function ReportPage() {
       })
       const quiesce = await quiesceRes.json().catch(() => ({}))
       console.log('[insert] quiesce:', quiesce)
-      if (quiesce?.stillOpen) {
+      // `settled` means the stored file has stopped changing, which is the
+      // condition that matters. The key often stays known while the document
+      // sits in the server's cache, so that is not treated as a failure.
+      if (quiesce?.settled === false) {
         throw new Error(
-          'The editor session would not close, so the insert was stopped to avoid losing your changes. Reload the page and try again.'
+          'The document is still being saved, so the insert was stopped to avoid losing your changes. Wait a moment and try again.'
         )
       }
 

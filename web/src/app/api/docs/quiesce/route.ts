@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { forceSaveAndWait, dropEditingSession, getSessionInfo } from '@/lib/onlyofficeConvert'
+import {
+  forceSaveAndWait,
+  dropEditingSession,
+  getSessionInfo,
+  getDocUpdatedAt,
+} from '@/lib/onlyofficeConvert'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -14,18 +19,25 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 200, headers: cors })
 }
 
+const POLL_MS = 750
+const SETTLE_POLLS = 3      // ~2.2s of silence before calling it settled
+const MAX_POLLS = 20        // ~15s ceiling
+
 /** Gets a document into a state where it can safely be rewritten.
  *
- *  Rewriting a document while the editor still has it open loses the
- *  changes: the session flushes its own copy back through the save callback
- *  and overwrites whatever was written, which shows up as the document
- *  "reverting to the original".
+ *  Rewriting while the editor holds the document loses the change: the
+ *  session flushes its own copy through the save callback afterwards and
+ *  overwrites what was written — the document "reverting to the original".
  *
- *  Dropping the session is not enough on its own — the Document Server
- *  sends one final save as it disconnects, and that save lands *after* the
- *  rewrite. So this saves, drops, and then polls c:"info" until the server
- *  no longer recognises the key (error 1 = no session), which is the point
- *  at which no further callback can arrive. */
+ *  What is actually being waited for is *writes stopping*, not the session
+ *  disappearing. Two things were learned the hard way here:
+ *   - Dropping alone is insufficient; the server sends one last save as it
+ *     disconnects, which lands after the rewrite.
+ *   - Waiting for c:"info" to stop recognising the key doesn't work either:
+ *     the document stays in the server's cache after the users leave, so it
+ *     keeps answering error 0 long after the editor has gone.
+ *  So this saves, drops, then watches the stored file's timestamp until it
+ *  has been quiet for a couple of seconds. */
 export async function POST(request: NextRequest) {
   try {
     const { inspectionId, docKey } = await request.json()
@@ -33,27 +45,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing inspectionId or docKey' }, { status: 400, headers: cors })
     }
 
-    // 1. Persist what's on screen.
     const saved = await forceSaveAndWait(inspectionId, docKey)
-
-    // 2. Ask the session to end.
     const dropped = await dropEditingSession(docKey)
 
-    // 3. Wait for it to actually be gone, including its parting save.
-    let open = true
-    let waited = 0
-    for (let i = 0; i < 20 && open; i++) {
-      await new Promise(r => setTimeout(r, 750))
-      waited += 750
-      open = (await getSessionInfo(docKey)).open
+    let last = await getDocUpdatedAt(inspectionId)
+    let quietFor = 0
+    let polls = 0
+
+    while (polls < MAX_POLLS && quietFor < SETTLE_POLLS) {
+      await new Promise(r => setTimeout(r, POLL_MS))
+      polls++
+      const now = await getDocUpdatedAt(inspectionId)
+      if (now !== last) {
+        // A save landed — most likely the session's parting write. Start the
+        // quiet period again from here.
+        last = now
+        quietFor = 0
+      } else {
+        quietFor++
+      }
     }
 
-    // A session that won't close is reported rather than hidden: the caller
-    // can still proceed, but the overwrite risk is real and worth logging.
-    console.log('[quiesce]', docKey, JSON.stringify({ saved: saved.saved, dropped: dropped.ok, stillOpen: open, waited }))
+    const settled = quietFor >= SETTLE_POLLS
+    // Informational only: the key often stays known while the document sits
+    // in cache, so this must not gate the rewrite.
+    const info = await getSessionInfo(docKey)
+
+    console.log('[quiesce]', docKey, JSON.stringify({
+      saved: saved.saved, dropped: dropped.ok, settled, polls, keyStillKnown: info.open,
+    }))
 
     return NextResponse.json(
-      { success: true, saved: saved.saved, dropped: dropped.ok, stillOpen: open, waitedMs: waited },
+      {
+        success: true,
+        saved: saved.saved,
+        dropped: dropped.ok,
+        settled,
+        waitedMs: polls * POLL_MS,
+        keyStillKnown: info.open,
+      },
       { headers: cors }
     )
   } catch (err: any) {

@@ -14,7 +14,7 @@ const getSupabase = () => createClient(
 /** Reads the current `reports/{inspectionId}.docx` object's last-modified
  *  timestamp, or null if it doesn't exist yet. Used to detect whether a
  *  force-save actually landed a new version. */
-async function getDocUpdatedAt(inspectionId: string): Promise<string | null> {
+export async function getDocUpdatedAt(inspectionId: string): Promise<string | null> {
   const supabase = getSupabase()
   const { data } = await supabase.storage
     .from('reports')
