@@ -60,6 +60,7 @@ export default function ReportPage() {
   const [zipProgress,        setZipProgress]          = useState<{ done: number; total: number } | null>(null)
   const [editorError,        setEditorError]         = useState(false)
   const [inserting,          setInserting]           = useState(false)
+  const [insertResult,       setInsertResult]        = useState('')
   const [reloadingEditor,    setReloadingEditor]     = useState(false)
   const [mobileTab,          setMobileTab]            = useState<'document' | 'attachments'>('document')
   const [showFinaliseConfirm, setShowFinaliseConfirm] = useState(false)
@@ -730,6 +731,19 @@ export default function ReportPage() {
       const data = await res.json()
       console.log('[insert] Result:', data)
       if (!res.ok) throw new Error(data.error)
+
+      // The section is appended after a page break at the end, and the
+      // editor reopens at page 1 — so without this the insert looks like it
+      // did nothing at all.
+      const parts: string[] = []
+      if (data.photosAdded)   parts.push(`${data.photosAdded} photo${data.photosAdded === 1 ? '' : 's'}`)
+      if (data.drawingsAdded) parts.push(`${data.drawingsAdded} drawing${data.drawingsAdded === 1 ? '' : 's'}`)
+      setInsertResult(
+        parts.length
+          ? `${parts.join(' and ')} added at the end of the report — scroll to the last pages.`
+          : 'Attachments removed from the report.'
+      )
+      setTimeout(() => setInsertResult(''), 8000)
 
       setReloadingEditor(true)
       setEditorKey(prev => prev + 1)
@@ -1711,6 +1725,19 @@ export default function ReportPage() {
                   </>
                 )}
               </button>
+
+              {insertResult && (
+                <div style={{
+                  marginTop: 8, padding: '9px 11px',
+                  background: 'var(--sage-soft)',
+                  border: '1px solid rgba(91,146,121,.3)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontFamily: 'var(--f-text)', fontSize: 11.5,
+                  color: 'var(--sage-ink)', lineHeight: 1.45, textAlign: 'center',
+                }}>
+                  {insertResult}
+                </div>
+              )}
 
             </div>
           </div>
