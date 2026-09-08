@@ -313,18 +313,27 @@ export default function ReportPage() {
 
     const docKey = `doc-${inspectionId}-${editorKey}`
 
-    // Force-save FIRST, so the download includes what's on screen. This used
-    // to run after the append, which meant the save wrote the editor's copy
-    // back over the freshly attached photos and drawings. Best-effort: a
-    // report with no open session has nothing to save.
-    try {
-      await fetch('/api/docs/forcesave', {
+    if (hasAttachments) {
+      // Same hazard as inserting: the file is about to be rewritten, so the
+      // session has to be saved and closed first or its parting save
+      // overwrites the attachments. (This used to force-save *after* the
+      // append, which guaranteed exactly that.)
+      await fetch('/api/docs/quiesce', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ inspectionId, key: docKey }),
-      })
-    } catch (err) {
-      console.warn('[download] force-save skipped:', err)
+        body:    JSON.stringify({ inspectionId, docKey }),
+      }).catch(() => { /* nothing open — fine */ })
+    } else {
+      // Nothing to attach, so just capture what's on screen.
+      try {
+        await fetch('/api/docs/forcesave', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ inspectionId, key: docKey }),
+        })
+      } catch (err) {
+        console.warn('[download] force-save skipped:', err)
+      }
     }
 
     if (hasAttachments) {
@@ -346,6 +355,13 @@ export default function ReportPage() {
         const err = await appendRes.json()
         throw new Error('Could not attach photos: ' + (err.error || 'Unknown error'))
       }
+
+      // The session was closed to make the rewrite safe, so reconnect the
+      // editor on a fresh key — otherwise it sits there disconnected and
+      // still showing the pre-attachment document.
+      setReloadingEditor(true)
+      setEditorKey(prev => prev + 1)
+      setTimeout(() => setReloadingEditor(false), 3000)
     }
   }
 
@@ -719,25 +735,24 @@ export default function ReportPage() {
     try {
       const docKey = `doc-${inspectionId}-${editorKey}`
 
-      // 1. Persist whatever is on screen. Without this the append would
-      //    rewrite the last autosave and any newer edits would be lost.
-      await fetch('/api/docs/forcesave', {
+      // Save, close and wait for the session to be fully gone before
+      // touching the file. Dropping alone isn't enough: the Document Server
+      // sends a final save as it disconnects, and that save would land
+      // after the append and overwrite it — the document "reverting to the
+      // original with just the site notes".
+      const quiesceRes = await fetch('/api/docs/quiesce', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inspectionId, key: docKey }),
-      }).catch(() => { /* no active session to save is fine */ })
+        body: JSON.stringify({ inspectionId, docKey }),
+      })
+      const quiesce = await quiesceRes.json().catch(() => ({}))
+      console.log('[insert] quiesce:', quiesce)
+      if (quiesce?.stillOpen) {
+        throw new Error(
+          'The editor session would not close, so the insert was stopped to avoid losing your changes. Reload the page and try again.'
+        )
+      }
 
-      // 2. End the session before rewriting the file underneath it. The
-      //    open editor still holds the pre-insert copy and flushes it back
-      //    through the save callback afterwards, which overwrote the
-      //    appended document — the "reverts to the original" symptom.
-      await fetch('/api/docs/drop', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ docKey }),
-      }).catch(() => { /* nothing open to drop */ })
-
-      // 3. Now the file is ours to modify.
       const drawingsList = await uploadCapturedDrawings()
 
       const res = await fetch('/api/docs/append', {

@@ -73,6 +73,28 @@ export async function forceSaveAndWait(inspectionId: string, docKey: string): Pr
   return { saved: false, commandOk, commandResponse }
 }
 
+/** Asks the Document Server about a document key. error 0 means a session
+ *  is still open; error 1 means it knows nothing about the key, i.e. the
+ *  session is gone and the file is safe to rewrite. */
+export async function getSessionInfo(docKey: string): Promise<{ open: boolean; response: any }> {
+  const secret = getSecret()
+  if (!secret) return { open: false, response: { error: 'ONLYOFFICE_JWT_SECRET not configured' } }
+
+  const payload = { c: 'info', key: docKey }
+  try {
+    const token = jwt.sign(payload, secret, { algorithm: 'HS256' })
+    const res = await fetch(`${getOoUrl()}/coauthoring/CommandService.ashx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, token }),
+    })
+    const response = await res.json().catch(() => ({}))
+    return { open: response?.error === 0, response }
+  } catch (err: any) {
+    return { open: false, response: { error: err.message } }
+  }
+}
+
 /** Disconnects the open editing session for a document key.
  *
  *  Needed before rewriting a document underneath the editor: the open
