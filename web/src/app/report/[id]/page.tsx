@@ -866,25 +866,10 @@ export default function ReportPage() {
         })
       }
 
-      // Marked-up drawings first, carrying their pin counts.
+      // Only drawings that were actually marked up on this inspection —
+      // a plain drawing has nothing to say about the site visit.
       ;(zonesData ?? []).forEach((z: any) => addDrawing(z.drawings, 1))
 
-      // Then the rest of the project's drawings. Previously the panel was
-      // built only from zones, so a project with no pins listed nothing and
-      // there was no way to put any drawing into the report at all.
-      const { data: insp } = await supabase
-        .from('inspections').select('project_id').eq('id', inspId).single()
-
-      if (insp?.project_id) {
-        const { data: projectDrawings } = await supabase
-          .from('drawings')
-          .select('id, title, number, revision, file_url')
-          .eq('project_id', insp.project_id)
-          .order('created_at', { ascending: false })
-        ;(projectDrawings ?? []).forEach((d: any) => addDrawing(d, 0))
-      }
-
-      // Marked-up ones at the top — they're the ones usually wanted.
       const drawingList = Array.from(drawingMap.values())
         .sort((a, b) => b.zone_count - a.zone_count)
       console.log('[loadAttachments] Drawings found:', drawingList.length)
@@ -1383,6 +1368,11 @@ export default function ReportPage() {
                       }}>
                         Drawings
                       </div>
+                      {drawings.length > 0 && (
+                        <div style={{ fontFamily: 'var(--f-text)', fontSize: 11, color: 'var(--text-mid)' }}>
+                          tap to add · then Insert below
+                        </div>
+                      )}
                     </div>
 
                     {drawings.length === 0 ? (
@@ -1396,10 +1386,10 @@ export default function ReportPage() {
                           <polyline points="14,2 14,8 20,8"/>
                         </svg>
                         <div style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>
-                          No drawings on this project
+                          No drawings marked up
                         </div>
                         <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5 }}>
-                          Upload drawings in Settings, then mark them up on mobile.
+                          Markups made on mobile will show here.
                         </div>
                       </div>
                     ) : drawings.map(d => (
@@ -1466,9 +1456,7 @@ export default function ReportPage() {
                               color: 'var(--text-mid)', marginTop: 2,
                               display: 'flex', alignItems: 'center', gap: 4,
                             }}>
-                              {d.number} · {d.zone_count > 0
-                                ? `${d.zone_count} zone${d.zone_count !== 1 ? 's' : ''}`
-                                : 'no markups'}
+                              {d.number} · {d.zone_count} zone{d.zone_count !== 1 ? 's' : ''}
                               {' · '}
                               {d.capturing ? (
                                 <span style={{ color: 'var(--indigo)' }}>Capturing...</span>
@@ -1663,8 +1651,8 @@ export default function ReportPage() {
                 color: 'var(--sage-ink)', lineHeight: 1.5,
               }}>
                 {selPhotoCount} of {selectedPhotos.length} photo{selectedPhotos.length !== 1 ? 's' : ''} selected
-                {selDrawingCount > 0 && (
-                  <> · {selDrawingCount} drawing{selDrawingCount !== 1 ? 's' : ''}</>
+                {drawings.length > 0 && (
+                  <> · {selDrawingCount} of {drawings.length} drawing{drawings.length !== 1 ? 's' : ''}</>
                 )}
               </div>
 
