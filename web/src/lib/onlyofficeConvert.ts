@@ -73,6 +73,41 @@ export async function forceSaveAndWait(inspectionId: string, docKey: string): Pr
   return { saved: false, commandOk, commandResponse }
 }
 
+/** Disconnects the open editing session for a document key.
+ *
+ *  Needed before rewriting a document underneath the editor: the open
+ *  session still holds the pre-edit copy and flushes it back through the
+ *  save callback afterwards, overwriting whatever was just written — which
+ *  looks like the document "reverting to the original".
+ *
+ *  The `users` array is required. Verified against this build: c:"drop"
+ *  without it answers error 5 (bad params), with it answers error 0;
+ *  c:"forceclose" is not supported here at all. The id must match the one
+ *  the editor was opened with (editorConfig.user.id). */
+export async function dropEditingSession(
+  docKey: string,
+  userId = 'siteiq-user'
+): Promise<{ ok: boolean; response: any }> {
+  const secret = getSecret()
+  if (!secret) return { ok: false, response: { error: 'ONLYOFFICE_JWT_SECRET not configured' } }
+
+  const payload = { c: 'drop', key: docKey, users: [userId] }
+  try {
+    const token = jwt.sign(payload, secret, { algorithm: 'HS256' })
+    const res = await fetch(`${getOoUrl()}/coauthoring/CommandService.ashx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, token }),
+    })
+    const response = await res.json().catch(() => ({}))
+    console.log('[dropEditingSession]', docKey, JSON.stringify(response))
+    return { ok: response?.error === 0, response }
+  } catch (err: any) {
+    console.error('[dropEditingSession] failed:', err)
+    return { ok: false, response: { error: err.message } }
+  }
+}
+
 /** Pushes a new title into a live editing session via the Document
  *  Server's `meta` command.
  *

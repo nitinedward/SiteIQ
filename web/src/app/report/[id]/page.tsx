@@ -311,9 +311,25 @@ export default function ReportPage() {
       selectedPhotosList.length > 0 ||
       selectedDrawingsList.length > 0
 
+    const docKey = `doc-${inspectionId}-${editorKey}`
+
+    // Force-save FIRST, so the download includes what's on screen. This used
+    // to run after the append, which meant the save wrote the editor's copy
+    // back over the freshly attached photos and drawings. Best-effort: a
+    // report with no open session has nothing to save.
+    try {
+      await fetch('/api/docs/forcesave', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ inspectionId, key: docKey }),
+      })
+    } catch (err) {
+      console.warn('[download] force-save skipped:', err)
+    }
+
     if (hasAttachments) {
-      // Same reason as insertAttachments: uploaded and passed by URL rather
-      // than inlined as base64, which overflowed the request body.
+      // Uploaded and passed by URL rather than inlined as base64, which
+      // overflowed the request body.
       const validDrawings = await uploadCapturedDrawings()
 
       const appendRes = await fetch('/api/docs/append', {
@@ -330,18 +346,6 @@ export default function ReportPage() {
         const err = await appendRes.json()
         throw new Error('Could not attach photos: ' + (err.error || 'Unknown error'))
       }
-    }
-
-    // Best-effort: a report with no open editing session has nothing to
-    // force-save, which isn't a failure worth blocking the download on.
-    try {
-      await fetch('/api/docs/forcesave', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ inspectionId, key: `doc-${inspectionId}-${editorKey}` }),
-      })
-    } catch (err) {
-      console.warn('[download] force-save skipped:', err)
     }
   }
 
@@ -713,10 +717,27 @@ export default function ReportPage() {
 
     setInserting(true)
     try {
-      // Inside the try: this uploads each captured drawing, and a failure
-      // here must surface like any other. Previously it ran outside, so a
-      // failed upload rejected unhandled and the click appeared to do
-      // nothing at all.
+      const docKey = `doc-${inspectionId}-${editorKey}`
+
+      // 1. Persist whatever is on screen. Without this the append would
+      //    rewrite the last autosave and any newer edits would be lost.
+      await fetch('/api/docs/forcesave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inspectionId, key: docKey }),
+      }).catch(() => { /* no active session to save is fine */ })
+
+      // 2. End the session before rewriting the file underneath it. The
+      //    open editor still holds the pre-insert copy and flushes it back
+      //    through the save callback afterwards, which overwrote the
+      //    appended document — the "reverts to the original" symptom.
+      await fetch('/api/docs/drop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ docKey }),
+      }).catch(() => { /* nothing open to drop */ })
+
+      // 3. Now the file is ours to modify.
       const drawingsList = await uploadCapturedDrawings()
 
       const res = await fetch('/api/docs/append', {
