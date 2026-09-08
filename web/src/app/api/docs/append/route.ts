@@ -6,7 +6,14 @@ import { saveDoc, loadDoc } from '@/lib/docStorage'
 const REL_IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 
 type PhotoInput   = { url: string; zoneLabel: string }
-type DrawingInput = { title: string; number: string; revision?: string; dataUrl?: string; pngBase64?: string }
+type DrawingInput = {
+  title: string; number: string; revision?: string
+  // `url` is the normal path — a full-page capture inlined as base64 blows
+  // the request body limit. dataUrl/pngBase64 are still accepted so older
+  // callers keep working.
+  url?: string
+  dataUrl?: string; pngBase64?: string
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -203,7 +210,31 @@ export async function POST(request: NextRequest) {
     }
 
     const validPhotos   = (photos   as PhotoInput[]).filter(p => p?.url)
-    const validDrawings = (drawings as DrawingInput[]).filter(d => d?.dataUrl || d?.pngBase64)
+    const validDrawings = (drawings as DrawingInput[]).filter(d => d?.url || d?.dataUrl || d?.pngBase64)
+
+    // Resolved up front because the section below is built synchronously.
+    // A drawing that can't be resolved yields null and is skipped rather
+    // than aborting the whole insert.
+    const drawingBuffers: (Buffer | null)[] = await Promise.all(
+      validDrawings.map(async (drawing) => {
+        if (drawing.url) {
+          try {
+            const res = await fetch(drawing.url, { cache: 'no-store' })
+            if (!res.ok) throw new Error(`HTTP ${res.status}`)
+            return Buffer.from(await res.arrayBuffer())
+          } catch (err) {
+            console.warn(`[append] Drawing "${drawing.title}" could not be fetched — skipping`, err)
+            return null
+          }
+        }
+        const match = (drawing.pngBase64 || drawing.dataUrl || '').match(/^data:image\/\w+;base64,(.+)$/)
+        if (!match) {
+          console.warn(`[append] Drawing "${drawing.title}" has bad dataUrl — skipping`)
+          return null
+        }
+        return Buffer.from(match[1], 'base64')
+      })
+    )
 
     const zip = new AdmZip(docBuffer)
 
@@ -259,13 +290,9 @@ export async function POST(request: NextRequest) {
       appendXml += PAGE_BREAK + sectionHeading('STRUCTURAL DRAWINGS')
 
       validDrawings.forEach((drawing, i) => {
-        const base64Match = (drawing.pngBase64 || drawing.dataUrl || '').match(/^data:image\/\w+;base64,(.+)$/)
-        if (!base64Match) {
-          console.warn(`[append] Drawing "${drawing.title}" has bad dataUrl — skipping`)
-          return
-        }
+        const imgBuffer = drawingBuffers[i]
+        if (!imgBuffer) return
 
-        const imgBuffer = Buffer.from(base64Match[1], 'base64')
         const mediaName = `appendDrawing${i + 1}.png`
         zip.addFile(`word/media/${mediaName}`, imgBuffer)
 

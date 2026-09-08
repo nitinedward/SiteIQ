@@ -311,20 +311,9 @@ export default function ReportPage() {
       selectedDrawingsList.length > 0
 
     if (hasAttachments) {
-      const drawingsWithData = await Promise.all(
-        selectedDrawingsList.map(async d => {
-          if (!d.capturedBlob) return null
-          const buf    = await d.capturedBlob.arrayBuffer()
-          const base64 = Buffer.from(buf).toString('base64')
-          return {
-            title:    d.title,
-            number:   d.number,
-            revision: d.revision,
-            dataUrl:  `data:image/png;base64,${base64}`,
-          }
-        })
-      )
-      const validDrawings = drawingsWithData.filter(Boolean)
+      // Same reason as insertAttachments: uploaded and passed by URL rather
+      // than inlined as base64, which overflowed the request body.
+      const validDrawings = await uploadCapturedDrawings()
 
       const appendRes = await fetch('/api/docs/append', {
         method:  'POST',
@@ -674,25 +663,38 @@ export default function ReportPage() {
   }
 
   // ── INSERT ATTACHMENTS INTO EDITOR ───────────────────────────────────────────
+  /** Uploads each captured drawing and returns them addressed by URL.
+   *
+   *  These used to be inlined into the append request as base64. A
+   *  full-page capture is several MB and base64 adds a third on top, so a
+   *  couple of drawings exceeded the request body limit — the platform
+   *  returned an HTML "Request Entity Too Large" page, which surfaced as
+   *  "Unexpected token 'R' ... is not valid JSON". Uploading as raw binary
+   *  keeps each request small and matches how photos have always worked. */
+  const uploadCapturedDrawings = async (): Promise<any[]> => {
+    const captured = drawings.filter(d => d.selected && d.captured && d.capturedBlob)
+    const out: any[] = []
+    for (const d of captured) {
+      const res = await fetch(
+        `/api/docs/drawing-asset?inspectionId=${inspectionId}&name=${encodeURIComponent(d.number || d.id)}`,
+        { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: d.capturedBlob! }
+      )
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(`Could not upload drawing ${d.number}: ${err.error || res.status}`)
+      }
+      const { url } = await res.json()
+      out.push({ title: d.title, number: d.number, revision: d.revision || 'A', url })
+    }
+    return out
+  }
+
   const insertAttachments = async () => {
     const photos = selectedPhotos
       .filter(p => p.selected)
       .map(p => ({ url: p.url, zoneLabel: p.zoneLabel }))
 
-    const drawingsList: any[] = []
-    for (const d of drawings.filter(dr => dr.selected && dr.captured && dr.capturedBlob)) {
-      const buf = await d.capturedBlob!.arrayBuffer()
-      const bytes = new Uint8Array(buf)
-      let binary = ''
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-      const base64 = btoa(binary)
-      drawingsList.push({
-        title: d.title,
-        number: d.number,
-        revision: d.revision || 'A',
-        pngBase64: `data:image/png;base64,${base64}`,
-      })
-    }
+    const drawingsList = await uploadCapturedDrawings()
 
     // Nothing selected — this call still runs (it replaces the whole
     // inserted section, so an empty selection means "remove everything
