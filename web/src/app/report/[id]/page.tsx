@@ -853,22 +853,40 @@ export default function ReportPage() {
       console.log('[loadAttachments] Zones loaded:', zonesData?.length ?? 0)
 
       const drawingMap = new Map<string, DrawingInfo>()
-      ;(zonesData ?? []).forEach((z: any) => {
-        const d = z.drawings
-        if (!d) return
-        if (drawingMap.has(d.id)) {
-          drawingMap.get(d.id)!.zone_count++
-        } else {
-          drawingMap.set(d.id, {
-            id: d.id, title: d.title || 'Untitled Drawing',
-            number: d.number || '—', revision: d.revision || 'A',
-            file_url: d.file_url, zone_count: 1,
-            selected: false, captured: false, capturing: false,
-            capturedBlob: null, previewUrl: null,
-          })
-        }
-      })
+      const addDrawing = (d: any, zoneCount: number) => {
+        if (!d?.id || !d.file_url) return
+        const existing = drawingMap.get(d.id)
+        if (existing) { existing.zone_count += zoneCount; return }
+        drawingMap.set(d.id, {
+          id: d.id, title: d.title || 'Untitled Drawing',
+          number: d.number || '—', revision: d.revision || 'A',
+          file_url: d.file_url, zone_count: zoneCount,
+          selected: false, captured: false, capturing: false,
+          capturedBlob: null, previewUrl: null,
+        })
+      }
+
+      // Marked-up drawings first, carrying their pin counts.
+      ;(zonesData ?? []).forEach((z: any) => addDrawing(z.drawings, 1))
+
+      // Then the rest of the project's drawings. Previously the panel was
+      // built only from zones, so a project with no pins listed nothing and
+      // there was no way to put any drawing into the report at all.
+      const { data: insp } = await supabase
+        .from('inspections').select('project_id').eq('id', inspId).single()
+
+      if (insp?.project_id) {
+        const { data: projectDrawings } = await supabase
+          .from('drawings')
+          .select('id, title, number, revision, file_url')
+          .eq('project_id', insp.project_id)
+          .order('created_at', { ascending: false })
+        ;(projectDrawings ?? []).forEach((d: any) => addDrawing(d, 0))
+      }
+
+      // Marked-up ones at the top — they're the ones usually wanted.
       const drawingList = Array.from(drawingMap.values())
+        .sort((a, b) => b.zone_count - a.zone_count)
       console.log('[loadAttachments] Drawings found:', drawingList.length)
       setDrawings(drawingList)
     } finally {
@@ -1378,10 +1396,10 @@ export default function ReportPage() {
                           <polyline points="14,2 14,8 20,8"/>
                         </svg>
                         <div style={{ fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>
-                          No drawings marked up
+                          No drawings on this project
                         </div>
                         <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5 }}>
-                          Markups made on mobile will show here.
+                          Upload drawings in Settings, then mark them up on mobile.
                         </div>
                       </div>
                     ) : drawings.map(d => (
@@ -1448,7 +1466,9 @@ export default function ReportPage() {
                               color: 'var(--text-mid)', marginTop: 2,
                               display: 'flex', alignItems: 'center', gap: 4,
                             }}>
-                              {d.number} · {d.zone_count} zone{d.zone_count !== 1 ? 's' : ''}
+                              {d.number} · {d.zone_count > 0
+                                ? `${d.zone_count} zone${d.zone_count !== 1 ? 's' : ''}`
+                                : 'no markups'}
                               {' · '}
                               {d.capturing ? (
                                 <span style={{ color: 'var(--indigo)' }}>Capturing...</span>
