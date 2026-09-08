@@ -40,13 +40,16 @@ const MAX_POLLS = 20        // ~15s ceiling
  *  has been quiet for a couple of seconds. */
 export async function POST(request: NextRequest) {
   try {
-    const { inspectionId, docKey } = await request.json()
+    const { inspectionId, docKey, drop = true } = await request.json()
     if (!inspectionId || !docKey) {
       return NextResponse.json({ error: 'Missing inspectionId or docKey' }, { status: 400, headers: cors })
     }
 
     const saved = await forceSaveAndWait(inspectionId, docKey)
-    const dropped = await dropEditingSession(docKey)
+    // Dropping server-side makes the still-open editor show "file cannot be
+    // accessed right now", so callers that have already closed the editor
+    // themselves pass drop:false and simply wait for its parting save.
+    const dropped = drop ? await dropEditingSession(docKey) : { ok: false, response: { skipped: true } }
 
     let last = await getDocUpdatedAt(inspectionId)
     let quietFor = 0

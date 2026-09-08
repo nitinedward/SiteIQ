@@ -61,6 +61,8 @@ export default function ReportPage() {
   const [editorError,        setEditorError]         = useState(false)
   const [inserting,          setInserting]           = useState(false)
   const [insertResult,       setInsertResult]        = useState('')
+  // Unmounts the editor while the document is rewritten underneath it.
+  const [editorSuspended,    setEditorSuspended]     = useState(false)
   const [reloadingEditor,    setReloadingEditor]     = useState(false)
   const [mobileTab,          setMobileTab]            = useState<'document' | 'attachments'>('document')
   const [showFinaliseConfirm, setShowFinaliseConfirm] = useState(false)
@@ -315,13 +317,16 @@ export default function ReportPage() {
 
     if (hasAttachments) {
       // Same hazard as inserting: the file is about to be rewritten, so the
-      // session has to be saved and closed first or its parting save
-      // overwrites the attachments. (This used to force-save *after* the
-      // append, which guaranteed exactly that.)
+      // editor is closed from this side first and its parting save allowed
+      // to land, or it overwrites the attachments. (This used to force-save
+      // *after* the append, which guaranteed exactly that.)
+      setReloadingEditor(true)
+      setEditorSuspended(true)
+      await new Promise(r => setTimeout(r, 1200))
       await fetch('/api/docs/quiesce', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ inspectionId, docKey }),
+        body:    JSON.stringify({ inspectionId, docKey, drop: false }),
       }).catch(() => { /* nothing open — fine */ })
     } else {
       // Nothing to attach, so just capture what's on screen.
@@ -356,12 +361,12 @@ export default function ReportPage() {
         throw new Error('Could not attach photos: ' + (err.error || 'Unknown error'))
       }
 
-      // The session was closed to make the rewrite safe, so reconnect the
-      // editor on a fresh key — otherwise it sits there disconnected and
-      // still showing the pre-attachment document.
-      setReloadingEditor(true)
+      // The editor was closed to make the rewrite safe, so bring it back on
+      // a fresh key — otherwise the pane stays empty and the user is left
+      // looking at the pre-attachment document.
+      setEditorSuspended(false)
       setEditorKey(prev => prev + 1)
-      setTimeout(() => setReloadingEditor(false), 3000)
+      setTimeout(() => setReloadingEditor(false), 2500)
     }
   }
 
@@ -735,15 +740,22 @@ export default function ReportPage() {
     try {
       const docKey = `doc-${inspectionId}-${editorKey}`
 
-      // Save, close and wait for the session to be fully gone before
-      // touching the file. Dropping alone isn't enough: the Document Server
-      // sends a final save as it disconnects, and that save would land
-      // after the append and overwrite it — the document "reverting to the
-      // original with just the site notes".
+      // Close the editor from this side first. Dropping the session
+      // server-side while the iframe is still open makes OnlyOffice show
+      // "file cannot be accessed right now"; unmounting calls
+      // destroyEditor(), which ends the session cleanly and triggers its
+      // final save. Give the teardown a moment to reach the server.
+      setReloadingEditor(true)
+      setEditorSuspended(true)
+      await new Promise(r => setTimeout(r, 1200))
+
+      // Then save what was on screen and wait for writes to go quiet — the
+      // parting save must land before the file is rewritten, or it
+      // overwrites the attachments and the report reverts to its notes.
       const quiesceRes = await fetch('/api/docs/quiesce', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inspectionId, docKey }),
+        body: JSON.stringify({ inspectionId, docKey, drop: false }),
       })
       const quiesce = await quiesceRes.json().catch(() => ({}))
       console.log('[insert] quiesce:', quiesce)
@@ -784,14 +796,16 @@ export default function ReportPage() {
       )
       setTimeout(() => setInsertResult(''), 8000)
 
-      setReloadingEditor(true)
       setEditorKey(prev => prev + 1)
       setMobileTab('document')
-      setTimeout(() => setReloadingEditor(false), 3000)
 
     } catch (err: any) {
       alert('Insert failed: ' + err.message)
     } finally {
+      // Always bring the editor back, including after a failure — otherwise
+      // a failed insert would leave the document pane empty.
+      setEditorSuspended(false)
+      setTimeout(() => setReloadingEditor(false), 2500)
       setInserting(false)
     }
   }
@@ -1832,7 +1846,7 @@ export default function ReportPage() {
                   boxShadow: 'var(--shadow-card-v3)',
                   border: '1px solid var(--border-line)',
                 }}>
-                  {docReady && (
+                  {docReady && !editorSuspended && (
                     <OnlyOfficeEditor
                       key={editorKey}
                       sessionKey={editorKey}
