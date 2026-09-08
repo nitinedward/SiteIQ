@@ -108,13 +108,48 @@ export async function captureDrawingWithMarkup(
     }
   })
 
-  return new Promise<Blob>((resolve, reject) => {
+  return exportWithinBudget(canvas)
+}
+
+/** Largest capture we'll hand to the upload route. A dense structural
+ *  drawing rendered at scale 2 can exceed the request body limit on its
+ *  own, which came back as a 413 and failed the insert. */
+const MAX_CAPTURE_BYTES = 3_500_000
+
+function toBlobAsync(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
     canvas.toBlob(
       blob => blob ? resolve(blob) : reject(new Error('Canvas export failed')),
-      'image/png',
-      0.95
+      'image/png'
     )
   })
+}
+
+/** Exports as PNG, stepping the resolution down until it fits the budget.
+ *  Kept as PNG deliberately: these are line drawings, which JPEG blurs, and
+ *  the document assembler stores them as .png. Halving the linear size
+ *  quarters the pixel count, so this converges quickly. */
+async function exportWithinBudget(canvas: HTMLCanvasElement): Promise<Blob> {
+  let blob = await toBlobAsync(canvas)
+  if (blob.size <= MAX_CAPTURE_BYTES) return blob
+
+  for (const factor of [0.75, 0.6, 0.5, 0.4, 0.3]) {
+    const scaled = document.createElement('canvas')
+    scaled.width = Math.max(1, Math.round(canvas.width * factor))
+    scaled.height = Math.max(1, Math.round(canvas.height * factor))
+    const sctx = scaled.getContext('2d')!
+    sctx.imageSmoothingEnabled = true
+    sctx.imageSmoothingQuality = 'high'
+    sctx.drawImage(canvas, 0, 0, scaled.width, scaled.height)
+
+    blob = await toBlobAsync(scaled)
+    console.log(`[captureDrawing] downscaled to ${Math.round(factor * 100)}% → ${(blob.size / 1e6).toFixed(2)} MB`)
+    if (blob.size <= MAX_CAPTURE_BYTES) return blob
+  }
+
+  // Still over budget at 30%: hand back the smallest we produced and let
+  // the upload report the failure rather than silently dropping it.
+  return blob
 }
 
 function drawLabel(

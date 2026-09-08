@@ -680,8 +680,12 @@ export default function ReportPage() {
         { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: d.capturedBlob! }
       )
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(`Could not upload drawing ${d.number}: ${err.error || res.status}`)
+        // 413 comes back as an HTML page, not JSON, so it needs naming
+        // explicitly rather than surfacing as a bare status code.
+        const detail = res.status === 413
+          ? `it is too large to upload (${(d.capturedBlob!.size / 1e6).toFixed(1)} MB). Try a drawing with fewer pages, or re-capture it.`
+          : (await res.json().catch(() => ({}))).error || `upload failed (${res.status})`
+        throw new Error(`Could not add drawing ${d.number}: ${detail}`)
       }
       const { url } = await res.json()
       out.push({ title: d.title, number: d.number, revision: d.revision || 'A', url })
@@ -694,18 +698,26 @@ export default function ReportPage() {
       .filter(p => p.selected)
       .map(p => ({ url: p.url, zoneLabel: p.zoneLabel }))
 
-    const drawingsList = await uploadCapturedDrawings()
+    // Counted rather than uploaded first, so the confirm below happens
+    // before any work starts.
+    const capturedCount = drawings.filter(d => d.selected && d.captured && d.capturedBlob).length
 
     // Nothing selected — this call still runs (it replaces the whole
     // inserted section, so an empty selection means "remove everything
     // I've inserted"), but confirm first so a stray click doesn't silently
     // wipe it out.
-    if (photos.length === 0 && drawingsList.length === 0) {
+    if (photos.length === 0 && capturedCount === 0) {
       if (!confirm('No photos or drawings are selected. This will remove any previously inserted attachments from the document. Continue?')) return
     }
 
     setInserting(true)
     try {
+      // Inside the try: this uploads each captured drawing, and a failure
+      // here must surface like any other. Previously it ran outside, so a
+      // failed upload rejected unhandled and the click appeared to do
+      // nothing at all.
+      const drawingsList = await uploadCapturedDrawings()
+
       const res = await fetch('/api/docs/append', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
