@@ -166,7 +166,18 @@ export async function loadProjectSiteNotes(projectId: string): Promise<SiteNote[
  *  records it in, so the two stay in step. */
 export async function setSiteNoteStatus(noteId: string, status: NoteStatus): Promise<void> {
   const { error } = await supabase.from('observations').update({ severity: status }).eq('id', noteId)
-  if (error) throw new Error(error.message)
+  if (!error) return
+
+  // The column still carries the old severity-grade check constraint on
+  // databases where web/sql/observation_status.sql hasn't been run. Say what
+  // to do about it rather than passing the raw Postgres message on.
+  if (/observations_severity_check/.test(error.message)) {
+    throw new Error(
+      'The database still restricts this field to the old severity grades, so open/closed can’t be saved yet. ' +
+      'Run web/sql/observation_status.sql once in the Supabase SQL editor.'
+    )
+  }
+  throw new Error(error.message)
 }
 
 // ── RESPONSES ───────────────────────────────────────────────────────────────
