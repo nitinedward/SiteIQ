@@ -1408,23 +1408,16 @@ function AdminPageInner() {
                                 </div>
                               </div>
 
-                              <button
-                                onClick={e => { e.stopPropagation(); changeNoteStatus(note.id, isOpen ? 'CLOSED' : 'OPEN') }}
-                                disabled={savingNoteId === note.id}
-                                title={isOpen ? 'Mark this note as closed' : 'Reopen this note'}
-                                style={{
-                                  flexShrink: 0,
-                                  background: isOpen ? 'var(--sage-soft)' : 'var(--surface)',
-                                  color: isOpen ? 'var(--sage-ink)' : 'var(--text-mid)',
-                                  border: `1px solid ${isOpen ? 'var(--sage)' : 'var(--border-line)'}`,
-                                  borderRadius: 'var(--radius-pill)', padding: '7px 14px',
-                                  fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700,
-                                  cursor: savingNoteId === note.id ? 'not-allowed' : 'pointer',
-                                  opacity: savingNoteId === note.id ? 0.6 : 1,
-                                }}
+                              {/* Closing and reopening live inside the note
+                                  itself, where the response that justifies
+                                  it is recorded — a row is for reading. */}
+                              <svg
+                                width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                stroke="var(--text-mid)" strokeWidth="2" style={{ flexShrink: 0, marginTop: 2 }}
+                                aria-hidden="true"
                               >
-                                {isOpen ? 'Close' : 'Reopen'}
-                              </button>
+                                <path d="m9 18 6-6-6-6"/>
+                              </svg>
                             </div>
                           )
                         })}
