@@ -32,7 +32,11 @@ export function SiteNoteModal({
   const [loadingResponses, setLoading]  = useState(true)
   const [tableMissing, setTableMissing] = useState(false)
   const [comment, setComment]           = useState('')
-  const [file, setFile]                 = useState<File | null>(null)
+  // Several files can be queued at once — dropping a handful of photos of
+  // the remedial work is the common case. Each becomes its own response,
+  // since a response row carries one file.
+  const [files, setFiles]               = useState<File[]>([])
+  const [dragging, setDragging]         = useState(false)
   const [savingResponse, setSavingResponse] = useState(false)
   const [responseError, setResponseError]   = useState('')
 
@@ -70,20 +74,47 @@ export function SiteNoteModal({
     return () => { cancelled = true }
   }, [note.id])
 
+  const addFiles = (incoming: FileList | File[] | null) => {
+    const list = Array.from(incoming ?? [])
+    if (list.length === 0) return
+    setFiles(curr => [...curr, ...list])
+    setResponseError('')
+  }
+
   const saveResponse = async (alsoClose: boolean) => {
     setResponseError('')
     setSavingResponse(true)
+
+    // Saved one at a time so a single failure part-way through still keeps
+    // whatever already landed, rather than the list disagreeing with the
+    // database. The comment goes on the first response of the batch.
+    const created: NoteResponse[] = []
     try {
-      const created = await addNoteResponse({ observationId: note.id, comment, file })
-      const next = [...responses, created]
-      setResponses(next)
-      onResponsesChanged?.(note.id, next.length)
+      if (files.length === 0) {
+        created.push(await addNoteResponse({ observationId: note.id, comment }))
+      } else {
+        for (let i = 0; i < files.length; i++) {
+          created.push(await addNoteResponse({
+            observationId: note.id,
+            comment: i === 0 ? comment : '',
+            file: files[i],
+          }))
+        }
+      }
       setComment('')
-      setFile(null)
+      setFiles([])
       if (alsoClose && note.status === 'OPEN') onToggleStatus('CLOSED')
     } catch (err: any) {
       setResponseError(err?.message ?? 'Could not save the response.')
+      // Anything that did save stays queued out of the file list.
+      setFiles(curr => curr.slice(created.length))
+      if (created.length > 0) setComment('')
     } finally {
+      if (created.length > 0) {
+        const next = [...responses, ...created]
+        setResponses(next)
+        onResponsesChanged?.(note.id, next.length)
+      }
       setSavingResponse(false)
     }
   }
@@ -147,13 +178,48 @@ export function SiteNoteModal({
         role="dialog"
         aria-modal="true"
         aria-label={`Site note — ${note.zoneLabel}`}
+        // Files can be dropped anywhere on an open note, not just on the
+        // attach button — dragging a photo or a PDF straight onto the note
+        // is the quickest way to record what came back from site.
+        onDragOver={e => {
+          if (tableMissing) return
+          e.preventDefault()
+          if (!dragging) setDragging(true)
+        }}
+        onDragLeave={e => { if (e.currentTarget === e.target) setDragging(false) }}
+        onDrop={e => {
+          if (tableMissing) return
+          e.preventDefault()
+          setDragging(false)
+          addFiles(e.dataTransfer?.files ?? null)
+        }}
         style={{
+          position: 'relative',
           background: 'var(--surface)', border: '1px solid var(--border-line)',
           borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card-v3)',
           width: 'min(920px, 100%)', maxHeight: '90vh',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          outline: dragging ? '2px dashed var(--indigo)' : 'none', outlineOffset: -10,
         }}
       >
+        {dragging && (
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: 5,
+            background: 'rgba(237,242,251,.92)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
+            pointerEvents: 'none', borderRadius: 'var(--radius-xl)',
+          }}>
+            <svg width="30" height="30" fill="none" stroke="var(--indigo)" strokeWidth="1.7" viewBox="0 0 24 24">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 800, color: 'var(--indigo-deep)' }}>
+              Drop to attach to this note
+            </div>
+            <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--indigo)' }}>
+              Photos, PDFs, emails or documents
+            </div>
+          </div>
+        )}
         {/* Header */}
         <div style={{
           padding: '22px 26px', borderBottom: '1px solid var(--border-line)',
@@ -419,6 +485,35 @@ export function SiteNoteModal({
                     onBlur={e => { e.target.style.borderColor = 'var(--border-line)' }}
                   />
 
+                  {files.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                      {files.map((f, i) => {
+                        const tooBig = f.size > MAX_RESPONSE_FILE_BYTES
+                        return (
+                          <span key={`${f.name}-${i}`} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 8, maxWidth: '100%',
+                            background: tooBig ? 'var(--clay-soft)' : 'var(--paper)',
+                            border: `1px solid ${tooBig ? 'rgba(229,115,91,.4)' : 'var(--border-line)'}`,
+                            borderRadius: 'var(--radius-pill)', padding: '6px 12px',
+                          }}>
+                            <span style={{
+                              fontFamily: 'var(--f-mono)', fontSize: 11.5,
+                              color: tooBig ? 'var(--clay-ink)' : 'var(--text-mid)',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240,
+                            }}>
+                              {f.name} · {(f.size / 1e6).toFixed(1)} MB{tooBig ? ' · too large' : ''}
+                            </span>
+                            <button
+                              onClick={() => setFiles(curr => curr.filter((_, idx) => idx !== i))}
+                              title="Remove"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mid)', fontSize: 13, padding: 0 }}
+                            >✕</button>
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
                     <label style={{
                       display: 'inline-flex', alignItems: 'center', gap: 7,
@@ -427,28 +522,18 @@ export function SiteNoteModal({
                       fontFamily: 'var(--f-heading)', fontSize: 12.5, fontWeight: 700, color: 'var(--text-ink)',
                     }}>
                       <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                      {file ? 'Change file' : 'Attach a file'}
+                      Attach files
                       <input
                         type="file"
-                        onChange={e => { setFile(e.target.files?.[0] ?? null); setResponseError('') }}
+                        multiple
+                        onChange={e => { addFiles(e.target.files); e.target.value = '' }}
                         style={{ display: 'none' }}
                       />
                     </label>
 
-                    {file && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                        <span style={{
-                          fontFamily: 'var(--f-mono)', fontSize: 11.5, color: 'var(--text-mid)',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220,
-                        }}>
-                          {file.name} · {(file.size / 1e6).toFixed(1)} MB
-                        </span>
-                        <button
-                          onClick={() => setFile(null)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mid)', fontSize: 13 }}
-                        >✕</button>
-                      </span>
-                    )}
+                    <span style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)' }}>
+                      or drop them anywhere on this note
+                    </span>
 
                     <span style={{ flex: 1 }} />
 
@@ -462,7 +547,9 @@ export function SiteNoteModal({
                         cursor: savingResponse ? 'not-allowed' : 'pointer', opacity: savingResponse ? 0.6 : 1,
                       }}
                     >
-                      {savingResponse ? 'Saving…' : 'Save response'}
+                      {savingResponse
+                        ? 'Saving…'
+                        : files.length > 1 ? `Save ${files.length} responses` : 'Save response'}
                     </button>
 
                     {isOpen && (
@@ -482,8 +569,9 @@ export function SiteNoteModal({
                   </div>
 
                   <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 10 }}>
-                    Photos, PDFs, emails or documents up to {MAX_RESPONSE_FILE_BYTES / 1e6} MB. Response files are kept with
-                    the note — they are not added to the report.
+                    Photos, PDFs, emails or documents up to {MAX_RESPONSE_FILE_BYTES / 1e6} MB each
+                    {files.length > 1 && ' — each file is saved as its own response, with your note on the first'}.
+                    Response files are kept with the note — they are not added to the report.
                   </div>
 
                   {responseError && (
