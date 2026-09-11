@@ -4,6 +4,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { Shell, Badge, Btn, Spinner, Card, NewProjectModal } from '@/components/Shell'
 import { reportDisplayName } from '@/lib/reportFileName'
+import { SiteNoteModal } from '@/components/SiteNoteModal'
+import {
+  SiteNote, NoteStatus, loadProjectSiteNotes, setSiteNoteStatus, formatNoteDate,
+} from '@/lib/siteNotes'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL ??
@@ -163,7 +167,12 @@ function AdminPageInner() {
   const [tab, setTab]                 = useState<'projects' | 'team'>('projects')
 
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
-  const [projTab, setProjTab]                 = useState<'reports' | 'drawings' | 'engineers'>('reports')
+  const [projTab, setProjTab]                 = useState<'reports' | 'notes' | 'drawings' | 'engineers'>('reports')
+  const [siteNotes, setSiteNotes]             = useState<SiteNote[]>([])
+  const [loadingNotes, setLoadingNotes]       = useState(false)
+  const [noteFilter, setNoteFilter]           = useState<'all' | 'open' | 'closed'>('all')
+  const [openNoteId, setOpenNoteId]           = useState<string | null>(null)
+  const [savingNoteId, setSavingNoteId]       = useState<string | null>(null)
   const [drawings, setDrawings]               = useState<Drawing[]>([])
   const [revisionHistoryFor, setRevisionHistoryFor] = useState<string | null>(null)
   const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([])
@@ -257,6 +266,9 @@ function AdminPageInner() {
     setEditingProject(false)
     setProjTab('reports')
     setSelectedDrawingIds([])
+    setNoteFilter('all')
+    setOpenNoteId(null)
+    loadSiteNotes(project.id)
     const [{ data: d }, { data: pm }] = await Promise.all([
       supabase.from('drawings').select('*').eq('project_id', project.id).order('created_at', { ascending: false }),
       supabase.from('project_members').select('user_id').eq('project_id', project.id),
@@ -264,6 +276,38 @@ function AdminPageInner() {
     setDrawings(sortDrawingsForDisplay(d ?? []))
     setAssignedUserIds((pm ?? []).map((p: any) => p.user_id))
     loadProjectInspections(project.id)
+  }
+
+  // Site notes — the observations recorded on site for this project, each
+  // open or closed. Loaded with the project rather than on tab click so the
+  // tab can show how many are outstanding without being opened first.
+  const loadSiteNotes = async (projectId: string) => {
+    setLoadingNotes(true)
+    try {
+      setSiteNotes(await loadProjectSiteNotes(projectId))
+    } catch (err) {
+      console.error('[siteNotes] load failed:', err)
+      setSiteNotes([])
+    } finally {
+      setLoadingNotes(false)
+    }
+  }
+
+  const changeNoteStatus = async (noteId: string, next: NoteStatus) => {
+    setSavingNoteId(noteId)
+    const previous = siteNotes
+    // Applied straight away — the list and its counts shouldn't wait on the
+    // round trip — and rolled back if the write fails.
+    setSiteNotes(curr => curr.map(n => (n.id === noteId ? { ...n, status: next } : n)))
+    try {
+      await setSiteNoteStatus(noteId, next)
+    } catch (err: any) {
+      console.error('[siteNotes] could not update:', err)
+      setSiteNotes(previous)
+      alert('Could not update the note: ' + (err?.message ?? 'unknown error'))
+    } finally {
+      setSavingNoteId(null)
+    }
   }
 
   const toggleAssignment = async (userId: string) => {
@@ -875,6 +919,23 @@ function AdminPageInner() {
     </div>
   )
 
+  // ── SITE NOTES — derived ──────────────────────────────────────────────────
+  const openNotesCount   = siteNotes.filter(n => n.status === 'OPEN').length
+  const closedNotesCount = siteNotes.length - openNotesCount
+  const visibleNotes     = siteNotes.filter(n =>
+    noteFilter === 'all' ? true : noteFilter === 'open' ? n.status === 'OPEN' : n.status === 'CLOSED'
+  )
+  const openNote = siteNotes.find(n => n.id === openNoteId) ?? null
+
+  const noteFilterBtn = (active: boolean): React.CSSProperties => ({
+    minHeight: 34, padding: '0 16px', borderRadius: 'var(--radius-pill)',
+    fontFamily: 'var(--f-heading)', fontSize: 12.5, fontWeight: 700,
+    background: active ? 'var(--indigo-soft)' : 'var(--surface)',
+    color: active ? 'var(--indigo)' : 'var(--text-mid)',
+    border: `1px solid ${active ? 'var(--indigo)' : 'var(--border-line)'}`,
+    cursor: 'pointer', transition: 'all .15s',
+  })
+
   const subTabBtn = (active: boolean): React.CSSProperties => ({
     padding: '14px 24px', fontFamily: 'var(--f-heading)', fontSize: 14.5,
     fontWeight: 700,
@@ -1161,6 +1222,16 @@ function AdminPageInner() {
                 {!editingProject && (
                   <div style={{ display: 'flex', borderBottom: '1px solid var(--border-line)', padding: '0 4px' }}>
                     <button style={subTabBtn(projTab === 'reports')}   onClick={() => { setProjTab('reports'); loadProjectInspections(selectedProject.id) }}>Reports</button>
+                    <button style={subTabBtn(projTab === 'notes')}     onClick={() => setProjTab('notes')}>
+                      Site Notes
+                      {openNotesCount > 0 && (
+                        <span style={{
+                          marginLeft: 7, background: 'var(--marigold-soft)', color: 'var(--marigold-ink)',
+                          fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700,
+                          padding: '2px 8px', borderRadius: 'var(--radius-pill)',
+                        }}>{openNotesCount} open</span>
+                      )}
+                    </button>
                     <button style={subTabBtn(projTab === 'drawings')}  onClick={() => setProjTab('drawings')}>Drawings ({drawings.length})</button>
                     <button style={subTabBtn(projTab === 'engineers')} onClick={() => setProjTab('engineers')}>Engineers</button>
                   </div>
@@ -1230,6 +1301,128 @@ function AdminPageInner() {
                           )
                         })()}
                       </>
+                    )}
+                  </div>
+                )}
+
+                {/* ── SITE NOTES TAB ── */}
+                {/* Every observation recorded on site for this project, open
+                    or closed. Clicking one opens the full note: what was
+                    dictated, the photos, the measurements, and the drawing
+                    with that note's markup on it. */}
+                {!editingProject && projTab === 'notes' && (
+                  <div style={{ padding: '24px 28px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                      <h3 style={{ fontFamily: 'var(--f-heading)', fontSize: 18, fontWeight: 800, color: 'var(--indigo-deep)' }}>
+                        Site Notes
+                      </h3>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button style={noteFilterBtn(noteFilter === 'all')}    onClick={() => setNoteFilter('all')}>All ({siteNotes.length})</button>
+                        <button style={noteFilterBtn(noteFilter === 'open')}   onClick={() => setNoteFilter('open')}>Open ({openNotesCount})</button>
+                        <button style={noteFilterBtn(noteFilter === 'closed')} onClick={() => setNoteFilter('closed')}>Closed ({closedNotesCount})</button>
+                      </div>
+                    </div>
+
+                    {loadingNotes ? (
+                      <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={28} /></div>
+                    ) : visibleNotes.length === 0 ? (
+                      <div style={{ padding: '28px 0', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>
+                        {siteNotes.length === 0
+                          ? 'No site notes yet — observations recorded on mobile appear here.'
+                          : noteFilter === 'open'
+                            ? 'Nothing open — every site note on this project has been closed.'
+                            : 'No closed site notes yet.'}
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {visibleNotes.map(note => {
+                          const isOpen = note.status === 'OPEN'
+                          const tone = isOpen
+                            ? { bg: 'var(--marigold-soft)', fg: 'var(--marigold-ink)', dot: 'var(--marigold)' }
+                            : { bg: 'var(--sage-soft)',     fg: 'var(--sage-ink)',     dot: 'var(--sage)' }
+                          return (
+                            <div
+                              key={note.id}
+                              onClick={() => setOpenNoteId(note.id)}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenNoteId(note.id) } }}
+                              style={{
+                                border: '1px solid var(--border-line)',
+                                borderRadius: 'var(--radius-lg, 18px)',
+                                background: isOpen ? 'var(--surface)' : 'var(--paper)',
+                                padding: '16px 18px', cursor: 'pointer', transition: 'border-color .15s, box-shadow .15s',
+                                display: 'flex', alignItems: 'flex-start', gap: 16,
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--indigo)'; e.currentTarget.style.boxShadow = 'var(--shadow-card-v3)' }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-line)'; e.currentTarget.style.boxShadow = 'none' }}
+                            >
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                                    background: tone.bg, color: tone.fg,
+                                    fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700,
+                                    padding: '3px 10px', borderRadius: 'var(--radius-pill)',
+                                  }}>
+                                    <span style={{ width: 6, height: 6, borderRadius: 3, background: tone.dot }} />
+                                    {isOpen ? 'Open' : 'Closed'}
+                                  </span>
+                                  {note.reportNo && (
+                                    <span style={{
+                                      background: 'var(--indigo-soft)', color: 'var(--indigo)',
+                                      fontFamily: 'var(--f-mono)', fontSize: 10.5, fontWeight: 600,
+                                      padding: '2px 8px', borderRadius: 8,
+                                    }}>#{note.reportNo}</span>
+                                  )}
+                                </div>
+
+                                <div style={{
+                                  fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700,
+                                  color: isOpen ? 'var(--text-ink)' : 'var(--text-mid)', marginTop: 8,
+                                }}>{note.zoneLabel}</div>
+
+                                {note.description && (
+                                  <div style={{
+                                    fontFamily: 'var(--f-text)', fontSize: 13.5, color: 'var(--text-mid)',
+                                    marginTop: 3, lineHeight: 1.55,
+                                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                  }}>{note.description}</div>
+                                )}
+
+                                <div style={{
+                                  display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                                  fontFamily: 'var(--f-mono)', fontSize: 11.5, color: 'var(--text-mid)', marginTop: 8,
+                                }}>
+                                  <span>{formatNoteDate(note)}</span>
+                                  {note.photos.length > 0 && <span>{note.photos.length} photo{note.photos.length === 1 ? '' : 's'}</span>}
+                                  {note.measurements.length > 0 && <span>{note.measurements.length} measurement{note.measurements.length === 1 ? '' : 's'}</span>}
+                                  {note.drawing && <span>{note.drawing.number}</span>}
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={e => { e.stopPropagation(); changeNoteStatus(note.id, isOpen ? 'CLOSED' : 'OPEN') }}
+                                disabled={savingNoteId === note.id}
+                                title={isOpen ? 'Mark this note as closed' : 'Reopen this note'}
+                                style={{
+                                  flexShrink: 0,
+                                  background: isOpen ? 'var(--sage-soft)' : 'var(--surface)',
+                                  color: isOpen ? 'var(--sage-ink)' : 'var(--text-mid)',
+                                  border: `1px solid ${isOpen ? 'var(--sage)' : 'var(--border-line)'}`,
+                                  borderRadius: 'var(--radius-pill)', padding: '7px 14px',
+                                  fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700,
+                                  cursor: savingNoteId === note.id ? 'not-allowed' : 'pointer',
+                                  opacity: savingNoteId === note.id ? 0.6 : 1,
+                                }}
+                              >
+                                {isOpen ? 'Close' : 'Reopen'}
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
                     )}
                   </div>
                 )}
@@ -1682,6 +1875,18 @@ function AdminPageInner() {
           </Card>
 
         </div>
+      )}
+
+      {openNote && (
+        <SiteNoteModal
+          note={openNote}
+          saving={savingNoteId === openNote.id}
+          onClose={() => setOpenNoteId(null)}
+          onToggleStatus={next => changeNoteStatus(openNote.id, next)}
+          onOpenReport={openNote.inspectionId
+            ? () => router.push(`/report/${openNote.inspectionId}?project_name=${encodeURIComponent(selectedProject?.name ?? '')}`)
+            : undefined}
+        />
       )}
 
     </Shell>

@@ -43,13 +43,14 @@ const STATUS_OPTIONS = [
 ];
 
 /** Reads whatever is stored back as a status. Observations recorded before
- *  this change hold a severity grade: anything that was graded is treated as
- *  still open, and 'NONE' (recorded as "no defects observed") as closed. */
+ *  this change hold a severity grade, so only an explicit 'CLOSED' reads as
+ *  closed — everything else is still open.
+ *
+ *  'NONE' is deliberately NOT closed: it was the pre-selected first chip of
+ *  the old severity picker, so it means nobody set a grade rather than that
+ *  the item was resolved, and most historic observations carry it. */
 function toStatus(stored: string | null | undefined): Status {
-  if (!stored) return 'OPEN';
-  const value = stored.toUpperCase();
-  if (value === 'CLOSED' || value === 'NONE') return 'CLOSED';
-  return 'OPEN';
+  return (stored ?? '').toUpperCase() === 'CLOSED' ? 'CLOSED' : 'OPEN';
 }
 
 function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; metering: number }) {
