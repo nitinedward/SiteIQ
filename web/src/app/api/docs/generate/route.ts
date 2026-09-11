@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { fillTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { saveDoc } from '@/lib/docStorage'
+import { writeWithAttachments } from '@/lib/attachmentSections'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,19 +17,26 @@ export async function POST(request: NextRequest) {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { inspectionId, photos: photoList, drawingIds: _drawingIds } = await request.json()
+    const { inspectionId, photos: photoList, drawingIds: _drawingIds, force } = await request.json()
 
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
     }
 
-    // Only generate if no document exists yet — preserves any edits made in OnlyOffice
+    // Normally this only runs when no document exists yet, so it can't wipe
+    // edits made in OnlyOffice. `force` is the "use the plain notes text"
+    // action: the user has asked for the written sections to go back to the
+    // raw observation transcripts, in place of the AI's prose. Inserted
+    // photos and markups survive it — see writeWithAttachments below.
     const { error: existErr } = await supabase.storage
       .from('reports')
       .createSignedUrl(`${inspectionId}.docx`, 10)
-    if (!existErr) {
+    if (!existErr && !force) {
       console.log('[generate] Doc already exists, skipping to preserve OO edits')
       return NextResponse.json({ success: true, inspectionId, skipped: true })
+    }
+    if (!existErr && force) {
+      console.log('[generate] Rewriting the text from notes at the user’s request')
     }
 
     const [inspRes, obsRes] = await Promise.all([
@@ -82,6 +90,8 @@ export async function POST(request: NextRequest) {
       findingsLines.length > 0 ? findingsLines : ['No specific findings recorded.']
     )
 
+    let carried: string[] = []
+
     if (firmId) {
       const templateData: TemplateData = {
         engineer_name:   engineerName,
@@ -102,7 +112,11 @@ export async function POST(request: NextRequest) {
       }
 
       const buffer = await fillTemplate(firmId, templateData)
-      await saveDoc(inspectionId, buffer)
+      // A forced rewrite replaces a document that may already hold inserted
+      // photos and markups; a first generation has nothing to carry.
+      carried = force
+        ? await writeWithAttachments(inspectionId, buffer)
+        : (await saveDoc(inspectionId, buffer), [])
       console.log('Document generated from firm template')
     } else {
       // Fallback: generate from scratch when no firm template is set up
@@ -127,10 +141,12 @@ export async function POST(request: NextRequest) {
       }
 
       const buffer = await generateServerReport(inspection, observations, undefined, photoAttachments)
-      await saveDoc(inspectionId, buffer)
+      carried = force
+        ? await writeWithAttachments(inspectionId, buffer)
+        : (await saveDoc(inspectionId, buffer), [])
     }
 
-    return NextResponse.json({ success: true, inspectionId })
+    return NextResponse.json({ success: true, inspectionId, carried })
   } catch (err) {
     console.error('[docs/generate] error:', err)
     return NextResponse.json({ error: 'Failed to generate document' }, { status: 500 })

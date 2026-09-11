@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import AdmZip from 'adm-zip'
 import { xmlEscape } from '@/lib/templateProcessor'
 import { saveDoc, loadDoc } from '@/lib/docStorage'
+import {
+  ALL_SECTIONS,
+  LEGACY_SECTION,
+  SECTION_DEFS,
+  SectionName,
+  hasLegacySection,
+  isSectionName,
+  placeSection,
+  removeSections,
+  wrapSection,
+} from '@/lib/attachmentSections'
 
 const REL_IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 
@@ -149,41 +160,14 @@ function refLine(text: string): string {
 
 const PAGE_BREAK = `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`
 
-// The whole appended drawings+photos section is wrapped in this bookmark so
-// a later call can find and remove exactly that content before rebuilding
-// it — every call replaces the section with the CURRENT selection, rather
-// than only ever adding more, so deselecting something and re-applying
-// removes it from the document.
-const ATTACHMENTS_BOOKMARK_ID   = '999000'
-const ATTACHMENTS_BOOKMARK_NAME = 'siteiq_attachments'
-
-/** Removes a previously-inserted attachments section (if any), including
- *  the image relationships and media files it referenced, so repeated
- *  add/remove cycles don't leak storage in the .docx. */
-function removeExistingAttachmentsSection(
-  docXml: string, relsXml: string, zip: AdmZip
-): { docXml: string; relsXml: string } {
-  const sectionRe = new RegExp(
-    `<w:bookmarkStart[^>]*w:id="${ATTACHMENTS_BOOKMARK_ID}"[^>]*w:name="${ATTACHMENTS_BOOKMARK_NAME}"[^>]*/>` +
-    `([\\s\\S]*?)` +
-    `<w:bookmarkEnd[^>]*w:id="${ATTACHMENTS_BOOKMARK_ID}"[^>]*/>`
-  )
-  const match = docXml.match(sectionRe)
-  if (!match) return { docXml, relsXml }
-
-  const newDocXml = docXml.replace(sectionRe, '')
-
-  let newRelsXml = relsXml
-  for (const [, rId] of match[0].matchAll(/r:embed="(rId\d+)"/g)) {
-    const relMatch = newRelsXml.match(new RegExp(`<Relationship Id="${rId}"[^>]*Target="([^"]+)"[^>]*/>`))
-    if (relMatch) {
-      try { zip.deleteFile(`word/${relMatch[1]}`) } catch { /* best-effort cleanup */ }
-    }
-    newRelsXml = newRelsXml.replace(new RegExp(`\\s*<Relationship Id="${rId}"[^>]*/>`), '')
-  }
-
-  return { docXml: newDocXml, relsXml: newRelsXml }
-}
+// Drawings and photos each own a bookmarked section (see
+// src/lib/attachmentSections.ts), so one can be rebuilt without disturbing
+// the other. A call replaces the sections it was asked for with the CURRENT
+// selection rather than only ever adding, so deselecting something and
+// re-applying removes it from the document.
+//
+// `sections` says which to rebuild — omit it to rebuild both, which is what
+// the download path wants.
 
 export async function POST(request: NextRequest) {
   try {
@@ -197,6 +181,11 @@ export async function POST(request: NextRequest) {
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400, headers: corsHeaders })
     }
+
+    const asked: SectionName[] = Array.isArray(body.sections)
+      ? body.sections.filter(isSectionName)
+      : ALL_SECTIONS
+    let requested: SectionName[] = asked.length > 0 ? asked : ALL_SECTIONS
 
     console.log('[append] Loading:', inspectionId)
     let docBuffer: Buffer
@@ -252,10 +241,22 @@ export async function POST(request: NextRequest) {
     }
     let docXml = docEntry.getData().toString('utf-8')
 
-    // Remove any previously-inserted attachments section (and its images)
-    // before rebuilding — this always runs, even with an empty selection,
-    // so deselecting everything and clicking again clears the section.
-    ;({ docXml, relsXml } = removeExistingAttachmentsSection(docXml, relsXml, zip))
+    // A document written before drawings and photos were split carries one
+    // combined bookmark that can't be divided after the fact, so the first
+    // insert into such a document rebuilds both sections — exactly the
+    // behaviour it already had. Afterwards the two are independent.
+    const legacy = hasLegacySection(docXml)
+    if (legacy) {
+      console.log('[append] Legacy combined section found — rebuilding both sections once')
+      requested = ALL_SECTIONS
+    }
+
+    // Remove the sections being rebuilt (and their images) first. This runs
+    // even with an empty selection, so deselecting everything and clicking
+    // again clears that section — and only that section.
+    const bookmarksToClear = requested.map(s => SECTION_DEFS[s].bookmark)
+    if (legacy) bookmarksToClear.push(LEGACY_SECTION.bookmark)
+    ;({ docXml, relsXml } = removeSections(docXml, relsXml, zip, bookmarksToClear))
 
     let nextRId = getMaxRId(relsXml) + 1
 
@@ -280,14 +281,16 @@ export async function POST(request: NextRequest) {
     }
 
     const newRels: { id: string; type: string; target: string }[] = []
-    let appendXml = ''
+    // Built separately so each can be placed in its own bookmark.
+    let drawingsXml = ''
+    let photosXml   = ''
 
     // docPr IDs must be unique across the document; start high to avoid collisions
     let docPrId = 500
 
     // ── STRUCTURAL DRAWINGS section ──────────────────────────────────────────
-    if (validDrawings.length > 0) {
-      appendXml += PAGE_BREAK + sectionHeading('STRUCTURAL DRAWINGS')
+    if (requested.includes('drawings') && validDrawings.length > 0) {
+      drawingsXml += PAGE_BREAK + sectionHeading('STRUCTURAL DRAWINGS')
 
       validDrawings.forEach((drawing, i) => {
         const imgBuffer = drawingBuffers[i]
@@ -300,15 +303,15 @@ export async function POST(request: NextRequest) {
         newRels.push({ id: rId, type: REL_IMAGE, target: `media/${mediaName}` })
 
         const safeRef = `Ref: ${drawing.number || '—'} · Rev ${drawing.revision || 'A'}`
-        appendXml += subHeading(drawing.title || 'Untitled Drawing')
-        appendXml += refLine(safeRef)
-        appendXml += `<w:p><w:r>${buildDrawingImageXml(rId, docPrId++)}</w:r></w:p>`
+        drawingsXml += subHeading(drawing.title || 'Untitled Drawing')
+        drawingsXml += refLine(safeRef)
+        drawingsXml += `<w:p><w:r>${buildDrawingImageXml(rId, docPrId++)}</w:r></w:p>`
       })
     }
 
     // ── SITE PHOTOGRAPHS section ─────────────────────────────────────────────
-    if (validPhotos.length > 0) {
-      appendXml += PAGE_BREAK + sectionHeading('SITE PHOTOGRAPHS')
+    if (requested.includes('photos') && validPhotos.length > 0) {
+      photosXml += PAGE_BREAK + sectionHeading('SITE PHOTOGRAPHS')
 
       // Group by zone
       const byZone: Record<string, PhotoInput[]> = {}
@@ -319,13 +322,13 @@ export async function POST(request: NextRequest) {
       })
 
       for (const [zone, zonePhotos] of Object.entries(byZone)) {
-        appendXml += subHeading(zone)
+        photosXml += subHeading(zone)
 
         let photoCount = 0
 
         for (let i = 0; i < zonePhotos.length; i += 2) {
           if (photoCount > 0 && photoCount % 6 === 0) {
-            appendXml += PAGE_BREAK
+            photosXml += PAGE_BREAK
           }
 
           const leftPhoto  = zonePhotos[i]
@@ -370,7 +373,7 @@ export async function POST(request: NextRequest) {
           }
 
           if (leftRId || rightRId) {
-            appendXml += buildPhotoTableRow(leftRId, docPrId++, rightRId, docPrId++)
+            photosXml += buildPhotoTableRow(leftRId, docPrId++, rightRId, docPrId++)
           }
 
           photoCount += rightPhoto ? 2 : 1
@@ -385,24 +388,36 @@ export async function POST(request: NextRequest) {
     zip.updateFile(relsPath, Buffer.from(relsXml, 'utf-8'))
 
     // ── Append content to document.xml ───────────────────────────────────────
-    // Wrapped in the attachments bookmark so a future call can find and
-    // remove exactly this section. If there's nothing new to add (e.g. the
-    // user deselected everything), the removal above still ran and gets
-    // saved here — the section is simply left empty.
-    if (appendXml) {
-      appendXml =
-        `<w:bookmarkStart w:id="${ATTACHMENTS_BOOKMARK_ID}" w:name="${ATTACHMENTS_BOOKMARK_NAME}"/>` +
-        appendXml +
-        `<w:bookmarkEnd w:id="${ATTACHMENTS_BOOKMARK_ID}"/>`
-      docXml = docXml.replace('</w:body>', `${appendXml}</w:body>`)
+    // Each block goes in its own bookmark so a later call can find and
+    // rebuild exactly that one. Drawings are placed ahead of the photos
+    // section if it's already there, so re-adding markups after photos
+    // doesn't leave the report reading photos-then-markups. An empty
+    // selection writes nothing — the removal above already ran, which is
+    // how deselecting everything clears a section.
+    if (drawingsXml) {
+      docXml = placeSection(docXml, 'drawings', wrapSection('drawings', drawingsXml))
+    }
+    if (photosXml) {
+      docXml = placeSection(docXml, 'photos', wrapSection('photos', photosXml))
     }
     zip.updateFile('word/document.xml', Buffer.from(docXml, 'utf-8'))
 
     await saveDoc(inspectionId, zip.toBuffer())
-    console.log(`[append] Saved, photos: ${validPhotos.length}, drawings: ${validDrawings.length}`)
+
+    const photosAdded   = requested.includes('photos')   ? validPhotos.length   : 0
+    const drawingsAdded = requested.includes('drawings') ? validDrawings.length : 0
+    console.log(`[append] Saved ${requested.join('+')} — photos: ${photosAdded}, drawings: ${drawingsAdded}`)
 
     return NextResponse.json(
-      { success: true, photosAdded: validPhotos.length, drawingsAdded: validDrawings.length },
+      {
+        success: true,
+        photosAdded,
+        drawingsAdded,
+        sections: requested,
+        // True when this call had to fold a pre-split document's combined
+        // section back into the two separate ones.
+        legacyMigrated: legacy,
+      },
       { headers: corsHeaders }
     )
   } catch (err: any) {

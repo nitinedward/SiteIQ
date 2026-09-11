@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { fillTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
-import { saveDoc } from '@/lib/docStorage'
+import { writeWithAttachments } from '@/lib/attachmentSections'
 
 export const dynamic = 'force-dynamic'
 
@@ -152,6 +152,11 @@ Rules:
 
     console.log('AI text generated, length:', aiText.length)
 
+    // Regenerating rewrites the whole file, which used to take the inserted
+    // photos and markups with it — they are lifted out and re-attached, so
+    // the text can be regenerated at any point in the workflow.
+    let carried: string[] = []
+
     if (firmId) {
       const purposeText  = parseAISection(aiText, 'PURPOSE OF INSPECTION') || (inspection.purpose ?? '')
       const worksText    = parseAISection(aiText, 'WORKS OBSERVED')
@@ -184,15 +189,15 @@ Rules:
       }
 
       const buffer = await fillTemplate(firmId, templateData)
-      await saveDoc(inspectionId, buffer)
+      carried = await writeWithAttachments(inspectionId, buffer)
       console.log('AI document generated using firm template')
     } else {
       console.log('No firm_id — generating AI doc from scratch')
       const buffer = await generateServerReport(inspection, observations, aiText)
-      await saveDoc(inspectionId, buffer)
+      carried = await writeWithAttachments(inspectionId, buffer)
     }
 
-    return NextResponse.json({ success: true, preview: aiText.slice(0, 200) })
+    return NextResponse.json({ success: true, preview: aiText.slice(0, 200), carried })
   } catch (err) {
     console.error('[ai-generate] error:', err)
     return NextResponse.json({ error: 'AI generation failed' }, { status: 500 })

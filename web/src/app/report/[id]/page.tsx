@@ -47,6 +47,8 @@ export default function ReportPage() {
   const [docReady,           setDocReady]            = useState(false)
   const [generating,         setGenerating]          = useState(false)
   const [generatingAI,       setGeneratingAI]        = useState(false)
+  const [generatingPlain,    setGeneratingPlain]     = useState(false)
+  const [textVersionResult,  setTextVersionResult]   = useState('')
   const [editorKey,          setEditorKey]           = useState(0)
   // The Document Server's identity for the *stored content* — fetched from
   // the file itself, never counted locally. See refreshDocKey below.
@@ -225,33 +227,76 @@ export default function ReportPage() {
     }
   }, [inspectionId, refreshDocKey])
 
-  // ── AI GENERATE ──────────────────────────────────────────────────────────────
+  // ── TEXT VERSIONS ────────────────────────────────────────────────────────────
+  // Both actions rewrite the written sections of the report and leave the
+  // inserted photos and markups alone — the server lifts those out and
+  // re-attaches them (see src/lib/attachmentSections.ts). So the order stops
+  // mattering: attachments can go in before or after the text is written,
+  // and the text can be switched between the AI version and the raw notes as
+  // often as needed. Hand-edits made in the editor are NOT preserved, since
+  // both actions rebuild the text from the template.
   const generateAIReport = async () => {
-    if (!confirm('Generate AI report content? This will replace the current document.')) return
+    if (!confirm(
+      'Rewrite the report text with AI?\n\n' +
+      'The written sections are replaced with the AI version. Inserted photos and markups are kept; ' +
+      'any edits you made by hand in the editor are not.'
+    )) return
     setGeneratingAI(true)
     try {
-      const res = await fetch('/api/docs/ai-generate', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ inspectionId }),
+      await runDocumentRewrite(async () => {
+        const res = await fetch('/api/docs/ai-generate', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ inspectionId }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'AI generation failed')
+        console.log('[ai-generate] Success:', data)
+        setTextVersionResult(
+          'Report text rewritten by AI' +
+          (data.carried?.length ? ' — inserted photos and markups kept.' : '.')
+        )
+        setTimeout(() => setTextVersionResult(''), 8000)
       })
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'AI generation failed')
-      }
-      const data = await res.json()
-      console.log('[ai-generate] Success:', data)
-      setReloadingEditor(true)
-      // The file was replaced — the editor has to reopen on the new
-      // version's key, or the Document Server hands back the old one.
-      await refreshDocKey()
-      setEditorKey(prev => prev + 1)
-      setTimeout(() => setReloadingEditor(false), 4000)
     } catch (err: any) {
       console.error('[generateAIReport] error:', err)
       alert('AI generation failed: ' + err.message)
     } finally {
       setGeneratingAI(false)
+    }
+  }
+
+  /** Puts the written sections back to the raw observation transcripts —
+   *  the version that exists before AI is ever run, straight from what was
+   *  recorded on site. */
+  const usePlainNotesText = async () => {
+    if (!confirm(
+      'Rewrite the report text from your site notes?\n\n' +
+      'The written sections go back to the raw observations, replacing any AI-written text. ' +
+      'Inserted photos and markups are kept; any edits you made by hand in the editor are not.'
+    )) return
+    setGeneratingPlain(true)
+    try {
+      await runDocumentRewrite(async () => {
+        const res = await fetch('/api/docs/generate', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ inspectionId, force: true }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'Could not rebuild the text from your notes')
+        console.log('[plain-generate] Success:', data)
+        setTextVersionResult(
+          'Report text rebuilt from your site notes' +
+          (data.carried?.length ? ' — inserted photos and markups kept.' : '.')
+        )
+        setTimeout(() => setTextVersionResult(''), 8000)
+      })
+    } catch (err: any) {
+      console.error('[usePlainNotesText] error:', err)
+      alert('Could not use the notes text: ' + err.message)
+    } finally {
+      setGeneratingPlain(false)
     }
   }
 
@@ -760,7 +805,65 @@ export default function ReportPage() {
     return out
   }
 
-  const insertAttachments = async () => {
+  /** Runs a server-side rewrite of the stored document safely, and reopens
+   *  the editor on the result.
+   *
+   *  Every rewrite — inserting attachments, regenerating the text — has the
+   *  same two hazards, so they are handled in one place:
+   *   - The editor is closed from this side first. Dropping the session
+   *     server-side while the iframe is open makes OnlyOffice show "file
+   *     cannot be accessed right now"; unmounting calls destroyEditor(),
+   *     which ends the session cleanly and triggers its final save. That
+   *     parting save must land BEFORE the file is rewritten, or it lands
+   *     after and overwrites it.
+   *   - Reopening must use the rewritten file's own key (see refreshDocKey),
+   *     or the Document Server serves the copy it cached beforehand. */
+  const runDocumentRewrite = async (rewrite: () => Promise<void>) => {
+    setReloadingEditor(true)
+    setEditorSuspended(true)
+    await new Promise(r => setTimeout(r, 1200))
+    try {
+      // docKey is null only if the editor never opened, in which case there
+      // is no session to save and nothing can overwrite the rewrite.
+      const quiesce = docKey
+        ? await fetch('/api/docs/quiesce', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inspectionId, docKey, drop: false }),
+          }).then(r => r.json()).catch(() => ({}))
+        : {}
+      console.log('[rewrite] quiesce:', quiesce)
+      // `settled` means the stored file has stopped changing, which is the
+      // condition that matters. The key often stays known while the document
+      // sits in the server's cache, so that is not treated as a failure.
+      if (quiesce?.settled === false) {
+        throw new Error(
+          'The document is still being saved, so this was stopped to avoid losing your changes. Wait a moment and try again.'
+        )
+      }
+
+      await rewrite()
+    } finally {
+      // Always reopen, including after a failure — otherwise the document
+      // pane is left empty — and always on a freshly-read key, because the
+      // file may have been rewritten before the failure.
+      await refreshDocKey()
+      setEditorSuspended(false)
+      setEditorKey(prev => prev + 1)
+      setTimeout(() => setReloadingEditor(false), 2500)
+    }
+  }
+
+  /** Rebuilds one or both attachment sections from the current selection.
+   *
+   *  Photos and markups own separate sections in the document, so inserting
+   *  one leaves the other exactly where it is. Within a section the current
+   *  selection replaces what was there, which is how deselecting something
+   *  removes it. */
+  const insertAttachments = async (sections: ('photos' | 'drawings')[]) => {
+    const wantsPhotos   = sections.includes('photos')
+    const wantsDrawings = sections.includes('drawings')
+
     const photos = selectedPhotos
       .filter(p => p.selected)
       .map(p => ({ url: p.url, zoneLabel: p.zoneLabel }))
@@ -769,90 +872,56 @@ export default function ReportPage() {
     // before any work starts.
     const capturedCount = drawings.filter(d => d.selected && d.captured && d.capturedBlob).length
 
-    // Nothing selected — this call still runs (it replaces the whole
-    // inserted section, so an empty selection means "remove everything
-    // I've inserted"), but confirm first so a stray click doesn't silently
-    // wipe it out.
-    if (photos.length === 0 && capturedCount === 0) {
-      if (!confirm('No photos or drawings are selected. This will remove any previously inserted attachments from the document. Continue?')) return
+    // Nothing selected — the call still runs (an empty selection means
+    // "remove what I inserted before"), but confirm first so a stray click
+    // doesn't silently wipe it out.
+    const label = wantsPhotos && wantsDrawings ? 'photos or markups' : wantsPhotos ? 'photos' : 'markups'
+    const selectedCount = (wantsPhotos ? photos.length : 0) + (wantsDrawings ? capturedCount : 0)
+    if (selectedCount === 0) {
+      if (!confirm(`No ${label} are selected. This will remove the ${label} previously inserted into the document, leaving the rest of the report alone. Continue?`)) return
     }
 
     setInserting(true)
     try {
-      // Close the editor from this side first. Dropping the session
-      // server-side while the iframe is still open makes OnlyOffice show
-      // "file cannot be accessed right now"; unmounting calls
-      // destroyEditor(), which ends the session cleanly and triggers its
-      // final save. Give the teardown a moment to reach the server.
-      setReloadingEditor(true)
-      setEditorSuspended(true)
-      await new Promise(r => setTimeout(r, 1200))
+      await runDocumentRewrite(async () => {
+        // Captured markups are uploaded even for a photos-only insert: a
+        // document from before the split carries one combined section that
+        // can't be divided, so the server rebuilds both that once and needs
+        // them. Costs nothing when none have been captured.
+        const drawingsList = await uploadCapturedDrawings()
 
-      // Then save what was on screen and wait for writes to go quiet — the
-      // parting save must land before the file is rewritten, or it
-      // overwrites the attachments and the report reverts to its notes.
-      // docKey is null only if the editor never opened, in which case there
-      // is no session to save and nothing can overwrite the insert.
-      const quiesce = docKey
-        ? await fetch('/api/docs/quiesce', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ inspectionId, docKey, drop: false }),
-          }).then(r => r.json()).catch(() => ({}))
-        : {}
-      console.log('[insert] quiesce:', quiesce)
-      // `settled` means the stored file has stopped changing, which is the
-      // condition that matters. The key often stays known while the document
-      // sits in the server's cache, so that is not treated as a failure.
-      if (quiesce?.settled === false) {
-        throw new Error(
-          'The document is still being saved, so the insert was stopped to avoid losing your changes. Wait a moment and try again.'
+        const res = await fetch('/api/docs/append', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            inspectionId,
+            photos,
+            drawings: drawingsList,
+            sections,
+          }),
+        })
+        const data = await res.json()
+        console.log('[insert] Result:', data)
+        if (!res.ok) throw new Error(data.error)
+
+        // The sections sit after a page break at the end and the editor
+        // reopens at page 1, so without this the insert looks like it did
+        // nothing at all.
+        const parts: string[] = []
+        if (data.photosAdded)   parts.push(`${data.photosAdded} photo${data.photosAdded === 1 ? '' : 's'}`)
+        if (data.drawingsAdded) parts.push(`${data.drawingsAdded} markup${data.drawingsAdded === 1 ? '' : 's'}`)
+        setInsertResult(
+          (parts.length
+            ? `${parts.join(' and ')} added at the end of the report — scroll to the last pages.`
+            : `${label[0].toUpperCase()}${label.slice(1)} removed from the report.`) +
+          (data.legacyMigrated ? ' (Both sections were rebuilt this once — from here they update separately.)' : '')
         )
-      }
-
-      const drawingsList = await uploadCapturedDrawings()
-
-      const res = await fetch('/api/docs/append', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inspectionId,
-          photos,
-          drawings: drawingsList,
-        }),
+        setTimeout(() => setInsertResult(''), 8000)
+        setMobileTab('document')
       })
-      const data = await res.json()
-      console.log('[insert] Result:', data)
-      if (!res.ok) throw new Error(data.error)
-
-      // The section is appended after a page break at the end, and the
-      // editor reopens at page 1 — so without this the insert looks like it
-      // did nothing at all.
-      const parts: string[] = []
-      if (data.photosAdded)   parts.push(`${data.photosAdded} photo${data.photosAdded === 1 ? '' : 's'}`)
-      if (data.drawingsAdded) parts.push(`${data.drawingsAdded} drawing${data.drawingsAdded === 1 ? '' : 's'}`)
-      setInsertResult(
-        parts.length
-          ? `${parts.join(' and ')} added at the end of the report — scroll to the last pages.`
-          : 'Attachments removed from the report.'
-      )
-      setTimeout(() => setInsertResult(''), 8000)
-
-      // Reopen on the rewritten file's own key. Without this the Document
-      // Server recognises the key and serves the copy it cached before the
-      // insert — the report appears to reset, and the session then saves
-      // that copy back over the attachments for good.
-      await refreshDocKey()
-      setEditorKey(prev => prev + 1)
-      setMobileTab('document')
-
     } catch (err: any) {
       alert('Insert failed: ' + err.message)
     } finally {
-      // Always bring the editor back, including after a failure — otherwise
-      // a failed insert would leave the document pane empty.
-      setEditorSuspended(false)
-      setTimeout(() => setReloadingEditor(false), 2500)
       setInserting(false)
     }
   }
@@ -1460,6 +1529,65 @@ export default function ReportPage() {
                   </>
                 )}
               </button>
+
+              {/* The un-AI'd version: the report text as it comes straight
+                  from the site notes. Both actions rewrite only the written
+                  sections — inserted photos and markups are carried across —
+                  so the two versions can be swapped freely. */}
+              <button
+                onClick={usePlainNotesText}
+                disabled={generatingPlain || generatingAI || !docReady || reportStatus === 'finalised'}
+                title="Replaces the written sections with your raw site notes, keeping inserted photos and markups"
+                style={{
+                  width: '100%',
+                  marginTop: 8,
+                  background: 'transparent',
+                  color: 'var(--indigo-deep)',
+                  border: '1px solid var(--border-line)',
+                  borderRadius: 'var(--radius-pill)',
+                  padding: '8px 14px',
+                  fontFamily: 'var(--f-heading)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: generatingPlain || generatingAI || !docReady || reportStatus === 'finalised' ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 7,
+                  opacity: !docReady || reportStatus === 'finalised' ? 0.5 : 1,
+                }}
+              >
+                {generatingPlain ? (
+                  <>
+                    <div style={{
+                      width: 12, height: 12,
+                      border: '2px solid var(--border-line)',
+                      borderTopColor: 'var(--text-mid)',
+                      borderRadius: '50%',
+                      animation: 'spin 0.7s linear infinite',
+                    }} />
+                    Rebuilding...
+                  </>
+                ) : (
+                  <>
+                    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    Use My Notes Text
+                  </>
+                )}
+              </button>
+
+              {textVersionResult && (
+                <div style={{
+                  marginTop: 8, padding: '8px 10px',
+                  background: 'var(--sage-wash, var(--paper))',
+                  border: '1px solid var(--border-line)',
+                  borderRadius: 'var(--radius-sm, 8px)',
+                  fontSize: 11.5, lineHeight: 1.5,
+                  fontFamily: 'var(--f-text)', color: 'var(--sage-ink, var(--text-mid))',
+                }}>
+                  {textVersionResult}
+                </div>
+              )}
             </div>
 
             {/* ── SCROLLABLE CONTENT ──────────────────────────────────── */}
@@ -1783,47 +1911,74 @@ export default function ReportPage() {
                 )}
               </div>
 
-              {/* Update Document button — replaces the whole inserted
-                  drawings+photos section with the current selection each
-                  time, so deselecting something and clicking again removes
-                  it from the document instead of only ever adding more. */}
-              <button
-                onClick={insertAttachments}
-                disabled={inserting || !docReady || reportStatus === 'finalised'}
-                title={reportStatus === 'finalised'
-                  ? 'This report is finalised and frozen — reopen it to make changes'
-                  : "Adds newly-selected photos/drawings and removes any you've deselected"}
-                style={{
-                  width: '100%',
-                  background: inserting ? 'var(--paper)' : 'var(--indigo)',
-                  color: inserting ? 'var(--text-mid)' : 'white',
-                  border: 'none',
-                  borderRadius: 'var(--radius-pill)',
-                  padding: '11px 14px',
-                  fontFamily: 'var(--f-heading)',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: reportStatus === 'finalised' ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 7,
-                  marginBottom: 8,
-                  opacity: !docReady || reportStatus === 'finalised' ? 0.5 : 1,
-                }}
-              >
-                {inserting ? (
-                  <>
-                    <div style={{ width: 12, height: 12, border: '2px solid var(--border-line)', borderTopColor: 'var(--text-mid)', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
-                    Updating...
-                  </>
-                ) : (
-                  <>
-                    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                    Insert into Document
-                  </>
-                )}
-              </button>
+              {/* Photos and markups are inserted separately — each owns its
+                  own section of the document, so updating one leaves the
+                  other untouched. Within a section the current selection
+                  replaces what was there, which is how deselecting something
+                  removes it rather than only ever adding more. */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                {([
+                  {
+                    section: 'photos' as const,
+                    label: 'Insert Photos',
+                    busyLabel: 'Photos...',
+                    count: selPhotoCount,
+                    disabled: false,
+                    title: "Rebuilds the photo pages from the selected photos, leaving the markups and the report text alone",
+                  },
+                  {
+                    section: 'drawings' as const,
+                    label: 'Insert Markups',
+                    busyLabel: 'Markups...',
+                    count: selDrawingCount,
+                    disabled: drawings.length === 0,
+                    title: drawings.length === 0
+                      ? 'This project has no drawings to mark up'
+                      : 'Rebuilds the markup pages from the selected drawings, leaving the photos and the report text alone',
+                  },
+                ]).map(btn => {
+                  const blocked = inserting || !docReady || reportStatus === 'finalised' || btn.disabled
+                  return (
+                    <button
+                      key={btn.section}
+                      onClick={() => insertAttachments([btn.section])}
+                      disabled={blocked}
+                      title={reportStatus === 'finalised'
+                        ? 'This report is finalised and frozen — reopen it to make changes'
+                        : btn.title}
+                      style={{
+                        flex: 1,
+                        background: inserting ? 'var(--paper)' : 'var(--indigo)',
+                        color: inserting ? 'var(--text-mid)' : 'white',
+                        border: 'none',
+                        borderRadius: 'var(--radius-pill)',
+                        padding: '11px 10px',
+                        fontFamily: 'var(--f-heading)',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: blocked ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        opacity: blocked ? 0.5 : 1,
+                      }}
+                    >
+                      {inserting ? (
+                        <>
+                          <div style={{ width: 12, height: 12, border: '2px solid var(--border-line)', borderTopColor: 'var(--text-mid)', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
+                          {btn.busyLabel}
+                        </>
+                      ) : (
+                        <>
+                          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                          {btn.label}{btn.count > 0 ? ` (${btn.count})` : ''}
+                        </>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
 
               {insertResult && (
                 <div style={{
