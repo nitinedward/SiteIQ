@@ -20,7 +20,11 @@ const SUPABASE_URL = 'https://vbaewualqaxhbmqgnhdt.supabase.co';
 const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
 
-type Severity = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+// An observation is tracked as open or closed rather than graded by
+// severity. It is still stored in the `observations.severity` column, so no
+// database change is needed and existing reports keep working — see
+// toStatus() for how older graded records are read back.
+type Status = 'OPEN' | 'CLOSED';
 type Measurement = { id: string; type: string; value: string; unit: string };
 
 const MEASUREMENT_TYPES = [
@@ -33,13 +37,20 @@ const MEASUREMENT_TYPES = [
   { label: 'Spalling Area', unit: 'm²' }, { label: 'Custom', unit: 'mm' },
 ];
 
-const SEVERITY_OPTIONS = [
-  { value: 'NONE' as Severity,     label: 'None',     colour: '#94A3B8', description: 'No defects observed' },
-  { value: 'LOW' as Severity,      label: 'Low',      colour: '#16A34A', description: 'Minor — monitor only' },
-  { value: 'MEDIUM' as Severity,   label: 'Medium',   colour: '#F59E0B', description: 'Moderate — action required' },
-  { value: 'HIGH' as Severity,     label: 'High',     colour: '#EF4444', description: 'Serious — urgent action' },
-  { value: 'CRITICAL' as Severity, label: 'Critical', colour: '#7C3AED', description: 'Immediate action required' },
+const STATUS_OPTIONS = [
+  { value: 'OPEN'   as Status, label: 'Open',   colour: '#F59E0B', description: 'Outstanding — still to be actioned' },
+  { value: 'CLOSED' as Status, label: 'Closed', colour: '#16A34A', description: 'Resolved — no further action needed' },
 ];
+
+/** Reads whatever is stored back as a status. Observations recorded before
+ *  this change hold a severity grade: anything that was graded is treated as
+ *  still open, and 'NONE' (recorded as "no defects observed") as closed. */
+function toStatus(stored: string | null | undefined): Status {
+  if (!stored) return 'OPEN';
+  const value = stored.toUpperCase();
+  if (value === 'CLOSED' || value === 'NONE') return 'CLOSED';
+  return 'OPEN';
+}
 
 function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; metering: number }) {
   const barAnims = useRef(Array.from({ length: BAR_COUNT }, () => new Animated.Value(0.05))).current;
@@ -95,7 +106,7 @@ export default function ObservationScreen() {
   const [zoneLabel, setZoneLabel]   = useState(params.zone_label as string || 'General Observation');
   const [photos, setPhotos]         = useState<string[]>([]);
   const [transcript, setTranscript] = useState('');
-  const [severity, setSeverity]     = useState<Severity>('NONE');
+  const [status, setStatus]         = useState<Status>('OPEN');
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading]   = useState(false);
@@ -135,7 +146,7 @@ export default function ObservationScreen() {
       if (data.zone_label) setZoneLabel(data.zone_label);
       setPhotos(Array.isArray(data.photos) ? data.photos : JSON.parse(data.photos || '[]'));
       setTranscript(data.transcript || '');
-      setSeverity(data.severity || 'NONE');
+      setStatus(toStatus(data.severity));
       try { setMeasurements(typeof data.measurements === 'string' ? JSON.parse(data.measurements || '[]') : data.measurements || []); } catch {}
       setIsLoadingObs(false);
     })();
@@ -344,7 +355,8 @@ export default function ObservationScreen() {
     }
     setIsSubmitting(true);
     const label = zoneLabel.trim() || 'General Site Observation';
-    const payload = { severity, transcript: transcript.trim(), notes: '', photos, measurements, zone_label: label };
+    // Stored under the original column name — see the Status type above.
+    const payload = { severity: status, transcript: transcript.trim(), notes: '', photos, measurements, zone_label: label };
     const { error } = isEditMode
       ? await supabase.from('observations').update(payload).eq('id', observationId)
       : await supabase.from('observations').insert({ ...payload, zone_id: zoneId !== 'general' ? zoneId : null, project_id: projectId, inspection_id: inspectionId || null });
@@ -353,7 +365,7 @@ export default function ObservationScreen() {
     Alert.alert(isEditMode ? 'Updated' : 'Saved', `Observation for "${zoneLabel}" has been ${isEditMode ? 'updated' : 'recorded'}.`, [{ text: 'OK', onPress: () => router.back() }]);
   };
 
-  const selSev = SEVERITY_OPTIONS.find(s => s.value === severity)!;
+  const selStatus = STATUS_OPTIONS.find(s => s.value === status)!;
 
   if (isLoadingObs) return (
     <View style={[S.container, { alignItems: 'center', justifyContent: 'center' }]}>
@@ -439,18 +451,18 @@ export default function ObservationScreen() {
           )}
         </View>
 
-        {/* Severity */}
+        {/* Status */}
         <View style={S.section}>
-          <Text style={S.sectionTitle}>Severity</Text>
+          <Text style={S.sectionTitle}>Status</Text>
           <View style={S.severityGrid}>
-            {SEVERITY_OPTIONS.map(opt => (
-              <TouchableOpacity key={opt.value} style={[S.sevChip, severity === opt.value && { backgroundColor: opt.colour + '20', borderColor: opt.colour }]} onPress={() => setSeverity(opt.value)}>
+            {STATUS_OPTIONS.map(opt => (
+              <TouchableOpacity key={opt.value} style={[S.sevChip, status === opt.value && { backgroundColor: opt.colour + '20', borderColor: opt.colour }]} onPress={() => setStatus(opt.value)}>
                 <View style={[S.sevDot, { backgroundColor: opt.colour }]} />
-                <Text style={[S.sevLabel, severity === opt.value && { color: opt.colour }]}>{opt.label}</Text>
+                <Text style={[S.sevLabel, status === opt.value && { color: opt.colour }]}>{opt.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
-          {severity !== 'NONE' && <Text style={[S.sevDesc, { color: selSev.colour }]}>{selSev.description}</Text>}
+          <Text style={[S.sevDesc, { color: selStatus.colour }]}>{selStatus.description}</Text>
         </View>
 
         {/* Measurements */}

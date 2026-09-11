@@ -89,7 +89,9 @@ export async function POST(request: NextRequest) {
     const obsText = observations.map((ob: any) => {
       const zone = ob.zone_label || 'General'
       const text = ob.transcript || ob.notes || 'No notes'
-      const sev  = ob.severity && ob.severity !== 'NONE' ? `Severity: ${ob.severity}` : ''
+      // Observations are recorded as OPEN or CLOSED; older ones hold a
+      // severity grade, which reads sensibly under the same label.
+      const sev  = ob.severity && ob.severity !== 'NONE' ? `Status: ${ob.severity}` : ''
       return `Zone: ${zone}${sev ? `\n${sev}` : ''}\nNotes: ${text}`
     }).join('\n\n')
 

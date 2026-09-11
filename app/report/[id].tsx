@@ -82,7 +82,12 @@ type Inspection = {
 type Pt = { x: number; y: number };
 type PdfRect = { x: number; y: number; width: number; height: number };
 
+// Observations are recorded as open or closed. The graded values below are
+// kept so observations recorded before that change still show a colour
+// rather than falling back to grey.
 const SEVERITY_COLOURS: Record<string, string> = {
+  OPEN:     '#F59E0B',
+  CLOSED:   '#16A34A',
   NONE:     '#94A3B8',
   LOW:      '#22C55E',
   MEDIUM:   '#F59E0B',
@@ -542,6 +547,8 @@ function buildReportHtml(
   drawings: Drawing[]
 ): string {
   const severityColour: Record<string, string> = {
+    OPEN: '#F59E0B', CLOSED: '#16A34A',
+    // Kept for observations recorded before open/closed replaced grading.
     NONE: '#94A3B8', LOW: '#22C55E', MEDIUM: '#F59E0B', HIGH: '#EF4444', CRITICAL: '#7C3AED',
   };
   const drawingNames = drawings.map(d => d.number || d.title).join(', ') || '-';

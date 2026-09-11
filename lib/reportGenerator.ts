@@ -47,7 +47,7 @@ export async function generateReportWithAI(data: ReportData): Promise<GeneratedR
       ).join(', ');
 
       return `  Observation ${i + 1}:
-    Severity: ${obs.severity}
+    Status: ${obs.severity}
     ${obs.transcript ? `Voice note: ${obs.transcript}` : ''}
     ${obs.notes ? `Notes: ${obs.notes}` : ''}
     ${measurements ? `Measurements: ${measurements}` : ''}
@@ -76,7 +76,7 @@ Generate a professional structural engineering site inspection report with exact
 
 1. EXECUTIVE_SUMMARY: A concise 2-3 paragraph professional summary of the inspection. Include the purpose, scope, overall condition assessment, and any critical findings that require immediate attention.
 
-2. FINDINGS: A detailed professional description of all findings organised by zone. For each zone describe the observed conditions in formal engineering language. Reference measurements and severity appropriately. Do not use bullet points — write in formal paragraphs.
+2. FINDINGS: A detailed professional description of all findings organised by zone. For each zone describe the observed conditions in formal engineering language. Reference measurements appropriately, and note whether each item is open (outstanding) or closed (resolved). Do not use bullet points — write in formal paragraphs.
 
 3. RECOMMENDATIONS: Professional engineering recommendations based on the findings. Be specific about urgency, follow-up actions, and any further investigation required. Organised by priority.
 
