@@ -157,8 +157,8 @@ export async function generateServerReport(
         for (const ob of obs) {
           const text = ob.transcript || ob.notes || ''
           if (text) {
-            const sev = ob.severity ? `[${ob.severity}] ` : ''
-            children.push(bulletPara(sev + text))
+            // No status tag in the bullet — it's tracked on the observation.
+            children.push(bulletPara(text))
           }
         }
       })

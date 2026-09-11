@@ -83,8 +83,9 @@ export async function POST(request: NextRequest) {
     const findingsLines = observations.map((ob: any) => {
       const label = ob.zone_label || 'General Observation'
       const text  = ob.transcript || ob.notes || 'Observation recorded'
-      const sev   = ob.severity && ob.severity !== 'NONE' ? ` [${ob.severity}]` : ''
-      return `${label}${sev}: ${text}`
+      // The open/closed status is tracked on the observation, not printed
+      // into the report text.
+      return `${label}: ${text}`
     })
     const findings = buildBulletXml(
       findingsLines.length > 0 ? findingsLines : ['No specific findings recorded.']
