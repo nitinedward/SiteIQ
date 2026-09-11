@@ -184,11 +184,10 @@ export type NoteResponse = {
   createdAt: string
 }
 
-/** The bucket the mobile app already uploads site photos to. Responses go in
- *  their own prefix so they can never be mistaken for site photos, which are
- *  what gets inserted into the report. */
-const RESPONSE_BUCKET = 'observation-photos'
-const RESPONSE_PREFIX = 'note-responses'
+// Files are stored by /api/notes/response-file, in the public
+// observation-photos bucket under note-responses/<observation id>/ — their
+// own prefix, so they can never be mistaken for the site photos that get
+// inserted into the report.
 
 export const MAX_RESPONSE_FILE_BYTES = 25 * 1024 * 1024
 
@@ -276,17 +275,24 @@ export async function addNoteResponse({
   let fileType: string | null = null
 
   if (file) {
-    // Prefixed with a timestamp so re-uploading a file of the same name
-    // (very common — "IMG_0001.jpg", "scan.pdf") never overwrites an
-    // earlier response.
-    const safeName = file.name.replace(/[^\w.\-]+/g, '_').slice(-80)
-    const path = `${RESPONSE_PREFIX}/${observationId}/${Date.now()}-${safeName}`
-    const { error: uploadError } = await supabase.storage
-      .from(RESPONSE_BUCKET)
-      .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false })
-    if (uploadError) throw new Error('Could not upload the file: ' + uploadError.message)
+    // Sent to our own route, which stores it with the service role — a
+    // browser-side storage write depends on the bucket's policies allowing
+    // this user to write to this prefix, and fails in a way that is hard to
+    // surface. See src/app/api/notes/response-file/route.ts.
+    const res = await fetch(
+      `/api/notes/response-file?observationId=${encodeURIComponent(observationId)}&name=${encodeURIComponent(file.name)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      }
+    )
+    const payload = await res.json().catch(() => ({}))
+    if (!res.ok || !payload?.url) {
+      throw new Error('Could not upload ' + file.name + ': ' + (payload?.error ?? `upload failed (${res.status})`))
+    }
 
-    fileUrl  = supabase.storage.from(RESPONSE_BUCKET).getPublicUrl(path).data.publicUrl
+    fileUrl  = payload.url
     fileName = file.name
     fileType = file.type || null
   }
@@ -323,6 +329,15 @@ export async function deleteNoteResponse(id: string): Promise<void> {
 export function isImageResponse(response: NoteResponse): boolean {
   if (response.fileType?.startsWith('image/')) return true
   return /\.(png|jpe?g|gif|webp|heic)$/i.test(response.fileName ?? '')
+}
+
+/** Whether a browser can display the file itself. A PDF or an image opens
+ *  in a tab; a Word or Excel file can only be downloaded, so the panel says
+ *  "Download" rather than offering a view that would never appear. */
+export function isViewableResponse(response: NoteResponse): boolean {
+  if (isImageResponse(response)) return true
+  if (response.fileType === 'application/pdf') return true
+  return /\.(pdf|txt|csv)$/i.test(response.fileName ?? '')
 }
 
 /** "24 August 2026" as stored on the inspection, or a formatted timestamp. */

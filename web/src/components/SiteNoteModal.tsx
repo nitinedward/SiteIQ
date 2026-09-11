@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Spinner } from '@/components/Shell'
 import {
   SiteNote, NoteStatus, NoteResponse, formatNoteDate, measurementLabel,
-  loadNoteResponses, addNoteResponse, deleteNoteResponse, isImageResponse,
+  loadNoteResponses, addNoteResponse, deleteNoteResponse, isImageResponse, isViewableResponse,
   MAX_RESPONSE_FILE_BYTES,
 } from '@/lib/siteNotes'
 
@@ -37,6 +37,8 @@ export function SiteNoteModal({
   // since a response row carries one file.
   const [files, setFiles]               = useState<File[]>([])
   const [dragging, setDragging]         = useState(false)
+  // Thumbnails that failed to load — the file link stays regardless.
+  const [brokenThumbs, setBrokenThumbs] = useState<Record<string, boolean>>({})
   const [savingResponse, setSavingResponse] = useState(false)
   const [responseError, setResponseError]   = useState('')
 
@@ -434,32 +436,51 @@ export function SiteNoteModal({
                         )}
 
                         {r.fileUrl && (
-                          isImageResponse(r) ? (
-                            <a href={r.fileUrl} target="_blank" rel="noreferrer" style={{ display: 'block', marginTop: 10 }}>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={r.fileUrl} alt={r.fileName ?? 'Response attachment'}
-                                style={{
-                                  maxWidth: 260, width: '100%', borderRadius: 'var(--radius-sm, 10px)',
-                                  border: '1px solid var(--border-line)', display: 'block',
-                                }}
-                              />
-                            </a>
-                          ) : (
+                          <div style={{ marginTop: 10 }}>
+                            {/* A thumbnail is a preview, not the only way in:
+                                the link below it is always there, so a file
+                                the browser can't render (or an image that
+                                fails to load) is still openable. */}
+                            {isImageResponse(r) && !brokenThumbs[r.id] && (
+                              <a href={r.fileUrl} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: 8 }}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={r.fileUrl} alt={r.fileName ?? 'Response attachment'}
+                                  onError={() => setBrokenThumbs(curr => ({ ...curr, [r.id]: true }))}
+                                  style={{
+                                    maxWidth: 260, width: '100%', borderRadius: 'var(--radius-sm, 10px)',
+                                    border: '1px solid var(--border-line)', display: 'block',
+                                  }}
+                                />
+                              </a>
+                            )}
+
                             <a
-                              href={r.fileUrl} target="_blank" rel="noreferrer"
+                              href={r.fileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              // Word, Excel and the like can't be shown in a
+                              // tab, so they're offered as a download instead
+                              // of a view that would never appear.
+                              download={isViewableResponse(r) ? undefined : (r.fileName ?? true)}
                               style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 10,
+                                display: 'inline-flex', alignItems: 'center', gap: 7,
                                 background: 'var(--surface)', border: '1px solid var(--border-line)',
                                 borderRadius: 'var(--radius-pill)', padding: '7px 14px',
                                 fontFamily: 'var(--f-heading)', fontSize: 12.5, fontWeight: 700,
-                                color: 'var(--indigo)', textDecoration: 'none',
+                                color: 'var(--indigo)', textDecoration: 'none', maxWidth: '100%',
                               }}
                             >
-                              <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                              {r.fileName ?? 'Attachment'}
+                              {isViewableResponse(r) ? (
+                                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                              ) : (
+                                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                              )}
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {isViewableResponse(r) ? 'View' : 'Download'} {r.fileName ?? 'attachment'}
+                              </span>
                             </a>
-                          )
+                          </div>
                         )}
                       </div>
                     ))}
