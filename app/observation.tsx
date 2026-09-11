@@ -42,13 +42,11 @@ const STATUS_OPTIONS = [
   { value: 'CLOSED' as Status, label: 'Closed', colour: '#16A34A', description: 'Resolved — no further action needed' },
 ];
 
-/** Reads whatever is stored back as a status. Observations recorded before
- *  this change hold a severity grade, so only an explicit 'CLOSED' reads as
- *  closed — everything else is still open.
- *
- *  'NONE' is deliberately NOT closed: it was the pre-selected first chip of
- *  the old severity picker, so it means nobody set a grade rather than that
- *  the item was resolved, and most historic observations carry it. */
+/** Reads what's stored back as a status. Only an explicit 'CLOSED' is
+ *  closed; anything else — including a blank field — is open. The graded
+ *  values this column used to hold were migrated to OPEN and the database
+ *  no longer accepts them (web/sql/observation_status.sql), so this is just
+ *  a guard now. */
 function toStatus(stored: string | null | undefined): Status {
   return (stored ?? '').toUpperCase() === 'CLOSED' ? 'CLOSED' : 'OPEN';
 }

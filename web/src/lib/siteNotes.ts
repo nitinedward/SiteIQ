@@ -41,14 +41,10 @@ export type SiteNote = {
   drawing: NoteDrawing | null
 }
 
-/** Observations are stored open/closed in the `severity` column. Ones
- *  recorded before that change hold a severity grade instead, so only an
- *  explicit 'CLOSED' counts as closed — everything else is still open.
- *
- *  In particular 'NONE' is NOT treated as closed: it was the pre-selected
- *  first chip of the old severity picker, so it means nobody set a grade,
- *  not that the item was resolved. Most historic observations carry it, and
- *  reading them as closed would mark the whole back catalogue resolved.
+/** Observations are stored open/closed in the `severity` column — the name
+ *  is historic, the graded values it used to hold were migrated to OPEN and
+ *  the database no longer accepts them (web/sql/observation_status.sql).
+ *  Only an explicit 'CLOSED' is closed; anything else is open.
  *
  *  Kept identical to the mobile app's toStatus() in app/observation.tsx. */
 export function noteStatus(stored: string | null | undefined): NoteStatus {

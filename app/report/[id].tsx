@@ -86,14 +86,13 @@ type PdfRect = { x: number; y: number; width: number; height: number };
 // kept so observations recorded before that change still show a colour
 // rather than falling back to grey.
 const SEVERITY_COLOURS: Record<string, string> = {
-  OPEN:     '#F59E0B',
-  CLOSED:   '#16A34A',
-  NONE:     '#94A3B8',
-  LOW:      '#22C55E',
-  MEDIUM:   '#F59E0B',
-  HIGH:     '#EF4444',
-  CRITICAL: '#7C3AED',
+  OPEN:   '#F59E0B',
+  CLOSED: '#16A34A',
 };
+
+/** Anything unrecognised reads grey rather than producing an invalid colour
+ *  from a missing key. */
+const statusColour = (value: string): string => SEVERITY_COLOURS[value] ?? '#94A3B8';
 
 // ── ZONE OBSERVATION PANEL ─────────────────────────────
 function ZonePanel({
@@ -149,16 +148,16 @@ function ZonePanel({
                   ? JSON.parse(obs.measurements || '[]')
                   : obs.measurements || [];
               } catch {}
-              const severity = obs.severity || 'NONE';
+              const severity = obs.severity || 'OPEN';
 
               return (
                 <View key={obs.id} style={P.obsCard}>
                   <View style={P.obsCardHeader}>
                     <Text style={P.obsCardNum}>Observation {idx + 1}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <View style={[P.severityBadge, { backgroundColor: SEVERITY_COLOURS[severity] + '22' }]}>
-                        <View style={[P.severityDot, { backgroundColor: SEVERITY_COLOURS[severity] }]} />
-                        <Text style={[P.severityText, { color: SEVERITY_COLOURS[severity] }]}>
+                      <View style={[P.severityBadge, { backgroundColor: statusColour(severity) + '22' }]}>
+                        <View style={[P.severityDot, { backgroundColor: statusColour(severity) }]} />
+                        <Text style={[P.severityText, { color: statusColour(severity) }]}>
                           {severity}
                         </Text>
                       </View>
@@ -546,18 +545,14 @@ function buildReportHtml(
   observations: Observation[],
   drawings: Drawing[]
 ): string {
-  const severityColour: Record<string, string> = {
-    OPEN: '#F59E0B', CLOSED: '#16A34A',
-    // Kept for observations recorded before open/closed replaced grading.
-    NONE: '#94A3B8', LOW: '#22C55E', MEDIUM: '#F59E0B', HIGH: '#EF4444', CRITICAL: '#7C3AED',
-  };
+  const severityColour: Record<string, string> = { OPEN: '#F59E0B', CLOSED: '#16A34A' };
   const drawingNames = drawings.map(d => d.number || d.title).join(', ') || '-';
 
   const buildObsCardHtml = (obs: Observation, idx: number): string => {
     const photos = getPhotos(obs);
     let measurements: any[] = [];
     try { measurements = typeof obs.measurements === 'string' ? JSON.parse(obs.measurements || '[]') : obs.measurements || []; } catch {}
-    const severity = obs.severity || 'NONE';
+    const severity = obs.severity || 'OPEN';
     const colour   = severityColour[severity] || '#94A3B8';
 
     const photosHtml = photos.length > 0
@@ -620,7 +615,7 @@ function buildReportHtml(
           const photos = getPhotos(obs);
           let measurements: any[] = [];
           try { measurements = typeof obs.measurements === 'string' ? JSON.parse(obs.measurements || '[]') : obs.measurements || []; } catch {}
-          const severity = obs.severity || 'NONE';
+          const severity = obs.severity || 'OPEN';
           const colour   = severityColour[severity] || '#94A3B8';
 
           const photosHtml = photos.length > 0
@@ -993,14 +988,14 @@ export default function ReportScreen() {
                   {zoneObs.map((obs, idx) => {
                     let measurements: { label: string; value: string; unit: string }[] = [];
                     try { measurements = typeof obs.measurements === 'string' ? JSON.parse(obs.measurements || '[]') : obs.measurements || []; } catch {}
-                    const severity = obs.severity || 'NONE';
+                    const severity = obs.severity || 'OPEN';
 
                     return (
                       <View key={obs.id} style={S.obsRow}>
                         <View style={S.obsRowHeader}>
                           <Text style={S.obsRowNum}>Obs {idx + 1}</Text>
-                          <View style={[S.severityPill, { backgroundColor: SEVERITY_COLOURS[severity] + '22' }]}>
-                            <Text style={[S.severityPillText, { color: SEVERITY_COLOURS[severity] }]}>
+                          <View style={[S.severityPill, { backgroundColor: statusColour(severity) + '22' }]}>
+                            <Text style={[S.severityPillText, { color: statusColour(severity) }]}>
                               {severity}
                             </Text>
                           </View>
@@ -1041,14 +1036,14 @@ export default function ReportScreen() {
                   {generalObs.map((obs, idx) => {
                     let measurements: { label: string; value: string; unit: string }[] = [];
                     try { measurements = typeof obs.measurements === 'string' ? JSON.parse(obs.measurements || '[]') : obs.measurements || []; } catch {}
-                    const severity = obs.severity || 'NONE';
+                    const severity = obs.severity || 'OPEN';
 
                     return (
                       <View key={obs.id} style={S.obsRow}>
                         <View style={S.obsRowHeader}>
                           <Text style={S.obsRowNum}>Obs {idx + 1}</Text>
-                          <View style={[S.severityPill, { backgroundColor: SEVERITY_COLOURS[severity] + '22' }]}>
-                            <Text style={[S.severityPillText, { color: SEVERITY_COLOURS[severity] }]}>
+                          <View style={[S.severityPill, { backgroundColor: statusColour(severity) + '22' }]}>
+                            <Text style={[S.severityPillText, { color: statusColour(severity) }]}>
                               {severity}
                             </Text>
                           </View>

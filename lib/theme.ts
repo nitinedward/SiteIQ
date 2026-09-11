@@ -29,20 +29,14 @@ export const C = {
   danger:     '#EF4444',
   dangerBg:   '#FFF1F2',
 
-  // Severity
-  sevNone:    '#64748B',
-  sevLow:     '#16A34A',
-  sevMedium:  '#F59E0B',
-  sevHigh:    '#EF4444',
-  sevCritical:'#7C3AED',
+  // Observation status
+  statusOpen:   '#F59E0B',
+  statusClosed: '#16A34A',
 }
 
-export const SEV_COLOURS: Record<string, string> = {
-  NONE:     C.sevNone,
-  LOW:      C.sevLow,
-  MEDIUM:   C.sevMedium,
-  HIGH:     C.sevHigh,
-  CRITICAL: C.sevCritical,
+export const STATUS_COLOURS: Record<string, string> = {
+  OPEN:   C.statusOpen,
+  CLOSED: C.statusClosed,
 }
 
 export const FONT = {
