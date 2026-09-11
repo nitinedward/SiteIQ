@@ -20,8 +20,12 @@ export async function OPTIONS() {
 }
 
 const POLL_MS = 750
-const SETTLE_POLLS = 3      // ~2.2s of silence before calling it settled
-const MAX_POLLS = 20        // ~15s ceiling
+// ~4.5s of silence before calling it settled. Three polls (~2.2s) was not
+// enough headroom: the Document Server's parting save can arrive several
+// seconds after the editor disconnects, and anything that lands after the
+// rewrite overwrites it.
+const SETTLE_POLLS = 6
+const MAX_POLLS = 30        // ~22s ceiling
 
 /** Gets a document into a state where it can safely be rewritten.
  *

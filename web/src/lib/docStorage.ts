@@ -138,3 +138,63 @@ export async function loadMarkupPdf(inspectionId: string): Promise<Buffer | null
   if (!res.ok) return null
   return Buffer.from(await res.arrayBuffer())
 }
+
+// ── DOCUMENT VERSION / EDITOR KEY ───────────────────────────────────────────
+// OnlyOffice treats `document.key` as the *identity of the content*, not of
+// the session: for a key it has seen before it ignores `document.url`
+// entirely and serves its own cached copy — and that session's saves then
+// write the stale copy back over storage. So the key must change whenever
+// the stored file changes, and must never be reused for different content.
+//
+// It is therefore derived from the stored object itself (its ETag, which is
+// the content hash, falling back to the modified time and size) rather than
+// from anything the browser counts.
+
+/** OnlyOffice accepts only [0-9a-zA-Z-._=] in a key, max 128 chars. */
+function sanitiseKeyPart(value: string): string {
+  return value.replace(/[^0-9a-zA-Z\-._=]/g, '')
+}
+
+export type DocVersion = {
+  tag: string
+  updatedAt: string | null
+  size: number | null
+}
+
+/** Identity of the currently-stored `reports/{inspectionId}.docx`, or null
+ *  if it doesn't exist yet. Two calls return the same tag only while the
+ *  file is byte-for-byte unchanged. */
+export async function getDocVersion(inspectionId: string): Promise<DocVersion | null> {
+  const supabase = getSupabase()
+  const { data } = await supabase.storage
+    .from('reports')
+    .list('', { search: `${inspectionId}.docx` })
+
+  const entry = data?.find(f => f.name === `${inspectionId}.docx`)
+  if (!entry) return null
+
+  const meta: any = entry.metadata ?? {}
+  const size: number | null = typeof meta.size === 'number' ? meta.size : null
+  const etag: string = typeof meta.eTag === 'string' ? meta.eTag : ''
+  const updatedAt: string | null = entry.updated_at ?? null
+
+  // ETag is the object's content hash — the strongest signal available.
+  // updated_at alone is only second-resolution in some environments, so two
+  // rewrites inside the same second would look identical; size is folded in
+  // as a cheap tiebreaker for that fallback.
+  const raw = etag
+    ? sanitiseKeyPart(etag)
+    : sanitiseKeyPart(`${updatedAt ?? ''}-${size ?? 0}`)
+
+  return { tag: raw.slice(0, 64) || String(Date.now()), updatedAt, size }
+}
+
+/** The OnlyOffice document key for the stored report, or null if there is
+ *  no document yet. Callers must pass this exact string both to the editor
+ *  and to any CommandService call (force-save, drop, meta) that targets the
+ *  open session. */
+export async function getDocKey(inspectionId: string): Promise<string | null> {
+  const version = await getDocVersion(inspectionId)
+  if (!version) return null
+  return `doc-${sanitiseKeyPart(inspectionId)}-${version.tag}`.slice(0, 128)
+}

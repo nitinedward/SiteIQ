@@ -6,7 +6,14 @@ interface OnlyOfficeEditorProps {
   inspectionId: string
   fileName: string
   editable: boolean
-  sessionKey: number
+  /** The Document Server's identity for this content — see
+   *  getDocKey() in src/lib/docStorage.ts. It must come from the stored
+   *  file's version, never from a per-session counter: a key the server has
+   *  seen before makes it serve its cached copy and ignore `document.url`,
+   *  so the editor shows an old revision and then saves it back over the
+   *  current one. The host must pass the same string to any CommandService
+   *  call aimed at this session. */
+  documentKey: string
   onReady?: () => void
   onError?: () => void
   /** Enables renaming from the editor's own title in the top bar. Receives
@@ -23,7 +30,7 @@ export default function OnlyOfficeEditor({
   inspectionId,
   fileName,
   editable,
-  sessionKey,
+  documentKey,
   onReady,
   onError,
   onRename,
@@ -69,7 +76,7 @@ export default function OnlyOfficeEditor({
         const config: Record<string, any> = {
           document: {
             fileType: 'docx',
-            key: `doc-${inspectionId}-${sessionKey}`,
+            key: documentKey,
             title: fileName,
             url: docUrl,
             permissions: {

@@ -48,6 +48,9 @@ export default function ReportPage() {
   const [generating,         setGenerating]          = useState(false)
   const [generatingAI,       setGeneratingAI]        = useState(false)
   const [editorKey,          setEditorKey]           = useState(0)
+  // The Document Server's identity for the *stored content* — fetched from
+  // the file itself, never counted locally. See refreshDocKey below.
+  const [docKey,             setDocKey]              = useState<string | null>(null)
   const [selectedPhotos,     setSelectedPhotos]      = useState<SelectedPhoto[]>([])
   const [drawings,           setDrawings]            = useState<DrawingInfo[]>([])
   const [loadingAttachments, setLoadingAttachments]  = useState(false)
@@ -154,6 +157,42 @@ export default function ReportPage() {
   }, [])
 
 
+  // ── EDITOR DOCUMENT KEY ──────────────────────────────────────────────────────
+  /** Re-reads the stored document's identity and adopts it as the editor's
+   *  key.
+   *
+   *  This must be called after ANYTHING rewrites the file server-side — AI
+   *  generation, inserting attachments, rebuilding them for a download.
+   *  OnlyOffice keys the content, not the session: reopening with a key it
+   *  has already seen makes it serve its own cached copy and ignore the
+   *  document URL, so the editor shows the pre-rewrite revision and its next
+   *  save writes that back over storage. That is what made an insert look
+   *  like it reset the report — and why it only behaved after regenerating,
+   *  which happened to move the old per-session counter onto an unused
+   *  number.
+   *
+   *  If the lookup fails, a timestamped key is used rather than the previous
+   *  one: a key that is merely new costs a re-download, whereas a reused key
+   *  costs the user their content. */
+  const refreshDocKey = useCallback(async (): Promise<string> => {
+    const fallback = `doc-${inspectionId}-t${Date.now()}`
+    try {
+      const res = await fetch(
+        `/api/docs/version?inspectionId=${inspectionId}&t=${Date.now()}`,
+        { cache: 'no-store' }
+      )
+      const data = await res.json().catch(() => ({}))
+      const key: string = res.ok && data?.key ? data.key : fallback
+      console.log('[docKey]', key, data?.updatedAt ?? '')
+      setDocKey(key)
+      return key
+    } catch (err) {
+      console.warn('[docKey] lookup failed, using a fresh key:', err)
+      setDocKey(fallback)
+      return fallback
+    }
+  }, [inspectionId])
+
   // ── GENERATE DOC ─────────────────────────────────────────────────────────────
   const generateDoc = useCallback(async () => {
     setGenerating(true)
@@ -165,14 +204,14 @@ export default function ReportPage() {
       })
       if (!res.ok) throw new Error('Generate failed')
       const data = await res.json()
+      // The key comes from the stored file, so it is correct either way:
+      // unchanged for a document that already existed (the editor rejoins
+      // the same session), new for one that was just written.
+      await refreshDocKey()
       setDocReady(true)
       if (data.skipped) {
-        // Doc already exists — show the editor without changing the OO session key.
-        // A stable editorKey means force-save in finaliseReport always targets
-        // the correct active OO session.
-        console.log('[generateDoc] Doc exists, showing without remount')
+        console.log('[generateDoc] Doc exists, opening at its current version')
       } else {
-        // Newly created — remount editor so OO loads the fresh file.
         console.log('[generateDoc] New doc generated, remounting editor')
         setReloadingEditor(true)
         setEditorKey(prev => prev + 1)
@@ -184,7 +223,7 @@ export default function ReportPage() {
     } finally {
       setGenerating(false)
     }
-  }, [inspectionId])
+  }, [inspectionId, refreshDocKey])
 
   // ── AI GENERATE ──────────────────────────────────────────────────────────────
   const generateAIReport = async () => {
@@ -203,6 +242,9 @@ export default function ReportPage() {
       const data = await res.json()
       console.log('[ai-generate] Success:', data)
       setReloadingEditor(true)
+      // The file was replaced — the editor has to reopen on the new
+      // version's key, or the Document Server hands back the old one.
+      await refreshDocKey()
       setEditorKey(prev => prev + 1)
       setTimeout(() => setReloadingEditor(false), 4000)
     } catch (err: any) {
@@ -240,19 +282,20 @@ export default function ReportPage() {
    *  with. Best-effort: the name is already saved, so a failure here just
    *  means the tab keeps the old label until the page is reloaded. */
   const pushTitleToEditor = useCallback(async (name: string) => {
+    if (!docKey) return
     try {
       await fetch('/api/docs/meta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          docKey: `doc-${inspectionId}-${editorKey}`,
+          docKey,
           title: `${name}.docx`,
         }),
       })
     } catch (err) {
       console.warn('[rename] could not refresh the editor title:', err)
     }
-  }, [inspectionId, editorKey])
+  }, [docKey])
 
   const renameFromEditor = useCallback(async (newName: string) => {
     const clean = newName.replace(/\.(docx|pdf)$/i, '').trim()
@@ -313,8 +356,6 @@ export default function ReportPage() {
       selectedPhotosList.length > 0 ||
       selectedDrawingsList.length > 0
 
-    const docKey = `doc-${inspectionId}-${editorKey}`
-
     if (hasAttachments) {
       // Same hazard as inserting: the file is about to be rewritten, so the
       // editor is closed from this side first and its parting save allowed
@@ -323,12 +364,14 @@ export default function ReportPage() {
       setReloadingEditor(true)
       setEditorSuspended(true)
       await new Promise(r => setTimeout(r, 1200))
-      await fetch('/api/docs/quiesce', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ inspectionId, docKey, drop: false }),
-      }).catch(() => { /* nothing open — fine */ })
-    } else {
+      if (docKey) {
+        await fetch('/api/docs/quiesce', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ inspectionId, docKey, drop: false }),
+        }).catch(() => { /* nothing open — fine */ })
+      }
+    } else if (docKey) {
       // Nothing to attach, so just capture what's on screen.
       try {
         await fetch('/api/docs/forcesave', {
@@ -362,8 +405,9 @@ export default function ReportPage() {
       }
 
       // The editor was closed to make the rewrite safe, so bring it back on
-      // a fresh key — otherwise the pane stays empty and the user is left
-      // looking at the pre-attachment document.
+      // the rewritten file's key — otherwise the pane stays empty, or worse,
+      // reopens on the pre-attachment copy the Document Server still holds.
+      await refreshDocKey()
       setEditorSuspended(false)
       setEditorKey(prev => prev + 1)
       setTimeout(() => setReloadingEditor(false), 2500)
@@ -534,10 +578,7 @@ export default function ReportPage() {
     const res = await fetch('/api/docs/export-pdf', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        inspectionId,
-        docKey: `doc-${inspectionId}-${editorKey}`,
-      }),
+      body:    JSON.stringify({ inspectionId, docKey }),
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
@@ -738,8 +779,6 @@ export default function ReportPage() {
 
     setInserting(true)
     try {
-      const docKey = `doc-${inspectionId}-${editorKey}`
-
       // Close the editor from this side first. Dropping the session
       // server-side while the iframe is still open makes OnlyOffice show
       // "file cannot be accessed right now"; unmounting calls
@@ -752,12 +791,15 @@ export default function ReportPage() {
       // Then save what was on screen and wait for writes to go quiet — the
       // parting save must land before the file is rewritten, or it
       // overwrites the attachments and the report reverts to its notes.
-      const quiesceRes = await fetch('/api/docs/quiesce', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inspectionId, docKey, drop: false }),
-      })
-      const quiesce = await quiesceRes.json().catch(() => ({}))
+      // docKey is null only if the editor never opened, in which case there
+      // is no session to save and nothing can overwrite the insert.
+      const quiesce = docKey
+        ? await fetch('/api/docs/quiesce', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inspectionId, docKey, drop: false }),
+          }).then(r => r.json()).catch(() => ({}))
+        : {}
       console.log('[insert] quiesce:', quiesce)
       // `settled` means the stored file has stopped changing, which is the
       // condition that matters. The key often stays known while the document
@@ -796,6 +838,11 @@ export default function ReportPage() {
       )
       setTimeout(() => setInsertResult(''), 8000)
 
+      // Reopen on the rewritten file's own key. Without this the Document
+      // Server recognises the key and serves the copy it cached before the
+      // insert — the report appears to reset, and the session then saves
+      // that copy back over the attachments for good.
+      await refreshDocKey()
       setEditorKey(prev => prev + 1)
       setMobileTab('document')
 
@@ -819,7 +866,6 @@ export default function ReportPage() {
     setShowFinaliseConfirm(false)
     setFinalisingReport(true)
     try {
-      const docKey = `doc-${inspectionId}-${editorKey}`
       console.log('[finalise] Force-saving and converting to PDF, key:', docKey)
       const res = await fetch('/api/docs/finalise-pdf', {
         method: 'POST',
@@ -1846,10 +1892,14 @@ export default function ReportPage() {
                   boxShadow: 'var(--shadow-card-v3)',
                   border: '1px solid var(--border-line)',
                 }}>
-                  {docReady && !editorSuspended && (
+                  {/* docKey gates the mount: opening the editor without the
+                      stored file's own key is what let the Document Server
+                      serve a cached, older revision. editorKey only forces a
+                      remount (retry) — it is not part of the document key. */}
+                  {docReady && docKey && !editorSuspended && (
                     <OnlyOfficeEditor
-                      key={editorKey}
-                      sessionKey={editorKey}
+                      key={`${docKey}:${editorKey}`}
+                      documentKey={docKey}
                       inspectionId={inspectionId}
                       fileName={`${baseFileName()}.docx`}
                       onRename={renameFromEditor}

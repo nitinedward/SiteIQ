@@ -32,7 +32,8 @@ export async function getDocUpdatedAt(inspectionId: string): Promise<string | nu
  *  autosave, or there may be no active editing session to save from).
  *
  *  docKey must match the `key` OnlyOffice was given when the editor was
- *  opened (the client uses `doc-${inspectionId}-${editorKey}`). */
+ *  opened — see getDocKey() in src/lib/docStorage.ts, which derives it from
+ *  the stored file's content hash. */
 export async function forceSaveAndWait(inspectionId: string, docKey: string): Promise<{ saved: boolean; commandOk: boolean; commandResponse: any }> {
   const secret = getSecret()
   const before = await getDocUpdatedAt(inspectionId)

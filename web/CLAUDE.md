@@ -68,6 +68,22 @@ Runs on a DigitalOcean VPS, not locally.
   BOM from the env var before use — a mismatched-looking-but-identical
   secret has bitten this project before.
 
+### OnlyOffice document key
+`document.key` identifies the *content*, not the session. For a key it has
+seen before, the Document Server ignores `document.url` and serves its own
+cached copy — and that session's saves then write the stale copy back over
+Supabase, which looks like the report "resetting" (this is what broke
+inserting photos/markups: the key used to be a per-page-load counter, so
+every visit reused keys from earlier visits).
+
+So the key is derived from the stored file itself — `getDocKey()` in
+`src/lib/docStorage.ts`, `doc-{inspectionId}-{ETag}` — and the report page
+re-reads it via `GET /api/docs/version` after anything rewrites the file
+(AI generation, insert, download rebuild). Rules: never reuse a key for
+different content; never open the editor before the key is known; always
+pass the key the session was *opened* with to CommandService calls
+(force-save, drop, meta), not a freshly-read one.
+
 ### OnlyOffice editor theme
 The editor's toolbar/canvas colours come from a custom theme installed on
 the Document Server, referenced as `uiTheme: 'theme-siteiq'` in
