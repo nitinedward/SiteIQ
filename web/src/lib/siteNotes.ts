@@ -153,10 +153,12 @@ export async function loadProjectSiteNotes(projectId: string): Promise<SiteNote[
     }
   })
 
+  // Oldest first: site notes read as a running record of the job, so the
+  // earliest observation belongs at the top.
   return notes.sort((a, b) => {
     const at = a.observedAt ? new Date(a.observedAt).getTime() : 0
     const bt = b.observedAt ? new Date(b.observedAt).getTime() : 0
-    return bt - at
+    return at - bt
   })
 }
 
@@ -165,6 +167,162 @@ export async function loadProjectSiteNotes(projectId: string): Promise<SiteNote[
 export async function setSiteNoteStatus(noteId: string, status: NoteStatus): Promise<void> {
   const { error } = await supabase.from('observations').update({ severity: status }).eq('id', noteId)
   if (error) throw new Error(error.message)
+}
+
+// ── RESPONSES ───────────────────────────────────────────────────────────────
+// What came back after a note was raised: the contractor's reply, a photo of
+// the remedial work, an email or a PDF. A note is usually closed once one
+// lands, so the response panel offers "Save and close" alongside "Save".
+
+export type NoteResponse = {
+  id: string
+  observationId: string
+  comment: string
+  fileUrl: string | null
+  fileName: string | null
+  fileType: string | null
+  createdAt: string
+}
+
+/** The bucket the mobile app already uploads site photos to. Responses go in
+ *  their own prefix so they can never be mistaken for site photos, which are
+ *  what gets inserted into the report. */
+const RESPONSE_BUCKET = 'observation-photos'
+const RESPONSE_PREFIX = 'note-responses'
+
+export const MAX_RESPONSE_FILE_BYTES = 25 * 1024 * 1024
+
+/** Set up with web/sql/note_responses.sql. Shown in the UI if the table
+ *  isn't there yet, so the one-off step explains itself rather than
+ *  surfacing as a failed query. */
+export const NOTE_RESPONSES_TABLE = 'note_responses'
+
+function isMissingTable(error: { message?: string; code?: string } | null): boolean {
+  if (!error) return false
+  // PostgREST answers PGRST205 for an unknown table, and Postgres 42P01.
+  return error.code === 'PGRST205' || error.code === '42P01' ||
+    /could not find the table/i.test(error.message ?? '')
+}
+
+function toResponse(row: any): NoteResponse {
+  return {
+    id: row.id,
+    observationId: row.observation_id,
+    comment: row.comment ?? '',
+    fileUrl: row.file_url ?? null,
+    fileName: row.file_name ?? null,
+    fileType: row.file_type ?? null,
+    createdAt: row.created_at,
+  }
+}
+
+/** Responses on one note, oldest first. `tableMissing` tells the caller to
+ *  show the setup step instead of an error. */
+export async function loadNoteResponses(
+  observationId: string
+): Promise<{ responses: NoteResponse[]; tableMissing: boolean }> {
+  const { data, error } = await supabase
+    .from(NOTE_RESPONSES_TABLE)
+    .select('*')
+    .eq('observation_id', observationId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    if (isMissingTable(error)) return { responses: [], tableMissing: true }
+    throw new Error(error.message)
+  }
+  return { responses: (data ?? []).map(toResponse), tableMissing: false }
+}
+
+/** How many responses each of these notes has, for the list rows. Returns an
+ *  empty map (not an error) when the table hasn't been created yet. */
+export async function loadResponseCounts(observationIds: string[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>()
+  if (observationIds.length === 0) return counts
+
+  const { data, error } = await supabase
+    .from(NOTE_RESPONSES_TABLE)
+    .select('observation_id')
+    .in('observation_id', observationIds)
+
+  if (error) {
+    if (!isMissingTable(error)) console.error('[siteNotes] response counts failed:', error)
+    return counts
+  }
+  for (const row of data ?? []) {
+    counts.set(row.observation_id, (counts.get(row.observation_id) ?? 0) + 1)
+  }
+  return counts
+}
+
+/** Records a response against a note, uploading the file first if there is
+ *  one. Either a comment or a file is enough — both is the common case. */
+export async function addNoteResponse({
+  observationId, comment, file,
+}: {
+  observationId: string
+  comment: string
+  file?: File | null
+}): Promise<NoteResponse> {
+  if (!comment.trim() && !file) {
+    throw new Error('Add a note or attach a file before saving.')
+  }
+  if (file && file.size > MAX_RESPONSE_FILE_BYTES) {
+    throw new Error(`That file is ${(file.size / 1e6).toFixed(1)} MB — the limit is ${MAX_RESPONSE_FILE_BYTES / 1e6} MB.`)
+  }
+
+  let fileUrl: string | null = null
+  let fileName: string | null = null
+  let fileType: string | null = null
+
+  if (file) {
+    // Prefixed with a timestamp so re-uploading a file of the same name
+    // (very common — "IMG_0001.jpg", "scan.pdf") never overwrites an
+    // earlier response.
+    const safeName = file.name.replace(/[^\w.\-]+/g, '_').slice(-80)
+    const path = `${RESPONSE_PREFIX}/${observationId}/${Date.now()}-${safeName}`
+    const { error: uploadError } = await supabase.storage
+      .from(RESPONSE_BUCKET)
+      .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false })
+    if (uploadError) throw new Error('Could not upload the file: ' + uploadError.message)
+
+    fileUrl  = supabase.storage.from(RESPONSE_BUCKET).getPublicUrl(path).data.publicUrl
+    fileName = file.name
+    fileType = file.type || null
+  }
+
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const { data, error } = await supabase
+    .from(NOTE_RESPONSES_TABLE)
+    .insert({
+      observation_id: observationId,
+      comment: comment.trim(),
+      file_url: fileUrl,
+      file_name: fileName,
+      file_type: fileType,
+      created_by: user?.id ?? null,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    if (isMissingTable(error)) {
+      throw new Error(`The ${NOTE_RESPONSES_TABLE} table hasn't been created yet — run web/sql/note_responses.sql in the Supabase SQL editor.`)
+    }
+    throw new Error(error.message)
+  }
+  return toResponse(data)
+}
+
+export async function deleteNoteResponse(id: string): Promise<void> {
+  const { error } = await supabase.from(NOTE_RESPONSES_TABLE).delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export function isImageResponse(response: NoteResponse): boolean {
+  if (response.fileType?.startsWith('image/')) return true
+  return /\.(png|jpe?g|gif|webp|heic)$/i.test(response.fileName ?? '')
 }
 
 /** "24 August 2026" as stored on the inspection, or a formatted timestamp. */

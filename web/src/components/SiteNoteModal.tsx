@@ -2,7 +2,9 @@
 import { useEffect, useState } from 'react'
 import { Spinner } from '@/components/Shell'
 import {
-  SiteNote, NoteStatus, formatNoteDate, measurementLabel,
+  SiteNote, NoteStatus, NoteResponse, formatNoteDate, measurementLabel,
+  loadNoteResponses, addNoteResponse, deleteNoteResponse, isImageResponse,
+  MAX_RESPONSE_FILE_BYTES,
 } from '@/lib/siteNotes'
 
 /** The full site note: what was dictated on site, the photos taken, anything
@@ -13,16 +15,26 @@ import {
  *  uses to put marked-up drawings into the .docx, so the pin here is exactly
  *  the pin that ends up in the document. */
 export function SiteNoteModal({
-  note, saving, onClose, onToggleStatus, onOpenReport,
+  note, saving, onClose, onToggleStatus, onOpenReport, onResponsesChanged,
 }: {
   note: SiteNote
   saving: boolean
   onClose: () => void
   onToggleStatus: (next: NoteStatus) => void
   onOpenReport?: () => void
+  /** Keeps the list row's response count in step with what's added here. */
+  onResponsesChanged?: (noteId: string, count: number) => void
 }) {
   const [markupUrl, setMarkupUrl]   = useState<string | null>(null)
   const [markupState, setMarkupState] = useState<'idle' | 'loading' | 'error'>('idle')
+
+  const [responses, setResponses]       = useState<NoteResponse[]>([])
+  const [loadingResponses, setLoading]  = useState(true)
+  const [tableMissing, setTableMissing] = useState(false)
+  const [comment, setComment]           = useState('')
+  const [file, setFile]                 = useState<File | null>(null)
+  const [savingResponse, setSavingResponse] = useState(false)
+  const [responseError, setResponseError]   = useState('')
 
   const isOpen = note.status === 'OPEN'
   const tone = isOpen
@@ -40,6 +52,53 @@ export function SiteNoteModal({
       document.body.style.overflow = previousOverflow
     }
   }, [onClose])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    loadNoteResponses(note.id)
+      .then(({ responses: rows, tableMissing: missing }) => {
+        if (cancelled) return
+        setResponses(rows)
+        setTableMissing(missing)
+      })
+      .catch(err => {
+        console.error('[siteNote] could not load responses:', err)
+        if (!cancelled) setResponseError('Could not load the responses on this note.')
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [note.id])
+
+  const saveResponse = async (alsoClose: boolean) => {
+    setResponseError('')
+    setSavingResponse(true)
+    try {
+      const created = await addNoteResponse({ observationId: note.id, comment, file })
+      const next = [...responses, created]
+      setResponses(next)
+      onResponsesChanged?.(note.id, next.length)
+      setComment('')
+      setFile(null)
+      if (alsoClose && note.status === 'OPEN') onToggleStatus('CLOSED')
+    } catch (err: any) {
+      setResponseError(err?.message ?? 'Could not save the response.')
+    } finally {
+      setSavingResponse(false)
+    }
+  }
+
+  const removeResponse = async (id: string) => {
+    if (!confirm('Remove this response?')) return
+    try {
+      await deleteNoteResponse(id)
+      const next = responses.filter(r => r.id !== id)
+      setResponses(next)
+      onResponsesChanged?.(note.id, next.length)
+    } catch (err: any) {
+      setResponseError(err?.message ?? 'Could not remove the response.')
+    }
+  }
 
   // pdf.js is heavy and only needed once a note is actually opened, so the
   // renderer is imported here rather than with the page.
@@ -111,13 +170,6 @@ export function SiteNoteModal({
                 <span style={{ width: 6, height: 6, borderRadius: 3, background: tone.dot }} />
                 {isOpen ? 'Open' : 'Closed'}
               </span>
-              {note.reportNo && (
-                <span style={{
-                  background: 'var(--indigo-soft)', color: 'var(--indigo)',
-                  fontFamily: 'var(--f-mono)', fontSize: 11, fontWeight: 600,
-                  padding: '3px 9px', borderRadius: 8,
-                }}>#{note.reportNo}</span>
-              )}
             </div>
             <h2 style={{
               fontFamily: 'var(--f-heading)', fontSize: 23, fontWeight: 800,
@@ -262,6 +314,187 @@ export function SiteNoteModal({
                   />
                 )}
               </div>
+            )}
+          </div>
+
+          {/* What came back from site — the contractor's reply, a photo of
+              the remedial work, an email or a PDF. Saving one can close the
+              note in the same click, which is the usual way a note ends. */}
+          <div style={{ marginTop: 24 }}>
+            <div style={sectionTitle}>Response ({responses.length})</div>
+
+            {loadingResponses ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner size={20} /></div>
+            ) : tableMissing ? (
+              <div style={{
+                background: 'var(--marigold-soft)', border: '1px solid var(--marigold)',
+                borderRadius: 'var(--radius-md, 14px)', padding: '16px 18px',
+              }}>
+                <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--marigold-ink)' }}>
+                  One-off setup needed
+                </div>
+                <div style={{ fontFamily: 'var(--f-text)', fontSize: 13.5, color: 'var(--marigold-ink)', marginTop: 6, lineHeight: 1.6 }}>
+                  Responses need a table that isn’t in the database yet. Run <strong>web/sql/note_responses.sql</strong> once
+                  in the Supabase SQL editor, then reopen this note.
+                </div>
+              </div>
+            ) : (
+              <>
+                {responses.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                    {responses.map(r => (
+                      <div key={r.id} style={{
+                        border: '1px solid var(--border-line)', borderRadius: 'var(--radius-md, 14px)',
+                        background: 'var(--paper)', padding: '14px 16px',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+                          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11.5, color: 'var(--text-mid)' }}>
+                            {new Date(r.createdAt).toLocaleString('en-NZ', {
+                              day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+                            })}
+                          </span>
+                          <button
+                            onClick={() => removeResponse(r.id)}
+                            title="Remove this response"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mid)', fontSize: 13, padding: 2 }}
+                          >✕</button>
+                        </div>
+
+                        {r.comment && (
+                          <div style={{
+                            fontFamily: 'var(--f-text)', fontSize: 14, lineHeight: 1.6,
+                            color: 'var(--text-ink)', marginTop: 6, whiteSpace: 'pre-wrap',
+                          }}>{r.comment}</div>
+                        )}
+
+                        {r.fileUrl && (
+                          isImageResponse(r) ? (
+                            <a href={r.fileUrl} target="_blank" rel="noreferrer" style={{ display: 'block', marginTop: 10 }}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={r.fileUrl} alt={r.fileName ?? 'Response attachment'}
+                                style={{
+                                  maxWidth: 260, width: '100%', borderRadius: 'var(--radius-sm, 10px)',
+                                  border: '1px solid var(--border-line)', display: 'block',
+                                }}
+                              />
+                            </a>
+                          ) : (
+                            <a
+                              href={r.fileUrl} target="_blank" rel="noreferrer"
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 10,
+                                background: 'var(--surface)', border: '1px solid var(--border-line)',
+                                borderRadius: 'var(--radius-pill)', padding: '7px 14px',
+                                fontFamily: 'var(--f-heading)', fontSize: 12.5, fontWeight: 700,
+                                color: 'var(--indigo)', textDecoration: 'none',
+                              }}
+                            >
+                              <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                              {r.fileName ?? 'Attachment'}
+                            </a>
+                          )
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{
+                  border: '1px solid var(--border-line)', borderRadius: 'var(--radius-md, 14px)',
+                  padding: '14px 16px', background: 'var(--surface)',
+                }}>
+                  <textarea
+                    value={comment}
+                    onChange={e => setComment(e.target.value)}
+                    placeholder="What came back from site? e.g. contractor confirmed the bolts were replaced on 12 Sept."
+                    rows={3}
+                    style={{
+                      width: '100%', resize: 'vertical',
+                      fontFamily: 'var(--f-text)', fontSize: 14, lineHeight: 1.6, color: 'var(--text-ink)',
+                      background: 'var(--paper)', border: '1px solid var(--border-line)',
+                      borderRadius: 'var(--radius-sm, 10px)', padding: '11px 13px', outline: 'none',
+                    }}
+                    onFocus={e => { e.target.style.borderColor = 'var(--indigo)' }}
+                    onBlur={e => { e.target.style.borderColor = 'var(--border-line)' }}
+                  />
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+                    <label style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 7,
+                      background: 'var(--paper)', border: '1px solid var(--border-line)',
+                      borderRadius: 'var(--radius-pill)', padding: '8px 15px', cursor: 'pointer',
+                      fontFamily: 'var(--f-heading)', fontSize: 12.5, fontWeight: 700, color: 'var(--text-ink)',
+                    }}>
+                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                      {file ? 'Change file' : 'Attach a file'}
+                      <input
+                        type="file"
+                        onChange={e => { setFile(e.target.files?.[0] ?? null); setResponseError('') }}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+
+                    {file && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <span style={{
+                          fontFamily: 'var(--f-mono)', fontSize: 11.5, color: 'var(--text-mid)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220,
+                        }}>
+                          {file.name} · {(file.size / 1e6).toFixed(1)} MB
+                        </span>
+                        <button
+                          onClick={() => setFile(null)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mid)', fontSize: 13 }}
+                        >✕</button>
+                      </span>
+                    )}
+
+                    <span style={{ flex: 1 }} />
+
+                    <button
+                      onClick={() => saveResponse(false)}
+                      disabled={savingResponse || saving}
+                      style={{
+                        background: 'var(--surface)', color: 'var(--text-ink)',
+                        border: '1px solid var(--border-line)', borderRadius: 'var(--radius-pill)',
+                        padding: '9px 18px', fontFamily: 'var(--f-heading)', fontSize: 12.5, fontWeight: 700,
+                        cursor: savingResponse ? 'not-allowed' : 'pointer', opacity: savingResponse ? 0.6 : 1,
+                      }}
+                    >
+                      {savingResponse ? 'Saving…' : 'Save response'}
+                    </button>
+
+                    {isOpen && (
+                      <button
+                        onClick={() => saveResponse(true)}
+                        disabled={savingResponse || saving}
+                        style={{
+                          background: 'var(--indigo)', color: '#fff', border: 'none',
+                          borderRadius: 'var(--radius-pill)', padding: '9px 18px',
+                          fontFamily: 'var(--f-heading)', fontSize: 12.5, fontWeight: 700,
+                          cursor: savingResponse ? 'not-allowed' : 'pointer', opacity: savingResponse ? 0.6 : 1,
+                        }}
+                      >
+                        {savingResponse ? 'Saving…' : 'Save and close note'}
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 10 }}>
+                    Photos, PDFs, emails or documents up to {MAX_RESPONSE_FILE_BYTES / 1e6} MB. Response files are kept with
+                    the note — they are not added to the report.
+                  </div>
+
+                  {responseError && (
+                    <div style={{
+                      marginTop: 10, background: 'var(--clay-soft)', color: 'var(--clay-ink)',
+                      border: '1px solid rgba(229,115,91,.3)', borderRadius: 'var(--radius-sm, 10px)',
+                      padding: '9px 12px', fontFamily: 'var(--f-text)', fontSize: 13,
+                    }}>{responseError}</div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </div>

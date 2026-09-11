@@ -7,6 +7,7 @@ import { reportDisplayName } from '@/lib/reportFileName'
 import { SiteNoteModal } from '@/components/SiteNoteModal'
 import {
   SiteNote, NoteStatus, loadProjectSiteNotes, setSiteNoteStatus, formatNoteDate,
+  loadResponseCounts,
 } from '@/lib/siteNotes'
 
 const supabase = createClient(
@@ -173,6 +174,7 @@ function AdminPageInner() {
   const [noteFilter, setNoteFilter]           = useState<'all' | 'open' | 'closed'>('all')
   const [openNoteId, setOpenNoteId]           = useState<string | null>(null)
   const [savingNoteId, setSavingNoteId]       = useState<string | null>(null)
+  const [responseCounts, setResponseCounts]   = useState<Record<string, number>>({})
   const [drawings, setDrawings]               = useState<Drawing[]>([])
   const [revisionHistoryFor, setRevisionHistoryFor] = useState<string | null>(null)
   const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([])
@@ -284,10 +286,16 @@ function AdminPageInner() {
   const loadSiteNotes = async (projectId: string) => {
     setLoadingNotes(true)
     try {
-      setSiteNotes(await loadProjectSiteNotes(projectId))
+      const notes = await loadProjectSiteNotes(projectId)
+      setSiteNotes(notes)
+      // Empty until the responses table exists — the note itself explains
+      // that one-off step, so nothing is reported here.
+      const counts = await loadResponseCounts(notes.map(n => n.id))
+      setResponseCounts(Object.fromEntries(counts))
     } catch (err) {
       console.error('[siteNotes] load failed:', err)
       setSiteNotes([])
+      setResponseCounts({})
     } finally {
       setLoadingNotes(false)
     }
@@ -1368,13 +1376,6 @@ function AdminPageInner() {
                                     <span style={{ width: 6, height: 6, borderRadius: 3, background: tone.dot }} />
                                     {isOpen ? 'Open' : 'Closed'}
                                   </span>
-                                  {note.reportNo && (
-                                    <span style={{
-                                      background: 'var(--indigo-soft)', color: 'var(--indigo)',
-                                      fontFamily: 'var(--f-mono)', fontSize: 10.5, fontWeight: 600,
-                                      padding: '2px 8px', borderRadius: 8,
-                                    }}>#{note.reportNo}</span>
-                                  )}
                                 </div>
 
                                 <div style={{
@@ -1399,6 +1400,11 @@ function AdminPageInner() {
                                   {note.photos.length > 0 && <span>{note.photos.length} photo{note.photos.length === 1 ? '' : 's'}</span>}
                                   {note.measurements.length > 0 && <span>{note.measurements.length} measurement{note.measurements.length === 1 ? '' : 's'}</span>}
                                   {note.drawing && <span>{note.drawing.number}</span>}
+                                  {(responseCounts[note.id] ?? 0) > 0 && (
+                                    <span style={{ color: 'var(--indigo)' }}>
+                                      {responseCounts[note.id]} response{responseCounts[note.id] === 1 ? '' : 's'}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
 
@@ -1886,6 +1892,7 @@ function AdminPageInner() {
           onOpenReport={openNote.inspectionId
             ? () => router.push(`/report/${openNote.inspectionId}?project_name=${encodeURIComponent(selectedProject?.name ?? '')}`)
             : undefined}
+          onResponsesChanged={(noteId, count) => setResponseCounts(curr => ({ ...curr, [noteId]: count }))}
         />
       )}
 
