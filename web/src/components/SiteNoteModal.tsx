@@ -184,13 +184,15 @@ export function SiteNoteModal({
         // attach button — dragging a photo or a PDF straight onto the note
         // is the quickest way to record what came back from site.
         onDragOver={e => {
-          if (tableMissing) return
+          if (tableMissing || !isOpen) return
           e.preventDefault()
           if (!dragging) setDragging(true)
         }}
         onDragLeave={e => { if (e.currentTarget === e.target) setDragging(false) }}
         onDrop={e => {
-          if (tableMissing) return
+          // A closed note takes nothing — including a dropped file, which
+          // would otherwise vanish with no explanation.
+          if (tableMissing || !isOpen) return
           e.preventDefault()
           setDragging(false)
           addFiles(e.dataTransfer?.files ?? null)
@@ -387,9 +389,25 @@ export function SiteNoteModal({
 
           {/* What came back from site — the contractor's reply, a photo of
               the remedial work, an email or a PDF. Saving one can close the
-              note in the same click, which is the usual way a note ends. */}
+              note in the same click, which is the usual way a note ends.
+              A closed note is a record: it is read-only until reopened. */}
           <div style={{ marginTop: 24 }}>
             <div style={sectionTitle}>Response ({responses.length})</div>
+
+            {!isOpen && !loadingResponses && !tableMissing && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 9,
+                background: 'var(--sage-soft)', border: '1px solid var(--sage)',
+                borderRadius: 'var(--radius-md, 14px)', padding: '12px 15px', marginBottom: 14,
+              }}>
+                <svg width="15" height="15" fill="none" stroke="var(--sage-ink)" strokeWidth="2" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+                  <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                <span style={{ fontFamily: 'var(--f-text)', fontSize: 13.5, color: 'var(--sage-ink)', lineHeight: 1.5 }}>
+                  This note is closed, so it’s locked. Reopen it to add a response or change anything.
+                </span>
+              </div>
+            )}
 
             {loadingResponses ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner size={20} /></div>
@@ -421,11 +439,13 @@ export function SiteNoteModal({
                               day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
                             })}
                           </span>
-                          <button
-                            onClick={() => removeResponse(r.id)}
-                            title="Remove this response"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mid)', fontSize: 13, padding: 2 }}
-                          >✕</button>
+                          {isOpen && (
+                            <button
+                              onClick={() => removeResponse(r.id)}
+                              title="Remove this response"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mid)', fontSize: 13, padding: 2 }}
+                            >✕</button>
+                          )}
                         </div>
 
                         {r.comment && (
@@ -487,6 +507,9 @@ export function SiteNoteModal({
                   </div>
                 )}
 
+                {/* The form only exists while the note is open. Closed is a
+                    record of what was agreed, not a draft. */}
+                {isOpen && (
                 <div style={{
                   border: '1px solid var(--border-line)', borderRadius: 'var(--radius-md, 14px)',
                   padding: '14px 16px', background: 'var(--surface)',
@@ -603,6 +626,13 @@ export function SiteNoteModal({
                     }}>{responseError}</div>
                   )}
                 </div>
+                )}
+
+                {!isOpen && responses.length === 0 && (
+                  <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>
+                    This note was closed without a response recorded against it.
+                  </div>
+                )}
               </>
             )}
           </div>
