@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Spinner } from '@/components/Shell'
 import {
   SiteNote, NoteStatus, NoteResponse, formatNoteDate, measurementLabel,
@@ -42,6 +42,78 @@ export function SiteNoteModal({
   const [brokenThumbs, setBrokenThumbs] = useState<Record<string, boolean>>({})
   const [savingResponse, setSavingResponse] = useState(false)
   const [responseError, setResponseError]   = useState('')
+
+  // ── Window position and size ──────────────────────────────────────────
+  // A note is something you read against the report or the drawing beside
+  // it, so it opens centred and can then be dragged by its header and
+  // resized from its bottom-right corner.
+  const MIN_W = 420
+  const MIN_H = 360
+  const [box, setBox] = useState(() => {
+    if (typeof window === 'undefined') return { x: 40, y: 40, w: 920, h: 700 }
+    const w = Math.min(920, window.innerWidth - 40)
+    const h = Math.min(Math.round(window.innerHeight * 0.9), window.innerHeight - 40)
+    return { x: Math.max(20, (window.innerWidth - w) / 2), y: Math.max(20, (window.innerHeight - h) / 2), w, h }
+  })
+  const dragFrom   = useRef<{ dx: number; dy: number } | null>(null)
+  const resizeFrom = useRef<{ x: number; y: number; w: number; h: number } | null>(null)
+
+  const clamp = (value: number, low: number, high: number) => Math.min(Math.max(value, low), high)
+
+  const startDrag = (e: React.PointerEvent) => {
+    // Buttons in the header keep working — only bare header space drags.
+    if ((e.target as HTMLElement).closest('button')) return
+    dragFrom.current = { dx: e.clientX - box.x, dy: e.clientY - box.y }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }
+
+  const onDragMove = (e: React.PointerEvent) => {
+    if (!dragFrom.current) return
+    setBox(b => ({
+      ...b,
+      // Always leave a strip on screen to drag it back by.
+      x: clamp(e.clientX - dragFrom.current!.dx, 60 - b.w, window.innerWidth - 60),
+      y: clamp(e.clientY - dragFrom.current!.dy, 0, window.innerHeight - 60),
+    }))
+  }
+
+  const endDrag = (e: React.PointerEvent) => {
+    dragFrom.current = null
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId) } catch { /* already released */ }
+  }
+
+  const startResize = (e: React.PointerEvent) => {
+    e.stopPropagation()
+    resizeFrom.current = { x: e.clientX, y: e.clientY, w: box.w, h: box.h }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }
+
+  const onResizeMove = (e: React.PointerEvent) => {
+    const from = resizeFrom.current
+    if (!from) return
+    setBox(b => ({
+      ...b,
+      w: clamp(from.w + (e.clientX - from.x), MIN_W, window.innerWidth - b.x - 10),
+      h: clamp(from.h + (e.clientY - from.y), MIN_H, window.innerHeight - b.y - 10),
+    }))
+  }
+
+  const endResize = (e: React.PointerEvent) => {
+    resizeFrom.current = null
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId) } catch { /* already released */ }
+  }
+
+  // Keep it reachable if the browser window shrinks under it.
+  useEffect(() => {
+    const onResize = () => setBox(b => ({
+      x: clamp(b.x, 60 - b.w, window.innerWidth - 60),
+      y: clamp(b.y, 0, window.innerHeight - 60),
+      w: Math.min(b.w, window.innerWidth - 20),
+      h: Math.min(b.h, window.innerHeight - 20),
+    }))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const isOpen = note.status === 'OPEN'
   const tone = isOpen
@@ -160,7 +232,6 @@ export function SiteNoteModal({
       style={{
         position: 'fixed', inset: 0, zIndex: 90,
         background: 'rgba(26,25,23,.45)', backdropFilter: 'blur(2px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
       }}
     >
       <div
@@ -186,10 +257,10 @@ export function SiteNoteModal({
           addFiles(e.dataTransfer?.files ?? null)
         }}
         style={{
-          position: 'relative',
+          position: 'fixed',
+          left: box.x, top: box.y, width: box.w, height: box.h,
           background: 'var(--surface)', border: '1px solid var(--border-line)',
           borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card-v3)',
-          width: 'min(920px, 100%)', maxHeight: '90vh',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           outline: dragging ? '2px dashed var(--indigo)' : 'none', outlineOffset: -10,
         }}
@@ -212,11 +283,18 @@ export function SiteNoteModal({
             </div>
           </div>
         )}
-        {/* Header */}
-        <div style={{
-          padding: '22px 26px', borderBottom: '1px solid var(--border-line)',
-          display: 'flex', alignItems: 'flex-start', gap: 16,
-        }}>
+        {/* Header — also the handle the window is dragged by. */}
+        <div
+          onPointerDown={startDrag}
+          onPointerMove={onDragMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          style={{
+            padding: '22px 26px', borderBottom: '1px solid var(--border-line)',
+            display: 'flex', alignItems: 'flex-start', gap: 16,
+            cursor: dragFrom.current ? 'grabbing' : 'grab', touchAction: 'none',
+          }}
+        >
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <span style={{
@@ -380,7 +458,29 @@ export function SiteNoteModal({
               note in the same click, which is the usual way a note ends.
               A closed note is a record: it is read-only until reopened. */}
           <div style={{ marginTop: 24 }}>
-            <div style={sectionTitle}>Comments ({responses.length})</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+              <div style={{ ...sectionTitle, marginBottom: 0 }}>Comments ({responses.length})</div>
+              {isOpen && !composing && !tableMissing && !loadingResponses && (
+                <button
+                  onClick={() => setComposing(true)}
+                  title="Add a comment"
+                  aria-label="Add a comment"
+                  style={{
+                    width: 30, height: 30, flexShrink: 0,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'var(--indigo-soft)', color: 'var(--indigo)',
+                    border: 'none', borderRadius: '50%', cursor: 'pointer',
+                    transition: 'background .15s, color .15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--indigo)'; e.currentTarget.style.color = '#fff' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--indigo-soft)'; e.currentTarget.style.color = 'var(--indigo)' }}
+                >
+                  <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                </button>
+              )}
+            </div>
 
             {!isOpen && !loadingResponses && !tableMissing && (
               <div style={{
@@ -430,9 +530,23 @@ export function SiteNoteModal({
                           {isOpen && (
                             <button
                               onClick={() => removeResponse(r.id)}
-                              title="Remove this comment"
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mid)', fontSize: 13, padding: 2 }}
-                            >✕</button>
+                              title="Delete this comment and its files"
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 5,
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700,
+                                color: 'var(--text-mid)', padding: '2px 4px', borderRadius: 6,
+                                transition: 'color .15s, background .15s',
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.color = 'var(--clay-ink)'; e.currentTarget.style.background = 'var(--clay-soft)' }}
+                              onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-mid)'; e.currentTarget.style.background = 'none' }}
+                            >
+                              <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                              </svg>
+                              Delete
+                            </button>
                           )}
                         </div>
 
@@ -507,25 +621,12 @@ export function SiteNoteModal({
                 {/* Nothing to write in until it's asked for: an open note
                     shows a + to start a comment, a closed one shows nothing
                     at all, since it's a record rather than a draft. */}
-                {isOpen && !composing && (
-                  <button
-                    onClick={() => setComposing(true)}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                      width: '100%', background: 'none',
-                      border: '1px dashed var(--border-line)', borderRadius: 'var(--radius-md, 14px)',
-                      padding: '13px 16px', cursor: 'pointer',
-                      fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-mid)',
-                      transition: 'border-color .15s, color .15s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--indigo)'; e.currentTarget.style.color = 'var(--indigo)' }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-line)'; e.currentTarget.style.color = 'var(--text-mid)' }}
-                  >
-                    <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                    </svg>
-                    {responses.length === 0 ? 'Add a comment' : 'Add another comment'}
-                  </button>
+                {/* The + beside the heading is what opens a comment box —
+                    nothing sits here waiting to be filled in. */}
+                {isOpen && !composing && responses.length === 0 && (
+                  <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>
+                    No comments yet — use + to record what came back from site.
+                  </div>
                 )}
 
                 {isOpen && composing && (
@@ -718,6 +819,24 @@ export function SiteNoteModal({
               </>
             )}
           </button>
+        </div>
+
+        {/* Resize corner */}
+        <div
+          onPointerDown={startResize}
+          onPointerMove={onResizeMove}
+          onPointerUp={endResize}
+          onPointerCancel={endResize}
+          title="Drag to resize"
+          style={{
+            position: 'absolute', right: 2, bottom: 2, width: 20, height: 20,
+            cursor: 'nwse-resize', touchAction: 'none',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: 3,
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="var(--text-mid)" strokeWidth="1.4" aria-hidden="true">
+            <path d="M11 5 5 11M11 9l-2 2"/>
+          </svg>
         </div>
       </div>
     </div>

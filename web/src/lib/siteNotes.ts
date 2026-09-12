@@ -365,8 +365,20 @@ export async function addNoteResponse({
 }
 
 export async function deleteNoteResponse(id: string): Promise<void> {
-  const { error } = await supabase.from(NOTE_RESPONSES_TABLE).delete().eq('id', id)
+  // `select()` so the removal can be confirmed. Row-level security filters a
+  // delete rather than refusing it, so a comment someone else added comes
+  // back as a success that deleted nothing — and the UI would drop it from
+  // the list while it sat in the database, reappearing on the next open.
+  const { data, error } = await supabase
+    .from(NOTE_RESPONSES_TABLE)
+    .delete()
+    .eq('id', id)
+    .select('id')
+
   if (error) throw new Error(error.message)
+  if (!data || data.length === 0) {
+    throw new Error('That comment could not be removed — it was added by someone else.')
+  }
 }
 
 export function isImageFile(file: NoteFile): boolean {
