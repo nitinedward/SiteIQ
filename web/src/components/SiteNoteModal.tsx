@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Spinner } from '@/components/Shell'
 import {
   SiteNote, NoteStatus, NoteResponse, formatNoteDate, measurementLabel,
-  loadNoteResponses, addNoteResponse, deleteNoteResponse, isImageResponse, isViewableResponse,
+  loadNoteResponses, addNoteResponse, deleteNoteResponse, isImageFile, isViewableFile,
   MAX_RESPONSE_FILE_BYTES,
 } from '@/lib/siteNotes'
 
@@ -32,9 +32,8 @@ export function SiteNoteModal({
   const [loadingResponses, setLoading]  = useState(true)
   const [tableMissing, setTableMissing] = useState(false)
   const [comment, setComment]           = useState('')
-  // Several files can be queued at once — dropping a handful of photos of
-  // the remedial work is the common case. Each becomes its own response,
-  // since a response row carries one file.
+  // Files queued against the comment being written — they are saved with
+  // it as one entry, not as uploads of their own.
   const [files, setFiles]               = useState<File[]>([])
   const [dragging, setDragging]         = useState(false)
   // Thumbnails that failed to load — the file link stays regardless.
@@ -70,7 +69,7 @@ export function SiteNoteModal({
       })
       .catch(err => {
         console.error('[siteNote] could not load responses:', err)
-        if (!cancelled) setResponseError('Could not load the responses on this note.')
+        if (!cancelled) setResponseError('Could not load the comments on this note.')
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
@@ -83,46 +82,29 @@ export function SiteNoteModal({
     setResponseError('')
   }
 
+  // One comment and the files attached to it are saved as a single entry in
+  // the note's history — the files belong to what was said, rather than
+  // arriving as separate uploads of their own.
   const saveResponse = async (alsoClose: boolean) => {
     setResponseError('')
     setSavingResponse(true)
-
-    // Saved one at a time so a single failure part-way through still keeps
-    // whatever already landed, rather than the list disagreeing with the
-    // database. The comment goes on the first response of the batch.
-    const created: NoteResponse[] = []
     try {
-      if (files.length === 0) {
-        created.push(await addNoteResponse({ observationId: note.id, comment }))
-      } else {
-        for (let i = 0; i < files.length; i++) {
-          created.push(await addNoteResponse({
-            observationId: note.id,
-            comment: i === 0 ? comment : '',
-            file: files[i],
-          }))
-        }
-      }
+      const created = await addNoteResponse({ observationId: note.id, comment, files })
+      const next = [...responses, created]
+      setResponses(next)
+      onResponsesChanged?.(note.id, next.length)
       setComment('')
       setFiles([])
       if (alsoClose && note.status === 'OPEN') onToggleStatus('CLOSED')
     } catch (err: any) {
-      setResponseError(err?.message ?? 'Could not save the response.')
-      // Anything that did save stays queued out of the file list.
-      setFiles(curr => curr.slice(created.length))
-      if (created.length > 0) setComment('')
+      setResponseError(err?.message ?? 'Could not save the comment.')
     } finally {
-      if (created.length > 0) {
-        const next = [...responses, ...created]
-        setResponses(next)
-        onResponsesChanged?.(note.id, next.length)
-      }
       setSavingResponse(false)
     }
   }
 
   const removeResponse = async (id: string) => {
-    if (!confirm('Remove this response?')) return
+    if (!confirm('Remove this comment and its files?')) return
     try {
       await deleteNoteResponse(id)
       const next = responses.filter(r => r.id !== id)
@@ -392,7 +374,7 @@ export function SiteNoteModal({
               note in the same click, which is the usual way a note ends.
               A closed note is a record: it is read-only until reopened. */}
           <div style={{ marginTop: 24 }}>
-            <div style={sectionTitle}>Response ({responses.length})</div>
+            <div style={sectionTitle}>Comments ({responses.length})</div>
 
             {!isOpen && !loadingResponses && !tableMissing && (
               <div style={{
@@ -442,7 +424,7 @@ export function SiteNoteModal({
                           {isOpen && (
                             <button
                               onClick={() => removeResponse(r.id)}
-                              title="Remove this response"
+                              title="Remove this comment"
                               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-mid)', fontSize: 13, padding: 2 }}
                             >✕</button>
                           )}
@@ -455,51 +437,60 @@ export function SiteNoteModal({
                           }}>{r.comment}</div>
                         )}
 
-                        {r.fileUrl && (
-                          <div style={{ marginTop: 10 }}>
-                            {/* A thumbnail is a preview, not the only way in:
-                                the link below it is always there, so a file
-                                the browser can't render (or an image that
-                                fails to load) is still openable. */}
-                            {isImageResponse(r) && !brokenThumbs[r.id] && (
-                              <a href={r.fileUrl} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: 8 }}>
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={r.fileUrl} alt={r.fileName ?? 'Response attachment'}
-                                  onError={() => setBrokenThumbs(curr => ({ ...curr, [r.id]: true }))}
-                                  style={{
-                                    maxWidth: 260, width: '100%', borderRadius: 'var(--radius-sm, 10px)',
-                                    border: '1px solid var(--border-line)', display: 'block',
-                                  }}
-                                />
-                              </a>
-                            )}
+                        {r.files.length > 0 && (
+                          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {r.files.map((f, i) => {
+                              const thumbKey = `${r.id}:${i}`
+                              return (
+                                <div key={thumbKey}>
+                                  {/* A thumbnail is a preview, not the only
+                                      way in: the link below it is always
+                                      there, so a file the browser can't
+                                      render (or an image that fails to load)
+                                      is still openable. */}
+                                  {isImageFile(f) && !brokenThumbs[thumbKey] && (
+                                    <a href={f.url} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: 8 }}>
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src={f.url} alt={f.name}
+                                        onError={() => setBrokenThumbs(curr => ({ ...curr, [thumbKey]: true }))}
+                                        style={{
+                                          maxWidth: 260, width: '100%', borderRadius: 'var(--radius-sm, 10px)',
+                                          border: '1px solid var(--border-line)', display: 'block',
+                                        }}
+                                      />
+                                    </a>
+                                  )}
 
-                            <a
-                              href={r.fileUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              // Word, Excel and the like can't be shown in a
-                              // tab, so they're offered as a download instead
-                              // of a view that would never appear.
-                              download={isViewableResponse(r) ? undefined : (r.fileName ?? true)}
-                              style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 7,
-                                background: 'var(--surface)', border: '1px solid var(--border-line)',
-                                borderRadius: 'var(--radius-pill)', padding: '7px 14px',
-                                fontFamily: 'var(--f-heading)', fontSize: 12.5, fontWeight: 700,
-                                color: 'var(--indigo)', textDecoration: 'none', maxWidth: '100%',
-                              }}
-                            >
-                              {isViewableResponse(r) ? (
-                                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                              ) : (
-                                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                              )}
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {isViewableResponse(r) ? 'View' : 'Download'} {r.fileName ?? 'attachment'}
-                              </span>
-                            </a>
+                                  <a
+                                    href={f.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    // Word, Excel and the like can't be shown
+                                    // in a tab, so they're offered as a
+                                    // download instead of a view that would
+                                    // never appear.
+                                    download={isViewableFile(f) ? undefined : (f.name || true)}
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: 7,
+                                      background: 'var(--surface)', border: '1px solid var(--border-line)',
+                                      borderRadius: 'var(--radius-pill)', padding: '7px 14px',
+                                      fontFamily: 'var(--f-heading)', fontSize: 12.5, fontWeight: 700,
+                                      color: 'var(--indigo)', textDecoration: 'none', maxWidth: '100%',
+                                    }}
+                                  >
+                                    {isViewableFile(f) ? (
+                                      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    ) : (
+                                      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    )}
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {isViewableFile(f) ? 'View' : 'Download'} {f.name || 'attachment'}
+                                    </span>
+                                  </a>
+                                </div>
+                              )
+                            })}
                           </div>
                         )}
                       </div>
@@ -593,7 +584,9 @@ export function SiteNoteModal({
                     >
                       {savingResponse
                         ? 'Saving…'
-                        : files.length > 1 ? `Save ${files.length} responses` : 'Save response'}
+                        : files.length > 0
+                          ? `Save comment with ${files.length} file${files.length === 1 ? '' : 's'}`
+                          : 'Save comment'}
                     </button>
 
                     {isOpen && (
@@ -614,7 +607,7 @@ export function SiteNoteModal({
 
                   <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 10 }}>
                     Photos, PDFs, emails or documents up to {MAX_RESPONSE_FILE_BYTES / 1e6} MB each
-                    {files.length > 1 && ' — each file is saved as its own response, with your note on the first'}.
+                    {files.length > 0 && ' — they are saved with this comment as one entry'}.
                     Response files are kept with the note — they are not added to the report.
                   </div>
 

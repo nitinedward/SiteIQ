@@ -1402,7 +1402,7 @@ function AdminPageInner() {
                                   {note.drawing && <span>{note.drawing.number}</span>}
                                   {(responseCounts[note.id] ?? 0) > 0 && (
                                     <span style={{ color: 'var(--indigo)' }}>
-                                      {responseCounts[note.id]} response{responseCounts[note.id] === 1 ? '' : 's'}
+                                      {responseCounts[note.id]} comment{responseCounts[note.id] === 1 ? '' : 's'}
                                     </span>
                                   )}
                                 </div>

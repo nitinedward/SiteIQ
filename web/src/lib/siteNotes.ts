@@ -181,13 +181,16 @@ export async function setSiteNoteStatus(noteId: string, status: NoteStatus): Pro
 // the remedial work, an email or a PDF. A note is usually closed once one
 // lands, so the response panel offers "Save and close" alongside "Save".
 
+export type NoteFile = { url: string; name: string; type: string | null }
+
 export type NoteResponse = {
   id: string
   observationId: string
   comment: string
-  fileUrl: string | null
-  fileName: string | null
-  fileType: string | null
+  /** The files attached to THIS comment. Stored in the `files` column; a
+   *  response written before that column existed carries a single file in
+   *  file_url/file_name/file_type and is read back the same way. */
+  files: NoteFile[]
   createdAt: string
 }
 
@@ -203,6 +206,12 @@ export const MAX_RESPONSE_FILE_BYTES = 25 * 1024 * 1024
  *  surfacing as a failed query. */
 export const NOTE_RESPONSES_TABLE = 'note_responses'
 
+/** PostgREST answers PGRST204 when a column in the payload doesn't exist. */
+function isMissingFilesColumn(error: { message?: string; code?: string } | null): boolean {
+  if (!error) return false
+  return error.code === 'PGRST204' && /'files'/.test(error.message ?? '')
+}
+
 function isMissingTable(error: { message?: string; code?: string } | null): boolean {
   if (!error) return false
   // PostgREST answers PGRST205 for an unknown table, and Postgres 42P01.
@@ -211,13 +220,19 @@ function isMissingTable(error: { message?: string; code?: string } | null): bool
 }
 
 function toResponse(row: any): NoteResponse {
+  const stored: NoteFile[] = Array.isArray(row.files)
+    ? row.files.filter((f: any) => f?.url)
+    : []
+
   return {
     id: row.id,
     observationId: row.observation_id,
     comment: row.comment ?? '',
-    fileUrl: row.file_url ?? null,
-    fileName: row.file_name ?? null,
-    fileType: row.file_type ?? null,
+    files: stored.length > 0
+      ? stored
+      : row.file_url
+        ? [{ url: row.file_url, name: row.file_name ?? 'Attachment', type: row.file_type ?? null }]
+        : [],
     createdAt: row.created_at,
   }
 }
@@ -263,61 +278,82 @@ export async function loadResponseCounts(observationIds: string[]): Promise<Map<
 
 /** Records a response against a note, uploading the file first if there is
  *  one. Either a comment or a file is enough — both is the common case. */
+/** Uploads one file through our own route, which stores it with the service
+ *  role — a browser-side storage write depends on the bucket's policies
+ *  allowing this user to write to this prefix, and fails in a way that is
+ *  hard to surface. See src/app/api/notes/response-file/route.ts. */
+async function uploadResponseFile(observationId: string, file: File): Promise<NoteFile> {
+  if (file.size > MAX_RESPONSE_FILE_BYTES) {
+    throw new Error(`${file.name} is ${(file.size / 1e6).toFixed(1)} MB — the limit is ${MAX_RESPONSE_FILE_BYTES / 1e6} MB.`)
+  }
+  const res = await fetch(
+    `/api/notes/response-file?observationId=${encodeURIComponent(observationId)}&name=${encodeURIComponent(file.name)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    }
+  )
+  const payload = await res.json().catch(() => ({}))
+  if (!res.ok || !payload?.url) {
+    throw new Error('Could not upload ' + file.name + ': ' + (payload?.error ?? `upload failed (${res.status})`))
+  }
+  return { url: payload.url, name: file.name, type: file.type || null }
+}
+
+/** Records one comment together with the files that belong to it — they are
+ *  a single entry in the note's history, not a comment and some loose
+ *  uploads. */
 export async function addNoteResponse({
-  observationId, comment, file,
+  observationId, comment, files = [],
 }: {
   observationId: string
   comment: string
-  file?: File | null
+  files?: File[]
 }): Promise<NoteResponse> {
-  if (!comment.trim() && !file) {
-    throw new Error('Add a note or attach a file before saving.')
-  }
-  if (file && file.size > MAX_RESPONSE_FILE_BYTES) {
-    throw new Error(`That file is ${(file.size / 1e6).toFixed(1)} MB — the limit is ${MAX_RESPONSE_FILE_BYTES / 1e6} MB.`)
+  if (!comment.trim() && files.length === 0) {
+    throw new Error('Add a comment or attach a file before saving.')
   }
 
-  let fileUrl: string | null = null
-  let fileName: string | null = null
-  let fileType: string | null = null
-
-  if (file) {
-    // Sent to our own route, which stores it with the service role — a
-    // browser-side storage write depends on the bucket's policies allowing
-    // this user to write to this prefix, and fails in a way that is hard to
-    // surface. See src/app/api/notes/response-file/route.ts.
-    const res = await fetch(
-      `/api/notes/response-file?observationId=${encodeURIComponent(observationId)}&name=${encodeURIComponent(file.name)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': file.type || 'application/octet-stream' },
-        body: file,
-      }
-    )
-    const payload = await res.json().catch(() => ({}))
-    if (!res.ok || !payload?.url) {
-      throw new Error('Could not upload ' + file.name + ': ' + (payload?.error ?? `upload failed (${res.status})`))
-    }
-
-    fileUrl  = payload.url
-    fileName = file.name
-    fileType = file.type || null
+  const uploaded: NoteFile[] = []
+  for (const file of files) {
+    uploaded.push(await uploadResponseFile(observationId, file))
   }
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const { data, error } = await supabase
-    .from(NOTE_RESPONSES_TABLE)
-    .insert({
-      observation_id: observationId,
-      comment: comment.trim(),
-      file_url: fileUrl,
-      file_name: fileName,
-      file_type: fileType,
-      created_by: user?.id ?? null,
-    })
-    .select()
-    .single()
+  const row: Record<string, any> = {
+    observation_id: observationId,
+    comment: comment.trim(),
+    files: uploaded,
+    // Also written to the original single-file columns so a response stays
+    // readable by anything looking at those, and by this app if the `files`
+    // column is ever rolled back.
+    file_url:  uploaded[0]?.url  ?? null,
+    file_name: uploaded[0]?.name ?? null,
+    file_type: uploaded[0]?.type ?? null,
+    created_by: user?.id ?? null,
+  }
+
+  let { data, error } = await supabase.from(NOTE_RESPONSES_TABLE).insert(row).select().single()
+
+  // The `files` column arrived after the table did. Without it, fall back to
+  // the original shape — one row per file — so responses still save on a
+  // database where web/sql/note_response_files.sql hasn't been run.
+  if (error && isMissingFilesColumn(error)) {
+    const { files: _dropped, ...legacyRow } = row
+    const first = await supabase.from(NOTE_RESPONSES_TABLE).insert(legacyRow).select().single()
+    if (first.error) throw new Error(first.error.message)
+    for (const extra of uploaded.slice(1)) {
+      await supabase.from(NOTE_RESPONSES_TABLE).insert({
+        observation_id: observationId,
+        comment: '',
+        file_url: extra.url, file_name: extra.name, file_type: extra.type,
+        created_by: user?.id ?? null,
+      })
+    }
+    return toResponse(first.data)
+  }
 
   if (error) {
     if (isMissingTable(error)) {
@@ -333,18 +369,18 @@ export async function deleteNoteResponse(id: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-export function isImageResponse(response: NoteResponse): boolean {
-  if (response.fileType?.startsWith('image/')) return true
-  return /\.(png|jpe?g|gif|webp|heic)$/i.test(response.fileName ?? '')
+export function isImageFile(file: NoteFile): boolean {
+  if (file.type?.startsWith('image/')) return true
+  return /\.(png|jpe?g|gif|webp|heic)$/i.test(file.name ?? '')
 }
 
 /** Whether a browser can display the file itself. A PDF or an image opens
  *  in a tab; a Word or Excel file can only be downloaded, so the panel says
  *  "Download" rather than offering a view that would never appear. */
-export function isViewableResponse(response: NoteResponse): boolean {
-  if (isImageResponse(response)) return true
-  if (response.fileType === 'application/pdf') return true
-  return /\.(pdf|txt|csv)$/i.test(response.fileName ?? '')
+export function isViewableFile(file: NoteFile): boolean {
+  if (isImageFile(file)) return true
+  if (file.type === 'application/pdf') return true
+  return /\.(pdf|txt|csv)$/i.test(file.name ?? '')
 }
 
 /** "24 August 2026" as stored on the inspection, or a formatted timestamp. */
