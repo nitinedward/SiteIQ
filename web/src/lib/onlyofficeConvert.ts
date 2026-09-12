@@ -165,8 +165,18 @@ export async function setDocumentMeta(docKey: string, title: string): Promise<{ 
 
 /** Converts the currently-stored .docx for an inspection to PDF via
  *  OnlyOffice's ConvertService.ashx, and returns the PDF as a Buffer.
- *  Throws on failure — callers must not treat a thrown error as success. */
-export async function convertDocxToPdf(inspectionId: string, appUrl: string): Promise<Buffer> {
+ *  Throws on failure — callers must not treat a thrown error as success.
+ *
+ *  `title` is the name OnlyOffice writes into the converted file, and a PDF
+ *  viewer shows that title in preference to the file name it was served
+ *  under — so leaving it unset is what made a finalised report display as
+ *  the raw inspection UUID even once the download itself was named properly.
+ *  Callers should pass the report's own name (see reportFileNameFor). */
+export async function convertDocxToPdf(
+  inspectionId: string,
+  appUrl: string,
+  title?: string
+): Promise<Buffer> {
   const secret = getSecret()
   if (!secret) throw new Error('ONLYOFFICE_JWT_SECRET not configured')
 
@@ -186,7 +196,9 @@ export async function convertDocxToPdf(inspectionId: string, appUrl: string): Pr
     filetype: 'docx',
     outputtype: 'pdf',
     key: conversionKey,
-    title: `${inspectionId}.docx`,
+    // The extension stays .docx — it describes the source being converted,
+    // and OnlyOffice swaps it for .pdf on the way out.
+    title: `${(title ?? '').trim() || inspectionId}.docx`,
     url: sourceUrl,
   }
   const token = jwt.sign(payload, secret, { algorithm: 'HS256' })

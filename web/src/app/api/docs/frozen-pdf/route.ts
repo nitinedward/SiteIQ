@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { loadPdf } from '@/lib/docStorage'
-import { reportFileName } from '@/lib/reportFileName'
+import { reportFileNameFor } from '@/lib/reportFileNameServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,21 +29,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
-      (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()
-    )
-    // select('*') rather than naming columns, so this keeps working whether
-    // or not the optional report_file_name column exists yet.
-    const { data: inspection } = await supabase
-      .from('inspections')
-      .select('*, projects(name)')
-      .eq('id', inspectionId)
-      .single()
-
-    const custom = ((inspection as any)?.report_file_name ?? '').trim()
-    const projectName = (inspection as any)?.projects?.name as string | undefined
-    const fileName = custom || reportFileName(projectName, (inspection as any)?.report_no, inspectionId)
+    const fileName = await reportFileNameFor(inspectionId)
 
     const pdf = await loadPdf(inspectionId)
 

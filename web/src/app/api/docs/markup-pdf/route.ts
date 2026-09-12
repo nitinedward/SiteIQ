@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { saveMarkupPdf, loadMarkupPdf } from '@/lib/docStorage'
-import { reportFileName } from '@/lib/reportFileName'
+import { reportFileNameFor } from '@/lib/reportFileNameServer'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -14,21 +13,6 @@ const cors = {
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 200, headers: cors })
-}
-
-async function fileNameFor(inspectionId: string): Promise<string> {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
-    (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()
-  )
-  const { data } = await supabase
-    .from('inspections')
-    .select('*, projects(name)')
-    .eq('id', inspectionId)
-    .single()
-
-  const custom = ((data as any)?.report_file_name ?? '').trim()
-  return custom || reportFileName((data as any)?.projects?.name, (data as any)?.report_no, inspectionId)
 }
 
 /** Stores the markup PDF built in the browser. The body is the raw PDF —
@@ -71,7 +55,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const name = await fileNameFor(inspectionId)
+    const name = await reportFileNameFor(inspectionId)
     return new NextResponse(new Uint8Array(pdf), {
       status: 200,
       headers: {

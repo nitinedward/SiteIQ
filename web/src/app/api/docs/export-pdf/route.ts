@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { forceSaveAndWait, convertDocxToPdf } from '@/lib/onlyofficeConvert'
+import { reportFileNameFor } from '@/lib/reportFileNameServer'
 
 export const dynamic = 'force-dynamic'
 // Force-save (~10s) plus conversion polling (~90s worst case for a large,
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin
-    const pdfBuffer = await convertDocxToPdf(inspectionId, appUrl)
+    const pdfBuffer = await convertDocxToPdf(inspectionId, appUrl, await reportFileNameFor(inspectionId))
     console.log('[export-pdf] PDF generated, size:', pdfBuffer.length)
 
     return new NextResponse(new Uint8Array(pdfBuffer), {
