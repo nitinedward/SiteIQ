@@ -292,7 +292,7 @@ export default function ObservationScreen() {
 
   const handleSubmit = async () => {
     if (!transcript.trim() && photos.length === 0 && measurements.length === 0) {
-      Alert.alert('Nothing to Save', 'Please add at least one photo, voice note, or measurement.'); return;
+      Alert.alert('Nothing to Save', 'Please add a note, photo, or measurement.'); return;
     }
     setIsSubmitting(true);
     const label = zoneLabel.trim() || 'General Site Observation';
@@ -368,10 +368,10 @@ export default function ObservationScreen() {
           )}
         </View>
 
-        {/* Voice */}
+        {/* Notes — typed or dictated */}
         <View style={S.section}>
           <View style={S.sectionRow}>
-            <Text style={S.sectionTitle}>Voice Notes</Text>
+            <Text style={S.sectionTitle}>Notes</Text>
             <TouchableOpacity style={[S.recordBtn, isRecording && S.recordBtnActive, isTranscribing && S.recordBtnTranscribing]} onPress={() => isRecording ? stopRecording() : startRecording()} disabled={isTranscribing}>
               {isTranscribing ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={S.recordBtnText}>{isRecording ? 'Stop' : 'Record'}</Text>}
             </TouchableOpacity>
@@ -382,14 +382,19 @@ export default function ObservationScreen() {
               <Text style={S.waveHint}>{isRecording ? 'Listening...' : 'Processing...'}</Text>
             </View>
           )}
-          {transcript ? (
-            <View style={S.transcriptBox}>
-              <Text style={S.transcriptLabel}>Transcribed — tap to edit:</Text>
-              <TextInput style={S.transcriptInput} value={transcript} onChangeText={setTranscript} multiline textAlignVertical="top" />
-            </View>
-          ) : (
-            <View style={S.emptyVoice}><Text style={S.emptyVoiceText}>Tap Record to dictate your observation</Text></View>
-          )}
+          <View style={S.transcriptBox}>
+            <Text style={S.transcriptLabel}>Type your observation, or tap Record to dictate:</Text>
+            <TextInput
+              style={S.transcriptInput}
+              value={transcript}
+              onChangeText={setTranscript}
+              placeholder="e.g. Hairline cracking to the south face of the column, approx 0.2 mm wide."
+              placeholderTextColor={T.mid}
+              multiline
+              textAlignVertical="top"
+              editable={!isRecording && !isTranscribing}
+            />
+          </View>
         </View>
 
         {/* Status */}
@@ -500,8 +505,6 @@ const S = StyleSheet.create({
   transcriptBox:{ backgroundColor: T.surface, borderRadius: R.sm, padding: 14, borderWidth: 1, borderColor: T.line },
   transcriptLabel:{ fontSize: 11, color: T.mid, marginBottom: 6 },
   transcriptInput:{ fontSize: 14, color: T.ink, minHeight: 80 },
-  emptyVoice:   { backgroundColor: T.surface, borderRadius: R.sm, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: T.line, borderStyle: 'dashed' },
-  emptyVoiceText:{ fontSize: 13, color: T.mid },
   severityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   sevChip:      { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: T.surface, borderRadius: R.pill, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1.5, borderColor: T.line },
   sevDot:       { width: 8, height: 8, borderRadius: 4 },
