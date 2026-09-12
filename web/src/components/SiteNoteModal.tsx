@@ -36,6 +36,8 @@ export function SiteNoteModal({
   // it as one entry, not as uploads of their own.
   const [files, setFiles]               = useState<File[]>([])
   const [dragging, setDragging]         = useState(false)
+  // The comment box is opened by the + rather than sitting there empty.
+  const [composing, setComposing]       = useState(false)
   // Thumbnails that failed to load — the file link stays regardless.
   const [brokenThumbs, setBrokenThumbs] = useState<Record<string, boolean>>({})
   const [savingResponse, setSavingResponse] = useState(false)
@@ -79,6 +81,9 @@ export function SiteNoteModal({
     const list = Array.from(incoming ?? [])
     if (list.length === 0) return
     setFiles(curr => [...curr, ...list])
+    // Dropping a file IS asking to comment, so the box opens with it rather
+    // than the file queueing somewhere the user can't see.
+    setComposing(true)
     setResponseError('')
   }
 
@@ -95,6 +100,7 @@ export function SiteNoteModal({
       onResponsesChanged?.(note.id, next.length)
       setComment('')
       setFiles([])
+      setComposing(false)
       if (alsoClose && note.status === 'OPEN') onToggleStatus('CLOSED')
     } catch (err: any) {
       setResponseError(err?.message ?? 'Could not save the comment.')
@@ -498,14 +504,37 @@ export function SiteNoteModal({
                   </div>
                 )}
 
-                {/* The form only exists while the note is open. Closed is a
-                    record of what was agreed, not a draft. */}
-                {isOpen && (
+                {/* Nothing to write in until it's asked for: an open note
+                    shows a + to start a comment, a closed one shows nothing
+                    at all, since it's a record rather than a draft. */}
+                {isOpen && !composing && (
+                  <button
+                    onClick={() => setComposing(true)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      width: '100%', background: 'none',
+                      border: '1px dashed var(--border-line)', borderRadius: 'var(--radius-md, 14px)',
+                      padding: '13px 16px', cursor: 'pointer',
+                      fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--text-mid)',
+                      transition: 'border-color .15s, color .15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--indigo)'; e.currentTarget.style.color = 'var(--indigo)' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-line)'; e.currentTarget.style.color = 'var(--text-mid)' }}
+                  >
+                    <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    {responses.length === 0 ? 'Add a comment' : 'Add another comment'}
+                  </button>
+                )}
+
+                {isOpen && composing && (
                 <div style={{
                   border: '1px solid var(--border-line)', borderRadius: 'var(--radius-md, 14px)',
                   padding: '14px 16px', background: 'var(--surface)',
                 }}>
                   <textarea
+                    autoFocus
                     value={comment}
                     onChange={e => setComment(e.target.value)}
                     placeholder="What came back from site? e.g. contractor confirmed the bolts were replaced on 12 Sept."
@@ -571,6 +600,19 @@ export function SiteNoteModal({
                     </span>
 
                     <span style={{ flex: 1 }} />
+
+                    <button
+                      onClick={() => { setComposing(false); setComment(''); setFiles([]); setResponseError('') }}
+                      disabled={savingResponse}
+                      style={{
+                        background: 'none', border: 'none',
+                        fontFamily: 'var(--f-heading)', fontSize: 12.5, fontWeight: 700,
+                        color: 'var(--text-mid)', cursor: savingResponse ? 'not-allowed' : 'pointer',
+                        padding: '9px 6px',
+                      }}
+                    >
+                      Cancel
+                    </button>
 
                     <button
                       onClick={() => saveResponse(false)}
