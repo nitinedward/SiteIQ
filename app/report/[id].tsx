@@ -669,7 +669,13 @@ function buildReportHtml(
       </div>`;
   }).join('');
 
+  // The title becomes the PDF's document metadata — what a viewer shows when
+  // it has a title to show, rather than falling back to the file name.
+  const docTitle = `Site Inspection Report - ${projectName} #${inspection.report_no}`
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<title>${docTitle}</title>
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
 body { font-family:-apple-system,Helvetica,Arial,sans-serif; color:#1e293b; background:#fff; }
@@ -773,7 +779,16 @@ export default function ReportScreen() {
     try {
       const html = buildReportHtml(inspection, projectName, zones, observations, drawings);
       const { uri } = await Print.printToFileAsync({ html, base64: false });
-      await Sharing.shareAsync(uri, {
+
+      // printToFileAsync names the file with a UUID, and that name is what the
+      // share sheet, Files and the PDF viewer all show. Give it the report's
+      // own name before handing it on — same shape as the Word export below.
+      const fileName = `SiteIQ-Report-${(projectName || 'Report').replace(/[^a-zA-Z0-9]/g, '-')}-${inspection.report_no}.pdf`;
+      const namedUri = FileSystem.cacheDirectory + fileName;
+      await FileSystem.deleteAsync(namedUri, { idempotent: true }); // a second export would collide
+      await FileSystem.moveAsync({ from: uri, to: namedUri });
+
+      await Sharing.shareAsync(namedUri, {
         mimeType: 'application/pdf',
         dialogTitle: `Site Report - ${projectName} #${inspection.report_no}`,
         UTI: 'com.adobe.pdf',
