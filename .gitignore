@@ -44,3 +44,6 @@ OpenAI API Key.txt
 # generated native folders
 /ios
 /android
+
+.vercel
+.env*

@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../lib/theme';
+import { transcribeAudio } from '../lib/transcribe';
 import { consumePendingMeasurement } from '../lib/pendingMeasurement';
 
 const T = theme.colors;
@@ -280,66 +281,7 @@ export default function ObservationScreen() {
     }
   };
 
-  const transcribeAudio = async (uri: string): Promise<string> => {
-    try {
-      console.log('[whisper] Starting:', uri)
 
-      const apiKey = process.env.EXPO_PUBLIC_OPENAI_KEY
-
-      if (!apiKey) {
-        throw new Error(
-          'OpenAI API key not configured. Please contact your administrator.'
-        )
-      }
-
-      const formData = new FormData()
-      formData.append('file', {
-        uri,
-        type: 'audio/m4a',
-        name: 'recording.m4a',
-      } as any)
-      formData.append('model', 'whisper-1')
-      formData.append('language', 'en')
-      formData.append(
-        'prompt',
-        'This is a structural engineering site inspection recording. ' +
-        'Technical terms may include: reinforcement, concrete, beam, ' +
-        'column, foundation, slab, rebar, stirrup, spacing, compliance.'
-      )
-
-      console.log('[whisper] Sending to API...')
-
-      const response = await fetch(
-        'https://api.openai.com/v1/audio/transcriptions',
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: formData,
-        }
-      )
-
-      console.log('[whisper] Response:', response.status)
-
-      if (!response.ok) {
-        const errText = await response.text()
-        console.error('[whisper] Error:', errText)
-        throw new Error(`Whisper API error: ${response.status}`)
-      }
-
-      const data = await response.json()
-      const transcript = data.text?.trim() ?? ''
-
-      console.log('[whisper] Transcript:', transcript.substring(0, 100))
-
-      return transcript
-
-    } catch (err: any) {
-      console.error('[whisper] Failed:', err)
-      throw err
-    }
-  };
 
   const addMeasurement = () => {
     if (!newMeasValue || isNaN(Number(newMeasValue))) { Alert.alert('Invalid', 'Please enter a valid number.'); return; }
