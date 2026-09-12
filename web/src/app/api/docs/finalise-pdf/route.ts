@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { savePdf } from '@/lib/docStorage'
 import { forceSaveAndWait, convertDocxToPdf } from '@/lib/onlyofficeConvert'
 import { reportFileNameFor } from '@/lib/reportFileNameServer'
+import { ensurePdfTitle } from '@/lib/pdfTitle'
 
 export const dynamic = 'force-dynamic'
 // Force-save (~10s) + conversion polling (~90s worst case for a large,
@@ -43,10 +44,13 @@ export async function POST(request: NextRequest) {
     // The frozen PDF is the copy people keep and pass around, so it carries
     // the report's name inside it rather than the inspection UUID.
     const title = await reportFileNameFor(inspectionId)
-    const pdfBuffer = await convertDocxToPdf(inspectionId, appUrl, title)
+    const converted = await convertDocxToPdf(inspectionId, appUrl, title)
+    // Stamped again here rather than trusting the conversion to have taken
+    // the title — this is the copy that gets viewed, downloaded and emailed.
+    const { bytes: pdfBuffer } = await ensurePdfTitle(converted, title)
 
     await savePdf(inspectionId, pdfBuffer)
-    console.log('[finalise-pdf] PDF stored, size:', pdfBuffer.length)
+    console.log('[finalise-pdf] PDF stored as:', title, 'size:', pdfBuffer.length)
 
     return NextResponse.json({ success: true, pdfSize: pdfBuffer.length }, { headers: cors })
   } catch (err: any) {
