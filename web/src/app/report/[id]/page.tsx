@@ -69,6 +69,8 @@ export default function ReportPage() {
   // Unmounts the editor while the document is rewritten underneath it.
   const [editorSuspended,    setEditorSuspended]     = useState(false)
   const [reloadingEditor,    setReloadingEditor]     = useState(false)
+  /** The AI report as it is being written, shown while it streams in. */
+  const [aiStreamText,       setAiStreamText]        = useState('')
   /** Backstop for the reloading overlay: it is normally lifted by the
    *  editor's own onReady, and this only covers a load that never reports
    *  ready at all, which would otherwise leave the pane covered for good. */
@@ -250,18 +252,63 @@ export default function ReportPage() {
     )) return
     setGeneratingAI(true)
     try {
+      setAiStreamText('')
       await runDocumentRewrite(async () => {
         const res = await fetch('/api/docs/ai-generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ inspectionId }),
         })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(data.error || 'AI generation failed')
-        console.log('[ai-generate] Success:', data)
+        // Failures before the stream starts still answer with a status.
+        if (!res.ok || !res.body) {
+          const data = await res.json().catch(() => ({} as any))
+          throw new Error(data.error || 'AI generation failed')
+        }
+
+        // Newline-delimited JSON: the report as it is written, then one
+        // final line. Anything that fails once the stream has started is
+        // reported in that line, not as an HTTP status.
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let carried: string[] = []
+        let finished = false
+
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? '' // a partial line waits for the next read
+
+          for (const line of lines) {
+            if (!line.trim()) continue
+            let msg: any
+            try { msg = JSON.parse(line) } catch { continue }
+
+            if (msg.t === 'text') {
+              setAiStreamText(prev => prev + msg.v)
+            } else if (msg.t === 'error') {
+              throw new Error(msg.error || 'AI generation failed')
+            } else if (msg.t === 'done') {
+              carried = msg.carried ?? []
+              finished = true
+            }
+          }
+        }
+
+        // No final line means the connection dropped part-way. The document
+        // may or may not have been rewritten, so say so rather than claiming
+        // success.
+        if (!finished) {
+          throw new Error('The connection dropped while the report was being written. Check the document before regenerating.')
+        }
+
+        console.log('[ai-generate] Success, carried:', carried)
         setTextVersionResult(
           'Report text rewritten by AI' +
-          (data.carried?.length ? ' — inserted photos and markups kept.' : '.')
+          (carried.length ? ' — inserted photos and markups kept.' : '.')
         )
         setTimeout(() => setTextVersionResult(''), 8000)
       })
@@ -270,6 +317,8 @@ export default function ReportPage() {
       alert('AI generation failed: ' + err.message)
     } finally {
       setGeneratingAI(false)
+      // Cleared so it can't reappear behind a later insert's overlay.
+      setAiStreamText('')
     }
   }
 
@@ -2152,8 +2201,28 @@ export default function ReportPage() {
                   textTransform: 'uppercase',
                   letterSpacing: '1px',
                 }}>
-                  Updating document...
+                  {aiStreamText ? 'Writing report...' : 'Updating document...'}
                 </div>
+
+                {/* The report as the model writes it. Without this the AI
+                    step is half a minute of nothing happening. */}
+                {aiStreamText && (
+                  <div
+                    ref={el => { if (el) el.scrollTop = el.scrollHeight }}
+                    style={{
+                      maxWidth: 560, maxHeight: 220, overflowY: 'auto',
+                      padding: '14px 18px', margin: '0 20px',
+                      background: 'var(--paper)',
+                      border: '1px solid var(--border-line)',
+                      borderRadius: 'var(--radius-md, 14px)',
+                      fontFamily: 'var(--f-text)', fontSize: 13, lineHeight: 1.6,
+                      color: 'var(--text-ink)', whiteSpace: 'pre-wrap',
+                      textAlign: 'left',
+                    }}
+                  >
+                    {aiStreamText}
+                  </div>
+                )}
               </div>
             )}
           </div>

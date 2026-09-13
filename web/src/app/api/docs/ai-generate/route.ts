@@ -28,6 +28,84 @@ function sectionToBulletLines(text: string): string[] {
     .map(l => l.replace(/^[-•]\s+/, ''))
 }
 
+/** Asks Claude for the report and hands back the text as it is written.
+ *
+ *  Streamed because a report takes the model the better part of a minute and
+ *  the request used to sit silent for all of it. The total is much the same;
+ *  what changes is that the engineer watches it being written.
+ *
+ *  Raw HTTP rather than the SDK to match every other Anthropic call in this
+ *  codebase (transcribe, extract-info) — one way of calling it, and no new
+ *  dependency in a change made for speed.
+ *
+ *  Server-sent events: blank-line separated, payload on the `data:` lines.
+ *  Only the text deltas carry report content; message_start, ping and the
+ *  rest are skipped. */
+async function streamReportText(
+  prompt: string,
+  apiKey: string,
+  onDelta: (text: string) => void
+): Promise<string> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type':      'application/json',
+      'x-api-key':         apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model:      'claude-sonnet-4-6',
+      max_tokens: 2000,
+      stream:     true,
+      messages:   [{ role: 'user', content: prompt }],
+    }),
+  })
+
+  if (!res.ok || !res.body) {
+    const detail = await res.text().catch(() => '')
+    console.error('[ai-generate] Anthropic error:', res.status, detail)
+    throw new Error('AI generation failed')
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let text = ''
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    // The last piece may be half a line; it is completed by the next read.
+    buffer = lines.pop() ?? ''
+
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue
+      const payload = line.slice(5).trim()
+      if (!payload) continue
+
+      let event: any
+      try {
+        event = JSON.parse(payload)
+      } catch {
+        continue // not a whole JSON object; the next read completes it
+      }
+
+      if (event?.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+        const chunk: string = event.delta.text ?? ''
+        text += chunk
+        onDelta(chunk)
+      } else if (event?.type === 'error') {
+        throw new Error(event.error?.message ?? 'AI generation failed')
+      }
+    }
+  }
+
+  return text
+}
+
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
   const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()
@@ -127,102 +205,119 @@ Rules:
 - Use formal structural engineering language throughout.`
 
     console.log('[ai-generate] Calling Anthropic, observations:', observations.length)
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type':      'application/json',
-        'x-api-key':         anthropicKey,
-        'anthropic-version': '2023-06-01',
+
+    // From here the response is a stream of newline-delimited JSON: the
+    // model's words as they arrive, then one final line saying how it went.
+    //
+    // Once the first byte is sent the status is already 200, so anything that
+    // fails after that is reported in the stream rather than as an HTTP
+    // error. The checks above — missing keys, missing inspection — still
+    // answer with a proper status, because nothing has been sent yet.
+    const encoder = new TextEncoder()
+
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (line: unknown) =>
+          controller.enqueue(encoder.encode(JSON.stringify(line) + '\n'))
+
+        try {
+          const rawAiText = await streamReportText(prompt, anthropicKey, chunk =>
+            send({ t: 'text', v: chunk })
+          )
+
+          // Clean up AI output: remove separator lines and excess blank lines
+          const aiText = rawAiText
+            .replace(/^[-─═=*]{3,}\s*$/gm, '')   // strip separator lines
+            .replace(/\n{3,}/g, '\n\n')            // max 2 consecutive newlines
+            .trim()
+
+          console.log('AI text generated, length:', aiText.length)
+
+          // Work out which finding belongs to which observation before
+          // anything is rendered, so the document and the site notes carry
+          // the same wording.
+          const { cleaned: observationLines, byObservation } = splitFindingRefs(
+            sectionToBulletLines(parseAISection(aiText, 'OBSERVATIONS/COMMENTS')),
+            observationIds
+          )
+          const stored = await storeReportText(byObservation)
+          console.log('[ai-generate] Report wording stored for', stored, 'of', observationIds.length, 'observations')
+
+          // The [#n] references are working notation, never report text. The
+          // template path renders from the cleaned lines above; the
+          // from-scratch generator takes the whole AI text, so strip them
+          // there too.
+          const cleanAiText = stripFindingRefs(aiText)
+
+          // Regenerating rewrites the whole file, which used to take the
+          // inserted photos and markups with it — they are lifted out and
+          // re-attached, so the text can be regenerated at any point in the
+          // workflow.
+          let carried: string[] = []
+
+          if (firmId) {
+            const purposeText  = parseAISection(aiText, 'PURPOSE OF INSPECTION') || (inspection.purpose ?? '')
+            const worksText    = parseAISection(aiText, 'WORKS OBSERVED')
+            const recsText     = parseAISection(aiText, 'CONTRACTOR TO PROVIDE')
+            const otherText    = parseAISection(aiText, 'OTHER ACTIVITY ON SITE')
+
+            // Combine works observed + observations into one bullet list.
+            // Works observed is general narrative with no note behind it, so
+            // only the observation lines carry an anchor back to their site
+            // note.
+            const findingLines: FindingLine[] = [
+              ...sectionToBulletLines(worksText).map(text => ({ text })),
+              ...observationLines,
+            ]
+
+            const templateData: TemplateData = {
+              engineer_name:   engineerName,
+              client_email:    `${engineerName.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '')}@silvesterclark.co.nz`,
+              project_name:    projects.name              ?? '',
+              report_no:       inspection.report_no       ?? '',
+              site_contact:    inspection.site_contact    ?? '',
+              contact_phone:   inspection.contact_phone   ?? '',
+              weather:         inspection.weather         ?? '',
+              drawings:        (inspection as any).drawing_ref ?? '',
+              emailed_to_1:    projects.client_name       ?? '',
+              emailed_to_2:    '',
+              purpose:         buildParagraphXml(purposeText),
+              findings:        buildAnchoredBulletXml(
+                                 findingLines.length > 0
+                                   ? findingLines
+                                   : [{ text: 'No specific findings recorded.' }]
+                               ),
+              recommendations: buildBulletXml(sectionToBulletLines(recsText)),
+              other_activity:  buildParagraphXml(otherText),
+              date:            inspection.date            ?? '',
+            }
+
+            const buffer = await fillTemplate(firmId, templateData)
+            carried = await writeWithAttachments(inspectionId, buffer)
+            console.log('AI document generated using firm template')
+          } else {
+            console.log('No firm_id — generating AI doc from scratch')
+            const buffer = await generateServerReport(inspection, observations, cleanAiText)
+            carried = await writeWithAttachments(inspectionId, buffer)
+          }
+
+          send({ t: 'done', carried })
+        } catch (err: any) {
+          console.error('[ai-generate] error:', err)
+          // In-band: the response is already a 200 by the time we get here.
+          send({ t: 'error', error: err?.message || 'AI generation failed' })
+        } finally {
+          controller.close()
+        }
       },
-      body: JSON.stringify({
-        model:      'claude-sonnet-4-6',
-        max_tokens: 2000,
-        messages:   [{ role: 'user', content: prompt }],
-      }),
     })
 
-    if (!response.ok) {
-      const err = await response.text()
-      console.error('[ai-generate] Anthropic error:', err)
-      return NextResponse.json({ error: 'AI generation failed' }, { status: 500 })
-    }
-
-    const aiData = await response.json()
-    const rawAiText: string = aiData.content?.[0]?.text ?? ''
-
-    // Clean up AI output: remove separator lines and excess blank lines
-    const aiText = rawAiText
-      .replace(/^[-─═=*]{3,}\s*$/gm, '')   // strip separator lines
-      .replace(/\n{3,}/g, '\n\n')            // max 2 consecutive newlines
-      .trim()
-
-    console.log('AI text generated, length:', aiText.length)
-
-    // Work out which finding belongs to which observation before anything is
-    // rendered, so the document and the site notes carry the same wording.
-    const { cleaned: observationLines, byObservation } = splitFindingRefs(
-      sectionToBulletLines(parseAISection(aiText, 'OBSERVATIONS/COMMENTS')),
-      observationIds
-    )
-    const stored = await storeReportText(byObservation)
-    console.log('[ai-generate] Report wording stored for', stored, 'of', observationIds.length, 'observations')
-
-    // The [#n] references are working notation, never report text. The
-    // template path renders from the cleaned lines above; the from-scratch
-    // generator takes the whole AI text, so strip them there too.
-    const cleanAiText = stripFindingRefs(aiText)
-
-    // Regenerating rewrites the whole file, which used to take the inserted
-    // photos and markups with it — they are lifted out and re-attached, so
-    // the text can be regenerated at any point in the workflow.
-    let carried: string[] = []
-
-    if (firmId) {
-      const purposeText  = parseAISection(aiText, 'PURPOSE OF INSPECTION') || (inspection.purpose ?? '')
-      const worksText    = parseAISection(aiText, 'WORKS OBSERVED')
-      const recsText     = parseAISection(aiText, 'CONTRACTOR TO PROVIDE')
-      const otherText    = parseAISection(aiText, 'OTHER ACTIVITY ON SITE')
-
-      // Combine works observed + observations into one bullet list. Works
-      // observed is general narrative with no note behind it, so only the
-      // observation lines carry an anchor back to their site note.
-      const findingLines: FindingLine[] = [
-        ...sectionToBulletLines(worksText).map(text => ({ text })),
-        ...observationLines,
-      ]
-
-      const templateData: TemplateData = {
-        engineer_name:   engineerName,
-        client_email:    `${engineerName.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '')}@silvesterclark.co.nz`,
-        project_name:    projects.name              ?? '',
-        report_no:       inspection.report_no       ?? '',
-        site_contact:    inspection.site_contact    ?? '',
-        contact_phone:   inspection.contact_phone   ?? '',
-        weather:         inspection.weather         ?? '',
-        drawings:        (inspection as any).drawing_ref ?? '',
-        emailed_to_1:    projects.client_name       ?? '',
-        emailed_to_2:    '',
-        purpose:         buildParagraphXml(purposeText),
-        findings:        buildAnchoredBulletXml(
-                           findingLines.length > 0
-                             ? findingLines
-                             : [{ text: 'No specific findings recorded.' }]
-                         ),
-        recommendations: buildBulletXml(sectionToBulletLines(recsText)),
-        other_activity:  buildParagraphXml(otherText),
-        date:            inspection.date            ?? '',
-      }
-
-      const buffer = await fillTemplate(firmId, templateData)
-      carried = await writeWithAttachments(inspectionId, buffer)
-      console.log('AI document generated using firm template')
-    } else {
-      console.log('No firm_id — generating AI doc from scratch')
-      const buffer = await generateServerReport(inspection, observations, cleanAiText)
-      carried = await writeWithAttachments(inspectionId, buffer)
-    }
-
-    return NextResponse.json({ success: true, preview: aiText.slice(0, 200), carried })
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    })
   } catch (err) {
     console.error('[ai-generate] error:', err)
     return NextResponse.json({ error: 'AI generation failed' }, { status: 500 })
