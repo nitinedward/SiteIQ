@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { saveDoc, loadDoc } from '@/lib/docStorage'
+import { syncReportTextFromDocx } from '@/lib/reportAnchors'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -66,6 +67,11 @@ async function saveDocumentInBackground(inspectionId: string, url: string) {
     const buffer = Buffer.from(await fileRes.arrayBuffer())
     await saveDoc(inspectionId, buffer)
     console.log('[callback] Saved successfully:', inspectionId)
+
+    // Findings the engineer has reworded in the editor go back to the site
+    // notes they describe. After the save, never instead of it: the document
+    // is the thing that must not be lost, and this never throws.
+    await syncReportTextFromDocx(buffer)
   } catch (err) {
     console.error('[callback] Save error:', err)
   }

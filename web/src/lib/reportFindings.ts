@@ -11,6 +11,8 @@
  *  Lives here rather than in the route because a Next.js route file may only
  *  export route handlers — exporting a helper from one fails the build. */
 
+import type { FindingLine } from './reportAnchors'
+
 /** The observation each findings line came from, by the [#n] reference the
  *  model is asked to keep on the front of it.
  *
@@ -26,22 +28,24 @@
 export function splitFindingRefs(
   lines: string[],
   observationIds: string[]
-): { cleaned: string[]; byObservation: Map<string, string> } {
-  const cleaned: string[] = []
+): { cleaned: FindingLine[]; byObservation: Map<string, string> } {
+  const cleaned: FindingLine[] = []
   const byObservation = new Map<string, string>()
 
   for (const line of lines) {
     const match = line.match(/^\[?#(\d+)\]?[\s:.-]*(.*)$/)
     if (!match) {
-      cleaned.push(line)
+      cleaned.push({ text: line })
       continue
     }
     const text = match[2].trim()
     if (!text) continue
 
-    cleaned.push(text)
-
     const id = observationIds[Number(match[1]) - 1]
+    // The line goes in the report either way; only an attributed one carries
+    // an anchor tying it back to its note.
+    cleaned.push({ text, observationId: id ?? null })
+
     if (!id) continue
     // Two lines about the same observation read as one note, in order.
     const existing = byObservation.get(id)

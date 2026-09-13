@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { fillTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
 import { writeWithAttachments } from '@/lib/attachmentSections'
 import { splitFindingRefs, stripFindingRefs } from '@/lib/reportFindings'
+import { buildAnchoredBulletXml, storeReportText, type FindingLine } from '@/lib/reportAnchors'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,43 +26,6 @@ function sectionToBulletLines(text: string): string[] {
     .map(l => l.trim())
     .filter(l => l.length > 0)
     .map(l => l.replace(/^[-•]\s+/, ''))
-}
-
-/** Records how the report words each observation, on the observation itself.
- *
- *  Writes `report_text` only. `transcript` is what was dictated or typed on
- *  site and is left exactly as it is — the on-site record and the report's
- *  wording are two different things, and a report must never quietly rewrite
- *  what someone observed.
- *
- *  Never throws: a report that generated is worth more than the linkage, so a
- *  failure here (including the column not existing yet — see
- *  web/sql/observation_report_text.sql) is logged and the document still
- *  ships. */
-async function saveReportText(
-  supabase: SupabaseClient,
-  byObservation: Map<string, string>
-): Promise<void> {
-  if (byObservation.size === 0) {
-    console.warn('[ai-generate] No findings could be attributed to an observation')
-    return
-  }
-
-  try {
-    const results = await Promise.all(
-      Array.from(byObservation, ([id, report_text]) =>
-        supabase.from('observations').update({ report_text }).eq('id', id)
-      )
-    )
-    const failed = results.find(r => r.error)
-    if (failed?.error) {
-      console.error('[ai-generate] Could not store report wording:', failed.error.message)
-      return
-    }
-    console.log('[ai-generate] Report wording stored for', byObservation.size, 'observations')
-  } catch (err) {
-    console.error('[ai-generate] Could not store report wording:', err)
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -194,22 +158,23 @@ Rules:
 
     console.log('AI text generated, length:', aiText.length)
 
-    // Regenerating rewrites the whole file, which used to take the inserted
-    // photos and markups with it — they are lifted out and re-attached, so
-    // the text can be regenerated at any point in the workflow.
     // Work out which finding belongs to which observation before anything is
     // rendered, so the document and the site notes carry the same wording.
     const { cleaned: observationLines, byObservation } = splitFindingRefs(
       sectionToBulletLines(parseAISection(aiText, 'OBSERVATIONS/COMMENTS')),
       observationIds
     )
-    await saveReportText(supabase, byObservation)
+    const stored = await storeReportText(byObservation)
+    console.log('[ai-generate] Report wording stored for', stored, 'of', observationIds.length, 'observations')
 
     // The [#n] references are working notation, never report text. The
     // template path renders from the cleaned lines above; the from-scratch
     // generator takes the whole AI text, so strip them there too.
     const cleanAiText = stripFindingRefs(aiText)
 
+    // Regenerating rewrites the whole file, which used to take the inserted
+    // photos and markups with it — they are lifted out and re-attached, so
+    // the text can be regenerated at any point in the workflow.
     let carried: string[] = []
 
     if (firmId) {
@@ -218,9 +183,11 @@ Rules:
       const recsText     = parseAISection(aiText, 'CONTRACTOR TO PROVIDE')
       const otherText    = parseAISection(aiText, 'OTHER ACTIVITY ON SITE')
 
-      // Combine works observed + observations into bullet list
-      const findingLines: string[] = [
-        ...sectionToBulletLines(worksText),
+      // Combine works observed + observations into one bullet list. Works
+      // observed is general narrative with no note behind it, so only the
+      // observation lines carry an anchor back to their site note.
+      const findingLines: FindingLine[] = [
+        ...sectionToBulletLines(worksText).map(text => ({ text })),
         ...observationLines,
       ]
 
@@ -236,7 +203,11 @@ Rules:
         emailed_to_1:    projects.client_name       ?? '',
         emailed_to_2:    '',
         purpose:         buildParagraphXml(purposeText),
-        findings:        buildBulletXml(findingLines.length > 0 ? findingLines : ['No specific findings recorded.']),
+        findings:        buildAnchoredBulletXml(
+                           findingLines.length > 0
+                             ? findingLines
+                             : [{ text: 'No specific findings recorded.' }]
+                         ),
         recommendations: buildBulletXml(sectionToBulletLines(recsText)),
         other_activity:  buildParagraphXml(otherText),
         date:            inspection.date            ?? '',
