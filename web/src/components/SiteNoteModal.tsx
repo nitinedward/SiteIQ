@@ -339,6 +339,24 @@ export function SiteNoteModal({
             {note.description || 'No description was dictated for this note.'}
           </div>
 
+          {/* How the report puts it — shown beside the site note rather than
+              replacing it, so what was observed and what was written stay
+              separately readable. */}
+          {note.reportText && (
+            <div style={{ marginTop: 24 }}>
+              <div style={sectionTitle}>As worded in the report</div>
+              <div style={{
+                background: 'var(--accent2, #edf2fb)',
+                border: '1px solid var(--accent3, #dbeafe)',
+                borderRadius: 'var(--radius-md, 14px)', padding: '16px 18px',
+                fontFamily: 'var(--f-text)', fontSize: 15, lineHeight: 1.65,
+                color: 'var(--text-ink)', whiteSpace: 'pre-wrap',
+              }}>
+                {note.reportText}
+              </div>
+            </div>
+          )}
+
           {note.measurements.length > 0 && (
             <div style={{ marginTop: 24 }}>
               <div style={sectionTitle}>Measurements</div>

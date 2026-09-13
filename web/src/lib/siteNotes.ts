@@ -30,7 +30,11 @@ export type SiteNote = {
   id: string
   status: NoteStatus
   zoneLabel: string
+  /** What was dictated or typed on site. Never rewritten by the report. */
   description: string
+  /** How the generated report words this same observation, or null if no
+   *  report has been generated for it yet. */
+  reportText: string | null
   photos: string[]
   measurements: NoteMeasurement[]
   observedAt: string | null
@@ -120,6 +124,9 @@ export async function loadProjectSiteNotes(projectId: string): Promise<SiteNote[
       status: noteStatus(row.severity),
       zoneLabel: row.zone_label || zone?.label || 'General Observation',
       description: (row.transcript || row.notes || '').trim(),
+      // Undefined until a report has been generated for this observation, and
+      // until web/sql/observation_report_text.sql has been run.
+      reportText: (row.report_text ?? '').trim() || null,
       photos: asArray<string>(row.photos).filter(u => typeof u === 'string' && u.startsWith('http')),
       measurements: asArray<NoteMeasurement>(row.measurements),
       observedAt: row.observed_at ?? row.created_at ?? null,

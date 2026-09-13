@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { fillTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
 import { writeWithAttachments } from '@/lib/attachmentSections'
+import { splitFindingRefs, stripFindingRefs } from '@/lib/reportFindings'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +25,43 @@ function sectionToBulletLines(text: string): string[] {
     .map(l => l.trim())
     .filter(l => l.length > 0)
     .map(l => l.replace(/^[-•]\s+/, ''))
+}
+
+/** Records how the report words each observation, on the observation itself.
+ *
+ *  Writes `report_text` only. `transcript` is what was dictated or typed on
+ *  site and is left exactly as it is — the on-site record and the report's
+ *  wording are two different things, and a report must never quietly rewrite
+ *  what someone observed.
+ *
+ *  Never throws: a report that generated is worth more than the linkage, so a
+ *  failure here (including the column not existing yet — see
+ *  web/sql/observation_report_text.sql) is logged and the document still
+ *  ships. */
+async function saveReportText(
+  supabase: SupabaseClient,
+  byObservation: Map<string, string>
+): Promise<void> {
+  if (byObservation.size === 0) {
+    console.warn('[ai-generate] No findings could be attributed to an observation')
+    return
+  }
+
+  try {
+    const results = await Promise.all(
+      Array.from(byObservation, ([id, report_text]) =>
+        supabase.from('observations').update({ report_text }).eq('id', id)
+      )
+    )
+    const failed = results.find(r => r.error)
+    if (failed?.error) {
+      console.error('[ai-generate] Could not store report wording:', failed.error.message)
+      return
+    }
+    console.log('[ai-generate] Report wording stored for', byObservation.size, 'observations')
+  } catch (err) {
+    console.error('[ai-generate] Could not store report wording:', err)
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -85,12 +123,15 @@ export async function POST(request: NextRequest) {
 
     const engineerName = member?.full_name ?? 'Site Engineer'
 
-    // Build observation text for AI prompt
-    const obsText = observations.map((ob: any) => {
+    // Build observation text for AI prompt. Each one is numbered so the
+    // findings it produces can be traced back to the note they came from —
+    // see splitFindingRefs.
+    const observationIds: string[] = observations.map((ob: any) => ob.id)
+    const obsText = observations.map((ob: any, i: number) => {
       const zone = ob.zone_label || 'General'
       const text = ob.transcript || ob.notes || 'No notes'
       const sev  = ob.severity ? `Status: ${ob.severity}` : ''
-      return `Zone: ${zone}${sev ? `\n${sev}` : ''}\nNotes: ${text}`
+      return `#${i + 1}\nZone: ${zone}${sev ? `\n${sev}` : ''}\nNotes: ${text}`
     }).join('\n\n')
 
     const prompt = `You are a structural engineer writing a formal site inspection report.
@@ -117,6 +158,7 @@ Rules:
 - Do NOT use separator lines, dashes, underscores, or horizontal rules between sections.
 - Do NOT number the headings.
 - Under OBSERVATIONS/COMMENTS, write each zone observation as a separate line starting with "- ".
+- Every line under OBSERVATIONS/COMMENTS must begin with the reference of the site observation it describes, in the form "- [#2] The steel connection at...". Use the numbers given above. If a line draws on more than one observation, reference the main one. Do not invent numbers that were not listed.
 - Under CONTRACTOR TO PROVIDE, write each item as a separate line starting with "- ".
 - Use formal structural engineering language throughout.`
 
@@ -155,19 +197,31 @@ Rules:
     // Regenerating rewrites the whole file, which used to take the inserted
     // photos and markups with it — they are lifted out and re-attached, so
     // the text can be regenerated at any point in the workflow.
+    // Work out which finding belongs to which observation before anything is
+    // rendered, so the document and the site notes carry the same wording.
+    const { cleaned: observationLines, byObservation } = splitFindingRefs(
+      sectionToBulletLines(parseAISection(aiText, 'OBSERVATIONS/COMMENTS')),
+      observationIds
+    )
+    await saveReportText(supabase, byObservation)
+
+    // The [#n] references are working notation, never report text. The
+    // template path renders from the cleaned lines above; the from-scratch
+    // generator takes the whole AI text, so strip them there too.
+    const cleanAiText = stripFindingRefs(aiText)
+
     let carried: string[] = []
 
     if (firmId) {
       const purposeText  = parseAISection(aiText, 'PURPOSE OF INSPECTION') || (inspection.purpose ?? '')
       const worksText    = parseAISection(aiText, 'WORKS OBSERVED')
-      const obsText2     = parseAISection(aiText, 'OBSERVATIONS/COMMENTS')
       const recsText     = parseAISection(aiText, 'CONTRACTOR TO PROVIDE')
       const otherText    = parseAISection(aiText, 'OTHER ACTIVITY ON SITE')
 
       // Combine works observed + observations into bullet list
       const findingLines: string[] = [
         ...sectionToBulletLines(worksText),
-        ...sectionToBulletLines(obsText2),
+        ...observationLines,
       ]
 
       const templateData: TemplateData = {
@@ -193,7 +247,7 @@ Rules:
       console.log('AI document generated using firm template')
     } else {
       console.log('No firm_id — generating AI doc from scratch')
-      const buffer = await generateServerReport(inspection, observations, aiText)
+      const buffer = await generateServerReport(inspection, observations, cleanAiText)
       carried = await writeWithAttachments(inspectionId, buffer)
     }
 
