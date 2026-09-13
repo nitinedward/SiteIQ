@@ -138,6 +138,29 @@ function buildPhotoTableRow(
  *  without opening a connection per photo on a report with fifty of them. */
 const PHOTO_CONCURRENCY = 6
 
+/** Photos are displayed about 8cm wide in the report. A phone camera gives
+ *  4000px and several megabytes, which is carried through the document, the
+ *  upload, the editor and the PDF for no visible gain. 1200px still prints
+ *  cleanly at that size. */
+const PHOTO_WIDTH = 1200
+const PHOTO_QUALITY = 80
+
+/** The same object served through Supabase's image transformer, or null if
+ *  this isn't a Supabase storage URL.
+ *
+ *  Note this is a different PATH, not a query parameter: `/object/` becomes
+ *  `/render/image/`. Adding the parameters to the plain object URL does
+ *  nothing at all — it serves the original bytes and looks like it worked.
+ *
+ *  resize=contain because the alternative, cover, crops. A cropped site
+ *  photo could hide the very defect it was taken to record. */
+function downscaledUrl(url: string): string | null {
+  if (!url.includes('/storage/v1/object/')) return null
+  const rendered = url.replace('/storage/v1/object/', '/storage/v1/render/image/')
+  const sep = rendered.includes('?') ? '&' : '?'
+  return `${rendered}${sep}width=${PHOTO_WIDTH}&quality=${PHOTO_QUALITY}&resize=contain`
+}
+
 /** Fetches every photo up front, a few at a time, keyed by the photo it came
  *  from so the layout can look its bytes up in order.
  *
@@ -150,20 +173,32 @@ async function fetchPhotos(photos: PhotoInput[]): Promise<Map<PhotoInput, Buffer
   for (let i = 0; i < photos.length; i += PHOTO_CONCURRENCY) {
     const batch = photos.slice(i, i + PHOTO_CONCURRENCY)
     await Promise.all(batch.map(async (photo) => {
-      try {
-        const res = await fetch(photo.url)
-        if (!res.ok) {
-          console.error('[append] Photo fetch failed:', res.status, photo.url)
-          out.set(photo, null)
+      // Downscaled first, original as the fallback. Image transformation is
+      // a paid Supabase feature: if it isn't enabled on the project the
+      // transformer answers with an error, and a report full of missing
+      // photos would be a far worse outcome than a large one.
+      const small = downscaledUrl(photo.url)
+
+      for (const url of small ? [small, photo.url] : [photo.url]) {
+        try {
+          const res = await fetch(url)
+          if (!res.ok) {
+            console.error('[append] Photo fetch failed:', res.status, url)
+            continue
+          }
+          const buf = Buffer.from(await res.arrayBuffer())
+          console.log(
+            '[append] Photo fetched:', Math.round(buf.byteLength / 1024), 'KB',
+            url === small ? '(downscaled)' : '(original)'
+          )
+          out.set(photo, buf)
           return
+        } catch (err) {
+          console.error('[append] Failed to fetch photo:', url, err)
         }
-        const buf = Buffer.from(await res.arrayBuffer())
-        console.log('[append] Photo fetched:', Math.round(buf.byteLength / 1024), 'KB')
-        out.set(photo, buf)
-      } catch (err) {
-        console.error('[append] Failed to fetch photo:', photo.url, err)
-        out.set(photo, null)
       }
+
+      out.set(photo, null)
     }))
   }
 
