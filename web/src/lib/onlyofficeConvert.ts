@@ -62,15 +62,36 @@ export async function forceSaveAndWait(inspectionId: string, docKey: string): Pr
   // Poll for the save callback to persist a new version, regardless of
   // commandOk — an already-current doc means "before" never changes, which
   // is fine; we just don't want to convert mid-save.
-  for (let i = 0; i < 10; i++) {
-    await new Promise(r => setTimeout(r, 1000))
+  //
+  // The first check used to come a full second after the command, and every
+  // check a second apart, so even a save that landed immediately cost a
+  // second. Checking sooner and backing off finds the common case quickly
+  // and still reaches the same ceiling for a slow one.
+  //
+  // The ceiling depends on what the Document Server said. error 0 means a
+  // live session was told to save, so a new version is genuinely expected
+  // and worth waiting the full budget for. Anything else means it does not
+  // know this key — there is no session to save from, so the old code sat
+  // through ten seconds of polling for something that was never coming.
+  // A short grace window still covers a parting save already in flight.
+  const budgetMs = commandOk ? 10_000 : 2_500
+  const startedAt = Date.now()
+  let waitMs = 150
+
+  while (Date.now() - startedAt < budgetMs) {
+    await new Promise(r => setTimeout(r, waitMs))
     const after = await getDocUpdatedAt(inspectionId)
     if (after && after !== before) {
-      console.log('[forceSaveAndWait] New version observed after', i + 1, 's')
+      console.log('[forceSaveAndWait] New version observed after', Date.now() - startedAt, 'ms')
       return { saved: true, commandOk, commandResponse }
     }
+    waitMs = Math.min(Math.round(waitMs * 1.6), 1000)
   }
-  console.warn('[forceSaveAndWait] No new version observed within 10s — proceeding with whatever is currently stored')
+
+  console.warn(
+    '[forceSaveAndWait] No new version observed within', budgetMs,
+    'ms (session live:', commandOk, ') — proceeding with whatever is currently stored'
+  )
   return { saved: false, commandOk, commandResponse }
 }
 
