@@ -935,6 +935,13 @@ export default function ReportPage() {
     setShowFinaliseConfirm(false)
     setFinalisingReport(true)
     try {
+      // Built and stored BEFORE the conversion, because finalise-pdf appends
+      // these pages to the frozen PDF — that is how a pin, area or freehand
+      // markup ends up linked to its photos in the finalised document. It is
+      // best-effort and never throws: a report with no markups, or a drawing
+      // that won't render, just means nothing is appended.
+      await generateAndStoreMarkup()
+
       console.log('[finalise] Force-saving and converting to PDF, key:', docKey)
       const res = await fetch('/api/docs/finalise-pdf', {
         method: 'POST',
@@ -954,11 +961,6 @@ export default function ReportPage() {
 
       setReportStatus('finalised')
       await loadFrozenPdf(inspectionId)
-
-      // Marked-up drawing with each pin linked to its photos. Runs after the
-      // report is already finalised and never throws, so a drawing that
-      // fails to render can't undo a finalise that has otherwise succeeded.
-      await generateAndStoreMarkup()
 
       console.log('[finalise] Done')
     } catch (err: any) {

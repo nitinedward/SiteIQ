@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { savePdf } from '@/lib/docStorage'
+import { savePdf, loadMarkupPdf } from '@/lib/docStorage'
+import { appendMarkupPages } from '@/lib/appendMarkupPages'
 import { forceSaveAndWait, convertDocxToPdf } from '@/lib/onlyofficeConvert'
 import { reportFileNameFor } from '@/lib/reportFileNameServer'
 import { ensurePdfTitle } from '@/lib/pdfTitle'
@@ -45,9 +46,20 @@ export async function POST(request: NextRequest) {
     // the report's name inside it rather than the inspection UUID.
     const title = await reportFileNameFor(inspectionId)
     const converted = await convertDocxToPdf(inspectionId, appUrl, title)
-    // Stamped again here rather than trusting the conversion to have taken
-    // the title — this is the copy that gets viewed, downloaded and emailed.
-    const { bytes: pdfBuffer } = await ensurePdfTitle(converted, title)
+
+    // The marked-up drawings go on the end, carrying their own hotspots: a
+    // Word document can't express a clickable region over part of an image,
+    // so the only way a pin, area or freehand markup links to its photos in
+    // the finalised PDF is to append pages that already have those links.
+    // Stored by the client just before finalising; absent for a report with
+    // no markups, which simply means nothing to append.
+    const markup = await loadMarkupPdf(inspectionId).catch(() => null)
+    const withMarkup = markup ? await appendMarkupPages(converted, markup) : converted
+    if (markup) console.log('[finalise-pdf] Marked-up drawings appended, +', markup.length, 'bytes')
+
+    // Stamped after the append rather than trusting the conversion to have
+    // taken the title — this is the copy that gets viewed and emailed.
+    const { bytes: pdfBuffer } = await ensurePdfTitle(withMarkup, title)
 
     await savePdf(inspectionId, pdfBuffer)
     console.log('[finalise-pdf] PDF stored as:', title, 'size:', pdfBuffer.length)
