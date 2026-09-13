@@ -134,6 +134,42 @@ function buildPhotoTableRow(
   )
 }
 
+/** How many photos are pulled at once. Enough to hide the round trips
+ *  without opening a connection per photo on a report with fifty of them. */
+const PHOTO_CONCURRENCY = 6
+
+/** Fetches every photo up front, a few at a time, keyed by the photo it came
+ *  from so the layout can look its bytes up in order.
+ *
+ *  A photo that can't be fetched maps to null and is skipped when the table
+ *  is built, exactly as a failed fetch was skipped before — one broken URL
+ *  must not cost the whole insert. */
+async function fetchPhotos(photos: PhotoInput[]): Promise<Map<PhotoInput, Buffer | null>> {
+  const out = new Map<PhotoInput, Buffer | null>()
+
+  for (let i = 0; i < photos.length; i += PHOTO_CONCURRENCY) {
+    const batch = photos.slice(i, i + PHOTO_CONCURRENCY)
+    await Promise.all(batch.map(async (photo) => {
+      try {
+        const res = await fetch(photo.url)
+        if (!res.ok) {
+          console.error('[append] Photo fetch failed:', res.status, photo.url)
+          out.set(photo, null)
+          return
+        }
+        const buf = Buffer.from(await res.arrayBuffer())
+        console.log('[append] Photo fetched:', Math.round(buf.byteLength / 1024), 'KB')
+        out.set(photo, buf)
+      } catch (err) {
+        console.error('[append] Failed to fetch photo:', photo.url, err)
+        out.set(photo, null)
+      }
+    }))
+  }
+
+  return out
+}
+
 function sectionHeading(text: string): string {
   return (
     `<w:p><w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr>` +
@@ -321,6 +357,12 @@ export async function POST(request: NextRequest) {
         byZone[k].push(p)
       })
 
+      // Every photo is fetched before the layout runs, a few at a time.
+      // They used to be fetched one by one as each table cell was built, so
+      // a twenty-photo insert paid twenty round trips end to end. The layout
+      // below is unchanged — it just reads bytes that have already arrived.
+      const fetched = await fetchPhotos(Object.values(byZone).flat())
+
       for (const [zone, zonePhotos] of Object.entries(byZone)) {
         photosXml += subHeading(zone)
 
@@ -334,42 +376,28 @@ export async function POST(request: NextRequest) {
           const leftPhoto  = zonePhotos[i]
           const rightPhoto = zonePhotos[i + 1] ?? null
 
-          // Fetch and embed left photo
+          // Embed left photo (already fetched above)
           let leftRId = ''
-          try {
-            console.log('[append] Fetching photo:', leftPhoto.url)
-            const res = await fetch(leftPhoto.url)
-            if (res.ok) {
-              const buf  = Buffer.from(await res.arrayBuffer())
-              console.log('[append] Photo size:', buf.byteLength)
-              const ext  = leftPhoto.url.toLowerCase().includes('.png') ? 'png' : 'jpg'
-              const name = `photo_${nextRId}.${ext}`
-              zip.addFile(`word/media/${name}`, buf)
-              leftRId = `rId${nextRId}`
-              newRels.push({ id: leftRId, type: REL_IMAGE, target: `media/${name}` })
-              nextRId++
-            }
-          } catch (err) {
-            console.error(`[append] Failed to fetch photo: ${leftPhoto.url}`, err)
+          const leftBuf = fetched.get(leftPhoto) ?? null
+          if (leftBuf) {
+            const ext  = leftPhoto.url.toLowerCase().includes('.png') ? 'png' : 'jpg'
+            const name = `photo_${nextRId}.${ext}`
+            zip.addFile(`word/media/${name}`, leftBuf)
+            leftRId = `rId${nextRId}`
+            newRels.push({ id: leftRId, type: REL_IMAGE, target: `media/${name}` })
+            nextRId++
           }
 
-          // Fetch and embed right photo
+          // Embed right photo (already fetched above)
           let rightRId: string | null = null
-          if (rightPhoto) {
-            try {
-              const res = await fetch(rightPhoto.url)
-              if (res.ok) {
-                const buf  = Buffer.from(await res.arrayBuffer())
-                const ext  = rightPhoto.url.toLowerCase().includes('.png') ? 'png' : 'jpg'
-                const name = `photo_${nextRId}.${ext}`
-                zip.addFile(`word/media/${name}`, buf)
-                rightRId = `rId${nextRId}`
-                newRels.push({ id: rightRId, type: REL_IMAGE, target: `media/${name}` })
-                nextRId++
-              }
-            } catch (err) {
-              console.error(`[append] Failed to fetch photo: ${rightPhoto.url}`, err)
-            }
+          const rightBuf = rightPhoto ? fetched.get(rightPhoto) ?? null : null
+          if (rightPhoto && rightBuf) {
+            const ext  = rightPhoto.url.toLowerCase().includes('.png') ? 'png' : 'jpg'
+            const name = `photo_${nextRId}.${ext}`
+            zip.addFile(`word/media/${name}`, rightBuf)
+            rightRId = `rId${nextRId}`
+            newRels.push({ id: rightRId, type: REL_IMAGE, target: `media/${name}` })
+            nextRId++
           }
 
           if (leftRId || rightRId) {
