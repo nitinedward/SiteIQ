@@ -12,11 +12,21 @@ type Zone = {
   shape_data: string | null
 }
 
+/** The capture, plus the page size the markup coordinates are expressed in.
+ *  Callers that only want the picture can destructure `blob`; the markup PDF
+ *  needs the dimensions to turn a zone's shape into a clickable area. */
+export type DrawingCapture = {
+  blob: Blob
+  /** Natural page size at scale 1 — the space `shape_data` is stored in. */
+  pdfWidth: number
+  pdfHeight: number
+}
+
 export async function captureDrawingWithMarkup(
   pdfUrl: string,
   zones: Zone[],
   pageNumber = 1
-): Promise<Blob> {
+): Promise<DrawingCapture> {
   // Load PDF
   const response    = await fetch(pdfUrl)
   const arrayBuffer = await response.arrayBuffer()
@@ -108,7 +118,7 @@ export async function captureDrawingWithMarkup(
     }
   })
 
-  return exportWithinBudget(canvas)
+  return { blob: await exportWithinBudget(canvas), pdfWidth, pdfHeight }
 }
 
 /** Largest capture we'll hand to the upload route. A dense structural

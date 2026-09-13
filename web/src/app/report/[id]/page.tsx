@@ -1085,7 +1085,7 @@ export default function ReportPage() {
         .from('zones').select('*')
         .eq('drawing_id', drawingId).eq('inspection_id', id)
 
-      const blob       = await captureDrawingWithMarkup(drawing.file_url, (zonesData ?? []) as any[], 1)
+      const { blob }   = await captureDrawingWithMarkup(drawing.file_url, (zonesData ?? []) as any[], 1)
       const previewUrl = URL.createObjectURL(blob)
       setDrawings(prev => prev.map(d =>
         d.id === drawingId

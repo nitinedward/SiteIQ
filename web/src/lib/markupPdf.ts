@@ -3,9 +3,10 @@ import { captureDrawingWithMarkup } from './captureDrawing'
 
 /** Builds a self-contained "marked-up drawing + photos" PDF.
  *
- *  Page 1 (per drawing) is the drawing with its pins rendered, and each pin
- *  that has photos is a clickable hotspot jumping to that zone's photo
- *  pages later in the same file. Photo pages link back to the drawing.
+ *  Page 1 (per drawing) is the drawing with its markups rendered, and every
+ *  markup that has photos — pin, area or freehand alike — is a clickable
+ *  hotspot jumping to that zone's photo pages later in the same file. Photo
+ *  pages link back to the drawing.
  *
  *  Deliberately self-contained rather than linking out: relative links to
  *  image files next to the PDF are only honoured by Acrobat (Chrome, Edge
@@ -86,7 +87,7 @@ function addInternalLink(
     Type: 'Annot',
     Subtype: 'Link',
     Rect: rect,
-    // No visible border — the pin graphic already shows where to click.
+    // No visible border — the markup itself already shows where to click.
     Border: [0, 0, 0],
     A: { S: 'GoTo', D: [targetRef, 'XYZ', null, null, null] },
   })
@@ -96,6 +97,79 @@ function addInternalLink(
   else page.node.set(PDFName.of('Annots'), doc.context.obj([ref]))
 }
 
+type Rect = [number, number, number, number]
+
+/** Grows a rect by `pad`, and out to `min` on either axis if it came back
+ *  smaller than a fingertip — a short scribble or a thin sliver of an area
+ *  is still something you should be able to tap. */
+function padRect([x0, y0, x1, y1]: Rect, pad: number, min: number): Rect {
+  let a = x0 - pad, b = y0 - pad, c = x1 + pad, d = y1 + pad
+  if (c - a < min) { const m = (a + c) / 2; a = m - min / 2; c = m + min / 2 }
+  if (d - b < min) { const m = (b + d) / 2; b = m - min / 2; d = m + min / 2 }
+  return [a, b, c, d]
+}
+
+/** The clickable region for a zone on the drawing page, in page coordinates.
+ *
+ *  A pin is a point, so a fixed target on it is right. An area or a freehand
+ *  shape is not: its centre is usually blank drawing inside the outline, and
+ *  a freehand stroke need not pass anywhere near its own centroid — so those
+ *  used to have a 40pt target floating in empty space, which is why only
+ *  pinned photos appeared to be linked. Each shape now gets its own outline.
+ *
+ *  `shape_data` is stored in the drawing's own PDF units measured from the
+ *  top-left (the same mapping captureDrawing renders with); page coordinates
+ *  run from the bottom-left, hence the flip. */
+export function zoneHotspots(
+  zone: MarkupZone,
+  imgW: number,
+  imgH: number,
+  pdfWidth: number,
+  pdfHeight: number
+): Rect[] {
+  const cx = (zone.x_percent / 100) * imgW
+  const cy = imgH - (zone.y_percent / 100) * imgH
+  const PIN_R = 20
+  // Room for the label chip, which is drawn above the shape.
+  const LABEL_H = 22
+  const atCentre: Rect = [cx - PIN_R, cy - PIN_R, cx + PIN_R, cy + PIN_R]
+
+  const toPage = (fx: number, fy: number): [number, number] => [fx * imgW, imgH - fy * imgH]
+
+  if (!zone.markup_type || zone.markup_type === 'pin' || !zone.shape_data) return [atCentre]
+
+  try {
+    let left: number, right: number, top: number, bottom: number
+
+    if (zone.markup_type === 'rectangle') {
+      const r = JSON.parse(zone.shape_data) as { x: number; y: number; width: number; height: number }
+      // Normalised, because a rectangle dragged up or left has a negative
+      // width or height and would otherwise produce an inside-out rect.
+      left = Math.min(r.x, r.x + r.width) / pdfWidth
+      right = Math.max(r.x, r.x + r.width) / pdfWidth
+      top = Math.min(r.y, r.y + r.height) / pdfHeight
+      bottom = Math.max(r.y, r.y + r.height) / pdfHeight
+    } else {
+      const pts = JSON.parse(zone.shape_data) as { x: number; y: number }[]
+      if (!pts?.length) return [atCentre]
+      left = Math.min(...pts.map(p => p.x)) / pdfWidth
+      right = Math.max(...pts.map(p => p.x)) / pdfWidth
+      top = Math.min(...pts.map(p => p.y)) / pdfHeight
+      bottom = Math.max(...pts.map(p => p.y)) / pdfHeight
+    }
+
+    const [x0, yBottom] = toPage(left, bottom)
+    const [x1, yTop] = toPage(right, top)
+    const shape = padRect([x0, yBottom, x1, yTop + LABEL_H], 6, 28)
+    // The centre target stays as well: harmless where it overlaps, and it
+    // keeps a freehand zone's label clickable when the label sits off the
+    // stroke's bounding box.
+    return [shape, atCentre]
+  } catch {
+    return [atCentre]
+  }
+}
+
 export type BuildMarkupPdfOptions = {
   drawings: MarkupDrawing[]
   photos: MarkupPhoto[]
@@ -103,7 +177,7 @@ export type BuildMarkupPdfOptions = {
   onProgress?: (done: number, total: number) => void
 }
 
-/** Returns null when there is nothing to show — no drawing has any pins. */
+/** Returns null when there is nothing to show — no drawing has any markups. */
 export async function buildMarkupPdf(
   { drawings, photos, reportTitle, onProgress }: BuildMarkupPdfOptions
 ): Promise<Blob | null> {
@@ -130,7 +204,7 @@ export async function buildMarkupPdf(
 
   for (const drawing of usable) {
     // ── Drawing page ────────────────────────────────────────────────────
-    const blob = await captureDrawingWithMarkup(drawing.file_url, drawing.zones)
+    const { blob, pdfWidth, pdfHeight } = await captureDrawingWithMarkup(drawing.file_url, drawing.zones)
     const png = await doc.embedPng(await blob.arrayBuffer())
 
     const fit = Math.min(DRAW_MAX_W / png.width, DRAW_MAX_H / png.height, 1)
@@ -143,7 +217,7 @@ export async function buildMarkupPdf(
       x: 14, y: imgH + 26, size: 12, font: bold, color: ink,
     })
     drawPage.drawText(
-      `${reportTitle}${drawing.revision ? `  ·  Rev ${drawing.revision}` : ''}  ·  tap a pin to see its photos`,
+      `${reportTitle}${drawing.revision ? `  ·  Rev ${drawing.revision}` : ''}  ·  tap a markup to see its photos`,
       { x: 14, y: imgH + 11, size: 8.5, font, color: mid }
     )
     drawPage.drawImage(png, { x: 0, y: 0, width: imgW, height: imgH })
@@ -212,15 +286,13 @@ export async function buildMarkupPdf(
         }
       }
 
-      // ── Make the pin clickable ────────────────────────────────────────
-      // Every markup type carries x_percent/y_percent, so the hotspot sits
-      // on the pin centre regardless of whether it was drawn as a pin,
-      // rectangle or freehand shape.
+      // ── Make the markup clickable ─────────────────────────────────────
+      // A pin gets a target on the pin; an area or a freehand shape gets
+      // its own outline, so all three kinds of markup link to their photos.
       if (firstPageRef) {
-        const cx = (zone.x_percent / 100) * imgW
-        const cy = imgH - (zone.y_percent / 100) * imgH
-        const R = 20
-        addInternalLink(doc, drawPage, [cx - R, cy - R, cx + R, cy + R], firstPageRef)
+        for (const rect of zoneHotspots(zone, imgW, imgH, pdfWidth, pdfHeight)) {
+          addInternalLink(doc, drawPage, rect, firstPageRef)
+        }
       }
     }
   }

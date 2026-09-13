@@ -204,7 +204,7 @@ export function SiteNoteModal({
       setMarkupState('loading')
       try {
         const { captureDrawingWithMarkup } = await import('@/lib/captureDrawing')
-        const blob = await captureDrawingWithMarkup(note.drawing!.file_url, [note.zone!] as any[], 1)
+        const { blob } = await captureDrawingWithMarkup(note.drawing!.file_url, [note.zone!] as any[], 1)
         if (cancelled) return
         objectUrl = URL.createObjectURL(blob)
         setMarkupUrl(objectUrl)
