@@ -69,6 +69,10 @@ export default function ReportPage() {
   // Unmounts the editor while the document is rewritten underneath it.
   const [editorSuspended,    setEditorSuspended]     = useState(false)
   const [reloadingEditor,    setReloadingEditor]     = useState(false)
+  /** Backstop for the reloading overlay: it is normally lifted by the
+   *  editor's own onReady, and this only covers a load that never reports
+   *  ready at all, which would otherwise leave the pane covered for good. */
+  const overlayFallback = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [mobileTab,          setMobileTab]            = useState<'document' | 'attachments'>('document')
   const [showFinaliseConfirm, setShowFinaliseConfirm] = useState(false)
   const [frozenPdfUrl,       setFrozenPdfUrl]         = useState<string | null>(null)
@@ -217,7 +221,10 @@ export default function ReportPage() {
         console.log('[generateDoc] New doc generated, remounting editor')
         setReloadingEditor(true)
         setEditorKey(prev => prev + 1)
-        setTimeout(() => setReloadingEditor(false), 4000)
+        // Lifted by onReady; this is only the backstop. (A ref, so it needs
+        // no place in this callback's dependencies.)
+        if (overlayFallback.current) clearTimeout(overlayFallback.current)
+        overlayFallback.current = setTimeout(() => setReloadingEditor(false), 8000)
       }
     } catch (err) {
       console.error('[generateDoc] error:', err)
@@ -450,12 +457,8 @@ export default function ReportPage() {
       }
 
       // The editor was closed to make the rewrite safe, so bring it back on
-      // the rewritten file's key — otherwise the pane stays empty, or worse,
-      // reopens on the pre-attachment copy the Document Server still holds.
-      await refreshDocKey()
-      setEditorSuspended(false)
-      setEditorKey(prev => prev + 1)
-      setTimeout(() => setReloadingEditor(false), 2500)
+      // the rewritten file's key.
+      await reopenEditor()
     }
   }
 
@@ -818,10 +821,33 @@ export default function ReportPage() {
    *     after and overwrites it.
    *   - Reopening must use the rewritten file's own key (see refreshDocKey),
    *     or the Document Server serves the copy it cached beforehand. */
+  /** Brings the editor back on the rewritten file's own key — otherwise the
+   *  pane stays empty, or worse, reopens on the copy the Document Server
+   *  still holds from before the rewrite.
+   *
+   *  The overlay stays up until the editor reports itself ready rather than
+   *  for a fixed 2.5s: quicker when the reload is quick, and it no longer
+   *  uncovers a half-loaded document when it is slow. */
+  const reopenEditor = async () => {
+    await refreshDocKey()
+    setEditorSuspended(false)
+    setEditorKey(prev => prev + 1)
+    if (overlayFallback.current) clearTimeout(overlayFallback.current)
+    overlayFallback.current = setTimeout(() => setReloadingEditor(false), 8000)
+  }
+
   const runDocumentRewrite = async (rewrite: () => Promise<void>) => {
     setReloadingEditor(true)
     setEditorSuspended(true)
-    await new Promise(r => setTimeout(r, 1200))
+    // Long enough for React to commit the unmount, so destroyEditor() has
+    // run and the parting save is on its way before quiesce looks for it.
+    // A render commit takes a frame or two; the rest of the waiting is done
+    // by quiesce, which polls until the stored file stops changing.
+    //
+    // If inserts ever start failing with "the document is still being
+    // saved", or come back with stale content, put this back up to 1200ms
+    // first — it is the cheapest thing to rule out.
+    await new Promise(r => setTimeout(r, 600))
     try {
       // docKey is null only if the editor never opened, in which case there
       // is no session to save and nothing can overwrite the rewrite.
@@ -847,10 +873,7 @@ export default function ReportPage() {
       // Always reopen, including after a failure — otherwise the document
       // pane is left empty — and always on a freshly-read key, because the
       // file may have been rewritten before the failure.
-      await refreshDocKey()
-      setEditorSuspended(false)
-      setEditorKey(prev => prev + 1)
-      setTimeout(() => setReloadingEditor(false), 2500)
+      await reopenEditor()
     }
   }
 
@@ -2061,7 +2084,13 @@ export default function ReportPage() {
                       fileName={`${baseFileName()}.docx`}
                       onRename={renameFromEditor}
                       editable={reportStatus !== 'finalised'}
-                      onReady={() => { console.log('[OnlyOffice] editor ready'); setEditorError(false) }}
+                      onReady={() => {
+                        console.log('[OnlyOffice] editor ready')
+                        setEditorError(false)
+                        // What actually lifts the reloading overlay.
+                        if (overlayFallback.current) clearTimeout(overlayFallback.current)
+                        setReloadingEditor(false)
+                      }}
                       onError={() => setEditorError(true)}
                       onLoadingChange={(isLoading, message) => {
                         setEditorLoading(isLoading)
