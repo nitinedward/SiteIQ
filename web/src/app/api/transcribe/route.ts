@@ -58,16 +58,32 @@ export async function POST(request: NextRequest) {
     'gridline, cleat, bolt, weld, compliance.'
   )
 
+  // Give up on Whisper before the platform gives up on us: maxDuration above
+  // is 60s, so a stalled upstream call would otherwise be killed with the
+  // function and reach the phone as a dead connection rather than a reason.
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30_000)
+
   let response: Response
   try {
     response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${openaiKey}` },
       body: upstream,
+      signal: controller.signal,
     })
   } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      console.error('[transcribe] Whisper timed out after 30s')
+      return NextResponse.json(
+        { error: 'Transcription timed out. Try a shorter recording.' },
+        { status: 504, headers: CORS }
+      )
+    }
     console.error('[transcribe] Upstream request failed:', err)
     return NextResponse.json({ error: 'Could not reach the transcription service' }, { status: 502, headers: CORS })
+  } finally {
+    clearTimeout(timeout)
   }
 
   if (!response.ok) {
