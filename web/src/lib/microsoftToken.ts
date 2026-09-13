@@ -1,6 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
+/** Built per call, not once at import.
+ *
+ *  supabase-js throws "supabaseKey is required" when the key is empty, and a
+ *  module-scope client throws it the moment the module is imported — which
+ *  during `next build` is while collecting page data, so a missing
+ *  environment variable failed the whole deployment instead of the one route
+ *  that needed it. Deferring it keeps the build honest about what is
+ *  actually broken: the request fails, the build doesn't. */
+const getSupabase = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL
     ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
   (process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -21,6 +29,7 @@ export type MicrosoftTokenRow = {
 export async function getValidToken(
   firmId: string
 ): Promise<string | null> {
+  const supabase = getSupabase()
 
   const { data: tokenRow, error } = await supabase
     .from('microsoft_tokens')
@@ -108,6 +117,7 @@ export async function getValidToken(
 export async function revokeToken(
   firmId: string
 ): Promise<void> {
+  const supabase = getSupabase()
   await supabase
     .from('microsoft_tokens')
     .delete()
@@ -117,6 +127,7 @@ export async function revokeToken(
 export async function getTokenInfo(
   firmId: string
 ): Promise<MicrosoftTokenRow | null> {
+  const supabase = getSupabase()
   const { data, error } = await supabase
     .from('microsoft_tokens')
     .select('*')

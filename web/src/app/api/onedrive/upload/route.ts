@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getValidToken } from '@/lib/microsoftToken'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
+// Built per call rather than at import — a module-scope client throws on a
+// missing key while `next build` collects page data, failing the deployment
+// rather than the one request. See lib/microsoftToken.ts.
+const getSupabase = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL
     ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
   (process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -189,7 +192,7 @@ export async function POST(request: NextRequest) {
 
     // Save to inspection record
     if (inspectionId) {
-      await supabase
+      await getSupabase()
         .from('inspections')
         .update({
           onedrive_url:     editUrl,
