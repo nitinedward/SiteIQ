@@ -960,6 +960,19 @@ export default function ReportPage() {
       // fails to render can't undo a finalise that has otherwise succeeded.
       await generateAndStoreMarkup()
 
+      // Finalising copies each note's report wording onto the note; say which
+      // notes it couldn't find in the report so nobody assumes they were updated.
+      const unmatched: string[] = data.wording?.unmatched ?? []
+      if (!data.wording) {
+        alert('Report finalised, but the report wording could not be copied to the site notes.')
+      } else if (unmatched.length > 0) {
+        alert(
+          'Report finalised. The wording for these site notes wasn’t found in the report, so those notes were not updated:\n\n' +
+          unmatched.map(l => `• ${l}`).join('\n') +
+          '\n\nA note is found by its bullet starting with the note’s label followed by a colon.'
+        )
+      }
+
       console.log('[finalise] Done')
     } catch (err: any) {
       console.error('[finalise] Error:', err)

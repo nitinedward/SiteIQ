@@ -33,7 +33,7 @@ const WEATHER_OPTIONS = [
 
 type Step = 'details' | 'capture';
 type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; preview_url: string | null };
-type GeneralObservation = { id: string; notes: string | null; transcript: string | null; severity: string | null; observed_at: string; zone_label: string | null };
+type GeneralObservation = { id: string; notes: string | null; transcript: string | null; report_text?: string | null; severity: string | null; observed_at: string; zone_label: string | null };
 
 function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; metering: number }) {
   const barAnims = useRef(Array.from({ length: BAR_COUNT }, () => new Animated.Value(0.05))).current;
@@ -139,7 +139,7 @@ export default function SessionScreen() {
   }, []));
 
   const fetchGeneralObservations = async (id: string) => {
-    const { data } = await supabase.from('observations').select('id,notes,transcript,severity,observed_at,zone_label').eq('inspection_id', id).is('zone_id', null).order('observed_at', { ascending: false });
+    const { data } = await supabase.from('observations').select('*').eq('inspection_id', id).is('zone_id', null).order('observed_at', { ascending: false });
     setGeneralObservations((data as GeneralObservation[]) ?? []);
   };
   useFocusEffect(useCallback(() => {
@@ -448,7 +448,8 @@ export default function SessionScreen() {
               </View>
               {generalObservations.map((obs, idx) => {
                 const summary = obs.zone_label?.trim() || obs.transcript?.trim() || obs.notes?.trim() || 'General observation';
-                const preview = obs.transcript?.trim() || obs.notes?.trim() || 'No notes yet';
+                // Once the report is finalised, show the note as it reads in the report (as the web does).
+                const preview = obs.report_text?.trim() || obs.transcript?.trim() || obs.notes?.trim() || 'No notes yet';
                 return (
                   <Swipeable
                     key={obs.id}

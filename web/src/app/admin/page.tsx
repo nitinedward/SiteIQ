@@ -7,7 +7,7 @@ import { reportDisplayName } from '@/lib/reportFileName'
 import { loadReportTemplates, defaultTemplateLabel, type ReportTemplate } from '@/lib/reportTemplates'
 import { SiteNoteModal } from '@/components/SiteNoteModal'
 import {
-  SiteNote, NoteStatus, loadProjectSiteNotes, setSiteNoteStatus, formatNoteDate,
+  SiteNote, NoteStatus, loadProjectSiteNotes, setSiteNoteStatus, formatNoteDate, noteReportRef,
   loadResponseCounts,
 } from '@/lib/siteNotes'
 
@@ -1410,19 +1410,21 @@ function AdminPageInner() {
                                   color: isOpen ? 'var(--text-ink)' : 'var(--text-mid)', marginTop: 8,
                                 }}>{note.zoneLabel}</div>
 
-                                {note.description && (
+                                {/* Once finalised, the list shows the note as it reads in the report. */}
+                                {(note.reportText || note.description) && (
                                   <div style={{
                                     fontFamily: 'var(--f-text)', fontSize: 13.5, color: 'var(--text-mid)',
                                     marginTop: 3, lineHeight: 1.55,
                                     display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
                                     overflow: 'hidden',
-                                  }}>{note.description}</div>
+                                  }}>{note.reportText || note.description}</div>
                                 )}
 
                                 <div style={{
                                   display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
                                   fontFamily: 'var(--f-mono)', fontSize: 11.5, color: 'var(--text-mid)', marginTop: 8,
                                 }}>
+                                  <span>{noteReportRef(note) ?? 'Not in a site report'}</span>
                                   <span>{formatNoteDate(note)}</span>
                                   {note.photos.length > 0 && <span>{note.photos.length} photo{note.photos.length === 1 ? '' : 's'}</span>}
                                   {note.measurements.length > 0 && <span>{note.measurements.length} measurement{note.measurements.length === 1 ? '' : 's'}</span>}

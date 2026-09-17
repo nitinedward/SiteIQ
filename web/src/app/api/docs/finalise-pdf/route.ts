@@ -3,6 +3,7 @@ import { savePdf } from '@/lib/docStorage'
 import { forceSaveAndWait, convertDocxToPdf } from '@/lib/onlyofficeConvert'
 import { reportFileNameFor } from '@/lib/reportFileNameServer'
 import { ensurePdfTitle } from '@/lib/pdfTitle'
+import { syncReportWordingToNotes, type WordingSyncResult } from '@/lib/reportWordingSync'
 
 export const dynamic = 'force-dynamic'
 // Force-save (~10s) + conversion polling (~90s worst case for a large,
@@ -52,7 +53,17 @@ export async function POST(request: NextRequest) {
     await savePdf(inspectionId, pdfBuffer)
     console.log('[finalise-pdf] PDF stored as:', title, 'size:', pdfBuffer.length)
 
-    return NextResponse.json({ success: true, pdfSize: pdfBuffer.length }, { headers: cors })
+    // The report's final wording for each site note goes back onto the note.
+    // A failure here is reported but never blocks the finalise.
+    let wording: WordingSyncResult | null = null
+    try {
+      wording = await syncReportWordingToNotes(inspectionId)
+      console.log('[finalise-pdf] Report wording saved to notes:', wording.updated, '| unmatched:', wording.unmatched)
+    } catch (err) {
+      console.error('[finalise-pdf] Could not save report wording to notes:', err)
+    }
+
+    return NextResponse.json({ success: true, pdfSize: pdfBuffer.length, wording }, { headers: cors })
   } catch (err: any) {
     console.error('[finalise-pdf] error:', err)
     // Never a partial success — the caller must not mark the report

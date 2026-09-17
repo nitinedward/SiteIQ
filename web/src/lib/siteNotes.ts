@@ -31,6 +31,9 @@ export type SiteNote = {
   status: NoteStatus
   zoneLabel: string
   description: string
+  /** The note's wording in its finalised report, copied back at finalise
+   *  (observations.report_text). Null until the report is finalised. */
+  reportText: string | null
   photos: string[]
   measurements: NoteMeasurement[]
   observedAt: string | null
@@ -120,6 +123,7 @@ export async function loadProjectSiteNotes(projectId: string): Promise<SiteNote[
       status: noteStatus(row.severity),
       zoneLabel: row.zone_label || zone?.label || 'General Observation',
       description: (row.transcript || row.notes || '').trim(),
+      reportText: (row.report_text ?? '').trim() || null,
       photos: asArray<string>(row.photos).filter(u => typeof u === 'string' && u.startsWith('http')),
       measurements: asArray<NoteMeasurement>(row.measurements),
       observedAt: row.observed_at ?? row.created_at ?? null,
@@ -396,6 +400,13 @@ export function isViewableFile(file: NoteFile): boolean {
 }
 
 /** "24 August 2026" as stored on the inspection, or a formatted timestamp. */
+/** Which site report a note was recorded in, as the report itself numbers it
+ *  ("Site Report 005"). Null for a note recorded outside a site visit. */
+export function noteReportRef(note: SiteNote): string | null {
+  if (!note.inspectionId) return null
+  return note.reportNo ? `Site Report ${note.reportNo}` : 'Site report (no number)'
+}
+
 export function formatNoteDate(note: SiteNote): string {
   if (note.visitDate) return note.visitDate
   if (!note.observedAt) return '—'

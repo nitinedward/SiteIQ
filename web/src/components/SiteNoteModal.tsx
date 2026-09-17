@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Spinner } from '@/components/Shell'
 import {
-  SiteNote, NoteStatus, NoteResponse, formatNoteDate, measurementLabel,
+  SiteNote, NoteStatus, NoteResponse, formatNoteDate, noteReportRef, measurementLabel,
   loadNoteResponses, addNoteResponse, deleteNoteResponse, isImageFile, isViewableFile,
   MAX_RESPONSE_FILE_BYTES,
 } from '@/lib/siteNotes'
@@ -312,7 +312,8 @@ export function SiteNoteModal({
               color: 'var(--indigo-deep)', marginTop: 10, wordBreak: 'break-word',
             }}>{note.zoneLabel}</h2>
             <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 4 }}>
-              {formatNoteDate(note)}
+              {noteReportRef(note) ?? 'Not in a site report'}
+              {` · ${formatNoteDate(note)}`}
               {note.drawing && ` · ${note.drawing.number} Rev ${note.drawing.revision}`}
             </div>
           </div>
@@ -328,7 +329,21 @@ export function SiteNoteModal({
 
         {/* Body */}
         <div style={{ padding: '22px 26px', overflowY: 'auto' }}>
-          <div style={sectionTitle}>Site note</div>
+          {note.reportText && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={sectionTitle}>In the report</div>
+              <div style={{
+                background: 'var(--indigo-soft)', border: '1px solid var(--border-line)',
+                borderRadius: 'var(--radius-md, 14px)', padding: '16px 18px',
+                fontFamily: 'var(--f-text)', fontSize: 15, lineHeight: 1.65,
+                color: 'var(--text-ink)', whiteSpace: 'pre-wrap',
+              }}>
+                {note.reportText}
+              </div>
+            </div>
+          )}
+
+          <div style={sectionTitle}>{note.reportText ? 'Recorded on site' : 'Site note'}</div>
           <div style={{
             background: 'var(--paper)', border: '1px solid var(--border-line)',
             borderRadius: 'var(--radius-md, 14px)', padding: '16px 18px',
@@ -789,7 +804,7 @@ export function SiteNoteModal({
                 fontFamily: 'var(--f-heading)', fontSize: 13.5, fontWeight: 700, color: 'var(--indigo)',
               }}
             >
-              Open the report this note is in
+              Open {noteReportRef(note) ?? 'the report this note is in'}
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
             </button>
           ) : <span />}

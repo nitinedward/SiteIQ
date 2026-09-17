@@ -4,6 +4,7 @@ import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildPar
 import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { saveDoc } from '@/lib/docStorage'
 import { writeWithAttachments } from '@/lib/attachmentSections'
+import { noteBulletLine, noteDictation } from '@/lib/reportNotes'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,13 +81,12 @@ export async function POST(request: NextRequest) {
     observations.forEach((ob: any, i: number) => {
       console.log(`[generate] obs[${i}] zone="${ob.zone_label}" transcript="${(ob.transcript ?? '').substring(0, 80)}" severity="${ob.severity}"`)
     })
-    const findingsLines = observations.map((ob: any) => {
-      const label = ob.zone_label || 'General Observation'
-      const text  = ob.transcript || ob.notes || 'Observation recorded'
-      // The open/closed status is tracked on the observation, not printed
-      // into the report text.
-      return `${label}: ${text}`
-    })
+    // One "<label>: <text>" bullet per note — the shape finalising reads the
+    // report wording back from (lib/reportNotes). The open/closed status is
+    // tracked on the observation, not printed into the report text.
+    const findingsLines = observations.map((ob: any) =>
+      noteBulletLine(ob, noteDictation(ob) || 'Observation recorded')
+    )
     const findings = buildBulletXml(
       findingsLines.length > 0 ? findingsLines : ['No specific findings recorded.']
     )

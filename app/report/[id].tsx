@@ -46,6 +46,8 @@ type Observation = {
   zone_id: string;
   notes: string;
   transcript: string;
+  /** The note's wording in its finalised report (copied back at finalise on the web). */
+  report_text?: string | null;
   severity: string;
   photos: string[] | string | null;
   measurements: string;
@@ -192,10 +194,18 @@ function ZonePanel({
                     </ScrollView>
                   )}
 
+                  {/* Report wording — matches the web Site Notes view */}
+                  {!!obs.report_text && (
+                    <View style={P.transcriptBox}>
+                      <Text style={P.transcriptLabel}>In the report</Text>
+                      <Text style={P.transcriptText}>{obs.report_text}</Text>
+                    </View>
+                  )}
+
                   {/* Transcript */}
                   {!!obs.transcript && (
                     <View style={P.transcriptBox}>
-                      <Text style={P.transcriptLabel}>Voice Note</Text>
+                      <Text style={P.transcriptLabel}>{obs.report_text ? 'Recorded on site' : 'Voice Note'}</Text>
                       <Text style={P.transcriptText}>{obs.transcript}</Text>
                     </View>
                   )}
@@ -1019,7 +1029,9 @@ export default function ReportScreen() {
                         {getPhotos(obs).length > 0 && (
                           <Text style={S.obsDetail}>Photos: {getPhotos(obs).length} photo{getPhotos(obs).length !== 1 ? 's' : ''}</Text>
                         )}
-                        {!!obs.transcript && (
+                        {obs.report_text ? (
+                          <Text style={S.obsDetail} numberOfLines={3}>Report: {obs.report_text}</Text>
+                        ) : !!obs.transcript && (
                           <Text style={S.obsDetail} numberOfLines={3}>Voice: {obs.transcript}</Text>
                         )}
                         {!!obs.notes && (
@@ -1067,7 +1079,9 @@ export default function ReportScreen() {
                         {getPhotos(obs).length > 0 && (
                           <Text style={S.obsDetail}>Photos: {getPhotos(obs).length} photo{getPhotos(obs).length !== 1 ? 's' : ''}</Text>
                         )}
-                        {!!obs.transcript && (
+                        {obs.report_text ? (
+                          <Text style={S.obsDetail} numberOfLines={3}>Report: {obs.report_text}</Text>
+                        ) : !!obs.transcript && (
                           <Text style={S.obsDetail} numberOfLines={3}>Voice: {obs.transcript}</Text>
                         )}
                         {!!obs.notes && (

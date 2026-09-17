@@ -106,6 +106,8 @@ export default function ObservationScreen() {
   const [zoneLabel, setZoneLabel]   = useState(params.zone_label as string || 'General Observation');
   const [photos, setPhotos]         = useState<string[]>([]);
   const [transcript, setTranscript] = useState('');
+  const [reportText, setReportText] = useState('');
+  const [reportRef, setReportRef]   = useState('');
   const [status, setStatus]         = useState<Status>('OPEN');
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -138,6 +140,18 @@ export default function ObservationScreen() {
     }
   }, []));
 
+  // Which site report the note belongs to, numbered as the report is
+  // ("Site Report 005") — the same reference the web Site Notes view shows.
+  const loadReportRef = async (inspId: string | null | undefined) => {
+    if (!inspId) { setReportRef('Not in a site report'); return; }
+    const { data } = await supabase.from('inspections').select('report_no').eq('id', inspId).single();
+    setReportRef(data?.report_no ? `Site Report ${data.report_no}` : 'Site report (no number)');
+  };
+
+  useEffect(() => {
+    if (!isEditMode) loadReportRef(inspectionId);
+  }, [inspectionId]);
+
   useEffect(() => {
     if (!isEditMode) return;
     (async () => {
@@ -146,6 +160,8 @@ export default function ObservationScreen() {
       if (data.zone_label) setZoneLabel(data.zone_label);
       setPhotos(Array.isArray(data.photos) ? data.photos : JSON.parse(data.photos || '[]'));
       setTranscript(data.transcript || '');
+      setReportText((data.report_text || '').trim());
+      loadReportRef(data.inspection_id);
       setStatus(toStatus(data.severity));
       try { setMeasurements(typeof data.measurements === 'string' ? JSON.parse(data.measurements || '[]') : data.measurements || []); } catch {}
       setIsLoadingObs(false);
@@ -342,6 +358,7 @@ export default function ObservationScreen() {
             ) : (
               <Text style={S.zoneLabel}>{zoneLabel}</Text>
             )}
+            {!!reportRef && <Text style={S.zoneSub}>{reportRef}</Text>}
             <Text style={S.zoneSub}>Tap below to capture your observations</Text>
           </View>
         </View>
@@ -380,6 +397,12 @@ export default function ObservationScreen() {
             <View style={S.waveBox}>
               <WaveformVisualiser isRecording={isRecording} metering={isRecording ? -20 : -60} />
               <Text style={S.waveHint}>{isRecording ? 'Listening...' : 'Processing...'}</Text>
+            </View>
+          )}
+          {!!reportText && (
+            <View style={[S.transcriptBox, S.reportBox]}>
+              <Text style={S.transcriptLabel}>In the report (from the finalised report — editing below doesn’t change it):</Text>
+              <Text style={S.reportText}>{reportText}</Text>
             </View>
           )}
           <View style={S.transcriptBox}>
@@ -505,6 +528,8 @@ const S = StyleSheet.create({
   transcriptBox:{ backgroundColor: T.surface, borderRadius: R.sm, padding: 14, borderWidth: 1, borderColor: T.line },
   transcriptLabel:{ fontSize: 11, color: T.mid, marginBottom: 6 },
   transcriptInput:{ fontSize: 14, color: T.ink, minHeight: 80 },
+  reportBox:    { backgroundColor: T.indigoSoft, marginBottom: 10 },
+  reportText:   { fontSize: 14, color: T.ink, lineHeight: 20 },
   severityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   sevChip:      { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: T.surface, borderRadius: R.pill, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1.5, borderColor: T.line },
   sevDot:       { width: 8, height: 8, borderRadius: 4 },

@@ -3,27 +3,15 @@ import { createClient } from '@supabase/supabase-js'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
 import { writeWithAttachments } from '@/lib/attachmentSections'
+import { noteLabel, noteDictation, noteBulletLine } from '@/lib/reportNotes'
 
 export const dynamic = 'force-dynamic'
 
-/** Extract the body text of a named CAPS section from AI output. */
-function parseAISection(text: string, sectionName: string): string {
-  const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(
-    `${escaped}[:\\s]*([\\s\\S]*?)(?=\\n[A-Z][A-Z /()\\-]{2,}(?::|\\n)|$)`,
-    'i'
-  )
-  const match = text.match(regex)
-  return match ? match[1].trim() : ''
-}
-
-/** Convert AI section text into bullet lines (strips leading "- " or "• " markers). */
-function sectionToBulletLines(text: string): string[] {
-  return text
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
-    .map(l => l.replace(/^[-•]\s+/, ''))
+/** The structured reply the AI is constrained to (output_config.format). */
+type AiReport = {
+  purpose: string
+  notes: { ref: string; text: string }[]
+  contractor_to_provide: { ref: string; item: string }[]
 }
 
 export async function POST(request: NextRequest) {
@@ -85,40 +73,32 @@ export async function POST(request: NextRequest) {
 
     const engineerName = member?.full_name ?? 'Site Engineer'
 
-    // Build observation text for AI prompt
-    const obsText = observations.map((ob: any) => {
-      const zone = ob.zone_label || 'General'
-      const text = ob.transcript || ob.notes || 'No notes'
-      const sev  = ob.severity ? `Status: ${ob.severity}` : ''
-      return `Zone: ${zone}${sev ? `\n${sev}` : ''}\nNotes: ${text}`
-    }).join('\n\n')
+    // The site notes decide what the report lists: one bullet per note, in
+    // order, under the note's own label. The AI only rewrites each note's
+    // wording, returned against the note's reference, so it can't add, merge,
+    // rename or drop notes. Open/closed status isn't sent — it's tracked on
+    // the note and changes after the report is written.
+    const refs = observations.map((_: any, i: number) => `N${i + 1}`)
+    const notesForPrompt = observations.map((ob: any, i: number) =>
+      `${refs[i]} | ${noteLabel(ob)}\n${noteDictation(ob) || '(nothing dictated; photos only)'}`
+    ).join('\n\n')
 
-    const prompt = `You are a structural engineer writing a formal site inspection report.
+    const prompt = `You are a structural engineer writing up a site inspection report from the site notes below.
 
 Project: ${projects.name ?? ''}
 Date: ${inspection.date ?? ''}
 Weather: ${inspection.weather ?? ''}
-Purpose: ${inspection.purpose ?? ''}
+Purpose recorded on site: ${inspection.purpose ?? '(none)'}
 
-Observations from site:
-${obsText || 'No observations recorded.'}
+Site notes (reference | label, then what the engineer recorded):
+${notesForPrompt || '(no site notes recorded)'}
 
-Write a professional site inspection report with EXACTLY these six section headings in ALL CAPS on their own line:
+Return:
+- purpose: one or two formal sentences stating the purpose of the inspection, based on the recorded purpose and the notes.
+- notes: one entry per site note, using its reference. Rewrite what was recorded as formal structural engineering wording. Keep every fact, location, grid line, member and requirement; add nothing that wasn't recorded. Don't repeat the label and don't mention open/closed status. For a note with nothing dictated, write "Observation recorded; refer to site photographs."
+- contractor_to_provide: each thing a note asks the contractor to provide or do, as a short formal item, with the reference of the note it came from. Only include requests actually made in the notes; if there are none, return an empty list.`
 
-PURPOSE OF INSPECTION
-WORKS OBSERVED
-OBSERVATIONS/COMMENTS
-CONTRACTOR TO PROVIDE (PRIOR TO NEXT INSPECTION)
-HEALTH AND SAFETY
-OTHER ACTIVITY ON SITE
-
-Rules:
-- Each section heading must appear alone on its own line in ALL CAPS.
-- Do NOT use separator lines, dashes, underscores, or horizontal rules between sections.
-- Do NOT number the headings.
-- Under OBSERVATIONS/COMMENTS, write each zone observation as a separate line starting with "- ".
-- Under CONTRACTOR TO PROVIDE, write each item as a separate line starting with "- ".
-- Use formal structural engineering language throughout.`
+    const noteRefSchema = refs.length > 0 ? { type: 'string', enum: refs } : { type: 'string' }
 
     console.log('[ai-generate] Calling Anthropic, observations:', observations.length)
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -130,8 +110,39 @@ Rules:
       },
       body: JSON.stringify({
         model:      'claude-sonnet-4-6',
-        max_tokens: 2000,
+        max_tokens: 8000,
         messages:   [{ role: 'user', content: prompt }],
+        output_config: {
+          format: {
+            type: 'json_schema',
+            schema: {
+              type: 'object',
+              properties: {
+                purpose: { type: 'string' },
+                notes: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: { ref: noteRefSchema, text: { type: 'string' } },
+                    required: ['ref', 'text'],
+                    additionalProperties: false,
+                  },
+                },
+                contractor_to_provide: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: { ref: noteRefSchema, item: { type: 'string' } },
+                    required: ['ref', 'item'],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ['purpose', 'notes', 'contractor_to_provide'],
+              additionalProperties: false,
+            },
+          },
+        },
       }),
     })
 
@@ -142,13 +153,39 @@ Rules:
     }
 
     const aiData = await response.json()
-    const rawAiText: string = aiData.content?.[0]?.text ?? ''
+    if (aiData.stop_reason !== 'end_turn') {
+      console.error('[ai-generate] Unexpected stop_reason:', aiData.stop_reason, aiData.stop_details ?? '')
+      return NextResponse.json({ error: 'AI generation did not complete' }, { status: 500 })
+    }
 
-    // Clean up AI output: remove separator lines and excess blank lines
-    const aiText = rawAiText
-      .replace(/^[-─═=*]{3,}\s*$/gm, '')   // strip separator lines
-      .replace(/\n{3,}/g, '\n\n')            // max 2 consecutive newlines
-      .trim()
+    const textBlock = (aiData.content ?? []).find((b: any) => b.type === 'text')
+    let ai: AiReport
+    try {
+      ai = JSON.parse(textBlock?.text ?? '')
+    } catch (err) {
+      console.error('[ai-generate] Could not parse AI JSON:', err)
+      return NextResponse.json({ error: 'AI generation failed' }, { status: 500 })
+    }
+
+    // Built from the notes, not from the AI's list: a note the AI skipped
+    // falls back to its dictated text rather than disappearing.
+    const wordingByRef = new Map(ai.notes.map(n => [n.ref, n.text.trim()]))
+    const findingLines = observations.map((ob: any, i: number) =>
+      noteBulletLine(ob, wordingByRef.get(refs[i]) || noteDictation(ob) || 'Observation recorded; refer to site photographs.')
+    )
+    const refOrder = new Map(refs.map((r: string, i: number) => [r, i]))
+    const contractorLines = [...ai.contractor_to_provide]
+      .sort((a, b) => (refOrder.get(a.ref) ?? 0) - (refOrder.get(b.ref) ?? 0))
+      .map(c => c.item.trim())
+      .filter(Boolean)
+    const purposeText = ai.purpose.trim() || (inspection.purpose ?? '')
+
+    // Section-headed text, for the no-template fallback generator and the preview.
+    const aiText = [
+      'PURPOSE OF INSPECTION', purposeText, '',
+      'OBSERVATIONS/COMMENTS', ...findingLines.map(l => `- ${l}`), '',
+      'CONTRACTOR TO PROVIDE (PRIOR TO NEXT INSPECTION)', ...contractorLines.map(l => `- ${l}`),
+    ].join('\n')
 
     console.log('AI text generated, length:', aiText.length)
 
@@ -158,18 +195,6 @@ Rules:
     let carried: string[] = []
 
     if (firmId) {
-      const purposeText  = parseAISection(aiText, 'PURPOSE OF INSPECTION') || (inspection.purpose ?? '')
-      const worksText    = parseAISection(aiText, 'WORKS OBSERVED')
-      const obsText2     = parseAISection(aiText, 'OBSERVATIONS/COMMENTS')
-      const recsText     = parseAISection(aiText, 'CONTRACTOR TO PROVIDE')
-      const otherText    = parseAISection(aiText, 'OTHER ACTIVITY ON SITE')
-
-      // Combine works observed + observations into bullet list
-      const findingLines: string[] = [
-        ...sectionToBulletLines(worksText),
-        ...sectionToBulletLines(obsText2),
-      ]
-
       const templateData: TemplateData = {
         engineer_name:   engineerName,
         client_email:    `${engineerName.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '')}@silvesterclark.co.nz`,
@@ -183,8 +208,9 @@ Rules:
         emailed_to_2:    '',
         purpose:         buildParagraphXml(purposeText),
         findings:        buildBulletXml(findingLines.length > 0 ? findingLines : ['No specific findings recorded.']),
-        recommendations: buildBulletXml(sectionToBulletLines(recsText)),
-        other_activity:  buildParagraphXml(otherText),
+        recommendations: buildBulletXml(contractorLines),
+        // Nothing is recorded for this on site, so it's left for the engineer to fill in.
+        other_activity:  buildParagraphXml(''),
         date:            inspection.date            ?? '',
       }
 
