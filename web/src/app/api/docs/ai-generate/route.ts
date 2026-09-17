@@ -96,7 +96,7 @@ ${notesForPrompt || '(no site notes recorded)'}
 Return:
 - purpose: one or two formal sentences stating the purpose of the inspection, based on the recorded purpose and the notes.
 - notes: one entry per site note, using its reference. Rewrite what was recorded as formal structural engineering wording. Keep every fact, location, grid line, member and requirement, including a record that something was absent or not built; add nothing that wasn't recorded. Don't repeat the label and don't mention open/closed status. Only where a note's recorded text is exactly "(nothing dictated; photos only)", write "Observation recorded; refer to site photographs." — never use that sentence in place of text the engineer recorded.
-- contractor_to_provide: each thing a note asks the contractor to provide or do, as a short formal item, with the reference of the note it came from. Only include requests actually made in the notes; if there are none, return an empty list.`
+- contractor_to_provide: at most one item per note, with that note's reference. Where a note asks the contractor to provide or do anything, gather all of that note's requests into a single formal item naming the location it relates to. Skip notes that ask for nothing; if no note asks for anything, return an empty list.`
 
     const noteRefSchema = refs.length > 0 ? { type: 'string', enum: refs } : { type: 'string' }
 
@@ -173,11 +173,16 @@ Return:
     const findingLines = observations.map((ob: any, i: number) =>
       noteBulletLine(ob, wordingByRef.get(refs[i]) || noteDictation(ob) || 'Observation recorded; refer to site photographs.')
     )
-    const refOrder = new Map(refs.map((r: string, i: number) => [r, i]))
-    const contractorLines = [...ai.contractor_to_provide]
-      .sort((a, b) => (refOrder.get(a.ref) ?? 0) - (refOrder.get(b.ref) ?? 0))
-      .map(c => c.item.trim())
-      .filter(Boolean)
+    // One item per note, in note order — a second item against the same note
+    // is dropped rather than letting one note spread across several bullets.
+    const itemByRef = new Map<string, string>()
+    for (const c of ai.contractor_to_provide) {
+      const item = c.item.trim()
+      if (item && !itemByRef.has(c.ref)) itemByRef.set(c.ref, item)
+    }
+    const contractorLines = refs
+      .map((r: string) => itemByRef.get(r))
+      .filter((item): item is string => Boolean(item))
     const purposeText = ai.purpose.trim() || (inspection.purpose ?? '')
 
     // Section-headed text, for the no-template fallback generator and the preview.
