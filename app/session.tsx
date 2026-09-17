@@ -255,8 +255,10 @@ export default function SessionScreen() {
     if (siteContact.trim()) await SecureStore.setItemAsync(SITE_CONTACT_KEY, siteContact.trim());
     if (contactPhone.trim()) await SecureStore.setItemAsync(CONTACT_PHONE_KEY, contactPhone.trim());
     const drawingRef = allDrawings.filter(d => selectedDrawings.includes(d.id)).map(d => d.number || d.title).join(', ');
+    // Recorded so the report can print who carried out the inspection.
+    const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase.from('inspections').insert({
-      project_id: String(project_id), date: todayShort, weather,
+      project_id: String(project_id), date: todayShort, weather, created_by: user?.id ?? null,
       site_contact: siteContact.trim(), contact_phone: contactPhone.trim(),
       drawing_ref: drawingRef, report_no: reportNo.trim(), purpose: purpose.trim(), status: 'IN_PROGRESS',
     }).select().single();

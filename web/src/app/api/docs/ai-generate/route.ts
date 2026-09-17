@@ -4,6 +4,7 @@ import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
 import { writeWithAttachments } from '@/lib/attachmentSections'
 import { noteLabel, noteDictation, noteBulletLine } from '@/lib/reportNotes'
+import { loadReportEngineer } from '@/lib/reportEngineer'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,17 +62,7 @@ export async function POST(request: NextRequest) {
     const projects     = (inspection.projects as any) ?? {}
     const firmId       = projects.firm_id as string | undefined
 
-    // Get engineer name from firm_members
-    const userId = (inspection as any).created_by ?? (inspection as any).user_id
-    const { data: member } = userId
-      ? await supabase
-          .from('firm_members')
-          .select('full_name')
-          .eq('user_id', userId)
-          .single()
-      : { data: null }
-
-    const engineerName = member?.full_name ?? 'Site Engineer'
+    const engineer = await loadReportEngineer(supabase, inspection as any)
 
     // The site notes decide what the report lists: one bullet per note, in
     // order, under the note's own label. The AI only rewrites each note's
@@ -201,8 +192,9 @@ Return:
 
     if (firmId) {
       const templateData: TemplateData = {
-        engineer_name:   engineerName,
-        client_email:    `${engineerName.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '')}@silvesterclark.co.nz`,
+        engineer_name:   engineer.name,
+        engineer_user:   engineer.user,
+        client_email:    engineer.email,
         project_name:    projects.name              ?? '',
         report_no:       inspection.report_no       ?? '',
         site_contact:    inspection.site_contact    ?? '',

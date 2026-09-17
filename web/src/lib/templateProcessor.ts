@@ -17,6 +17,9 @@ const DOCS_DIR = path.join('/tmp', 'siteiq-docs-cache')
 
 export type TemplateData = {
   engineer_name: string
+  /** The engineer's email name — "nitin.edward" — for templates that write
+   *  the address themselves as {{engineer_user}}@yourfirm.co.nz */
+  engineer_user: string
   client_email: string
   project_name: string
   report_no: string
@@ -266,6 +269,7 @@ export async function fillTemplate(
   // ── Single-line inline fields: plain text replacement ─────────────────────────
   const inline: Record<string, string> = {
     '{{engineer_name}}':   data.engineer_name   || '',
+    '{{engineer_user}}':   data.engineer_user   || '',
     '{{client_email}}':    data.client_email    || '',
     '{{project_name}}':    data.project_name    || '',
     '{{report_no}}':       data.report_no       || '',
