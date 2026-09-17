@@ -95,7 +95,7 @@ ${notesForPrompt || '(no site notes recorded)'}
 
 Return:
 - purpose: one or two formal sentences stating the purpose of the inspection, based on the recorded purpose and the notes.
-- notes: one entry per site note, using its reference. Rewrite what was recorded as formal structural engineering wording. Keep every fact, location, grid line, member and requirement; add nothing that wasn't recorded. Don't repeat the label and don't mention open/closed status. For a note with nothing dictated, write "Observation recorded; refer to site photographs."
+- notes: one entry per site note, using its reference. Rewrite what was recorded as formal structural engineering wording. Keep every fact, location, grid line, member and requirement, including a record that something was absent or not built; add nothing that wasn't recorded. Don't repeat the label and don't mention open/closed status. Only where a note's recorded text is exactly "(nothing dictated; photos only)", write "Observation recorded; refer to site photographs." — never use that sentence in place of text the engineer recorded.
 - contractor_to_provide: each thing a note asks the contractor to provide or do, as a short formal item, with the reference of the note it came from. Only include requests actually made in the notes; if there are none, return an empty list.`
 
     const noteRefSchema = refs.length > 0 ? { type: 'string', enum: refs } : { type: 'string' }
