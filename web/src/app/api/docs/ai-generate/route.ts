@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
-import { fillTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
+import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
 import { writeWithAttachments } from '@/lib/attachmentSections'
 
 export const dynamic = 'force-dynamic'
@@ -188,7 +188,12 @@ Rules:
         date:            inspection.date            ?? '',
       }
 
-      const buffer = await fillTemplate(firmId, templateData)
+      const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined
+      const { buffer, templateId } = await fillTemplate(firmId, templateData, {
+        pinnedTemplateId,
+        projectId: inspection.project_id,
+      })
+      await pinReportTemplate(inspectionId, pinnedTemplateId, templateId)
       carried = await writeWithAttachments(inspectionId, buffer)
       console.log('AI document generated using firm template')
     } else {

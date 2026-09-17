@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { fillTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
+import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { saveDoc } from '@/lib/docStorage'
 import { writeWithAttachments } from '@/lib/attachmentSections'
@@ -112,7 +112,12 @@ export async function POST(request: NextRequest) {
         date:            inspection.date            ?? '',
       }
 
-      const buffer = await fillTemplate(firmId, templateData)
+      const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined
+      const { buffer, templateId } = await fillTemplate(firmId, templateData, {
+        pinnedTemplateId,
+        projectId: inspection.project_id,
+      })
+      await pinReportTemplate(inspectionId, pinnedTemplateId, templateId)
       // A forced rewrite replaces a document that may already hold inserted
       // photos and markups; a first generation has nothing to carry.
       carried = force

@@ -1,7 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { loadReportTemplates, defaultTemplateLabel, type ReportTemplate } from '@/lib/reportTemplates'
 
 // ── DESIGN TOKENS (kept for backward compat) ──────────────────────────────────
 export const DS = {
@@ -491,7 +492,11 @@ export function NewProjectModal({ firmId, userId, onClose, onCreated }: {
   const [address, setAddress] = useState('')
   const [client, setClient]   = useState('')
   const [status, setStatus]   = useState('ACTIVE')
+  const [templateId, setTemplateId] = useState('')
+  const [templates, setTemplates]   = useState<ReportTemplate[]>([])
   const [saving, setSaving]   = useState(false)
+
+  useEffect(() => { loadReportTemplates(firmId).then(setTemplates) }, [firmId])
 
   const create = async () => {
     if (!name.trim()) { alert('Project name is required'); return }
@@ -500,6 +505,8 @@ export function NewProjectModal({ firmId, userId, onClose, onCreated }: {
       name: name.trim(), project_number: number.trim() || `PRJ-${Date.now().toString().slice(-6)}`,
       address: address.trim(), client_name: client.trim(),
       firm_id: firmId, status,
+      // Only sent when chosen, so creating projects still works before the templates migration.
+      ...(templateId ? { report_template_id: templateId } : {}),
     }).select().single()
     if (newProj) {
       await supabase.from('project_members').insert({ project_id: newProj.id, user_id: userId, added_by: userId })
@@ -540,6 +547,21 @@ export function NewProjectModal({ firmId, userId, onClose, onCreated }: {
             </div>
             <NPMField label="Address"><NPMInput value={address} onChange={setAddress} placeholder="123 Queen St, Auckland" /></NPMField>
             <NPMField label="Client"><NPMInput value={client} onChange={setClient} placeholder="e.g. Auckland Council" /></NPMField>
+            {templates.length > 1 && (
+              <NPMField label="Report Template">
+                <select
+                  value={templateId} onChange={e => setTemplateId(e.target.value)}
+                  style={{
+                    width: '100%', padding: '12px 16px', boxSizing: 'border-box',
+                    background: 'var(--surface)', border: '1.5px solid var(--border-line)',
+                    borderRadius: 'var(--radius-sm)', fontFamily: 'var(--f-text)', fontSize: 15, color: 'var(--text-ink)', outline: 'none',
+                  }}
+                >
+                  <option value="">{defaultTemplateLabel(templates)}</option>
+                  {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </NPMField>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
             <Btn variant="outline" onClick={onClose} style={{ flex: 1 }}>Cancel</Btn>

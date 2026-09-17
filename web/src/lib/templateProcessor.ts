@@ -127,11 +127,73 @@ function replaceParagraphWithXml(xml: string, placeholder: string, replacementXm
 
 // ── Template Fetch ─────────────────────────────────────────────────────────────
 
-/** Download the firm's template from Supabase, cache it locally. */
-async function fetchTemplateBuffer(firmId: string): Promise<Buffer> {
-  console.log('[template] Loading for firm:', firmId)
+export type TemplateChoice = {
+  /** The template the report was first built from, if any (inspections.report_template_id). */
+  pinnedTemplateId?: string | null
+  /** The report's project; its report_template_id is used when the report isn't pinned. */
+  projectId?: string | null
+}
 
-  const cachePath = path.join(DOCS_DIR, `template-${firmId}.docx`)
+type ResolvedTemplate = { templateId: string | null; url: string; cacheName: string }
+
+/**
+ * Pick the template for a report: the one it was first built from, else the
+ * project's, else the firm's default. Falls back to the legacy single
+ * firms.report_template_url when the firm has no named templates (or the
+ * report_templates migration hasn't been run).
+ */
+async function resolveTemplate(firmId: string, choice: TemplateChoice): Promise<ResolvedTemplate> {
+  const supabase = getSupabase()
+
+  const { data: templates, error } = await supabase
+    .from('report_templates')
+    .select('id, file_url, is_default, updated_at')
+    .eq('firm_id', firmId)
+
+  if (error) console.warn('[template] report_templates lookup failed, using firm template:', error.message)
+
+  const list = templates ?? []
+  let projectTemplateId: string | null = null
+  if (list.length > 0 && !choice.pinnedTemplateId && choice.projectId) {
+    const { data: project } = await supabase
+      .from('projects')
+      .select('report_template_id')
+      .eq('id', choice.projectId)
+      .single()
+    projectTemplateId = project?.report_template_id ?? null
+  }
+
+  const match =
+    list.find(t => t.id === choice.pinnedTemplateId) ??
+    list.find(t => t.id === projectTemplateId) ??
+    list.find(t => t.is_default)
+
+  if (match) {
+    const version = new Date(match.updated_at).getTime()
+    return { templateId: match.id, url: match.file_url, cacheName: `template-${match.id}-${version}.docx` }
+  }
+
+  const { data: firmData, error: dbError } = await supabase
+    .from('firms')
+    .select('report_template_url')
+    .eq('id', firmId)
+    .single()
+
+  console.log('[template] Firm template url:', firmData?.report_template_url ?? null, '| error:', dbError?.message ?? null)
+
+  if (!firmData?.report_template_url) {
+    throw new Error(
+      'No template uploaded. Go to Settings → Report templates and upload your .docx file.'
+    )
+  }
+  return { templateId: null, url: firmData.report_template_url, cacheName: `template-${firmId}.docx` }
+}
+
+/** Download a template from Supabase, cache it locally. */
+async function fetchTemplateBuffer(template: ResolvedTemplate): Promise<Buffer> {
+  console.log('[template] Loading:', template.templateId ?? 'firm template')
+
+  const cachePath = path.join(DOCS_DIR, template.cacheName)
   try {
     const cached = await fs.readFile(cachePath)
     console.log('[template] Using /tmp cache, size:', cached.length)
@@ -140,26 +202,8 @@ async function fetchTemplateBuffer(firmId: string): Promise<Buffer> {
     // Not cached — fetch from Supabase
   }
 
-  const keySet = !!(process.env.SUPABASE_SERVICE_ROLE_KEY)
-  console.log('[template] SUPABASE_SERVICE_ROLE_KEY set:', keySet)
-
-  const supabase = getSupabase()
-  const { data: firmData, error: dbError } = await supabase
-    .from('firms')
-    .select('report_template_url')
-    .eq('id', firmId)
-    .single()
-
-  console.log('[template] DB result — url:', firmData?.report_template_url ?? null, '| error:', dbError?.message ?? null)
-
-  if (!firmData?.report_template_url) {
-    throw new Error(
-      'No template uploaded. Go to Settings → Report Template and upload your .docx file.'
-    )
-  }
-
-  console.log('[template] Fetching from URL:', firmData.report_template_url)
-  const res = await fetch(firmData.report_template_url, {
+  console.log('[template] Fetching from URL:', template.url)
+  const res = await fetch(template.url, {
     headers: {
       Authorization: `Bearer ${(process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()}`,
     },
@@ -190,12 +234,17 @@ async function fetchTemplateBuffer(firmId: string): Promise<Buffer> {
  * any green colour inherited from the template's placeholder styling.
  *
  * Single-line inline fields (names, dates, etc.) use simple string replacement.
+ *
+ * Returns the id of the named template used (null for the legacy firm
+ * template), so callers can pin the report to it.
  */
 export async function fillTemplate(
   firmId: string,
   data: TemplateData,
-): Promise<Buffer> {
-  const templateBuffer = await fetchTemplateBuffer(firmId)
+  choice: TemplateChoice = {},
+): Promise<{ buffer: Buffer; templateId: string | null }> {
+  const template = await resolveTemplate(firmId, choice)
+  const templateBuffer = await fetchTemplateBuffer(template)
   const zip = new AdmZip(templateBuffer)
 
   const dateStr =
@@ -294,7 +343,21 @@ export async function fillTemplate(
     }
   }
 
-  return zip.toBuffer()
+  return { buffer: zip.toBuffer(), templateId: template.templateId }
+}
+
+/**
+ * Record the template a report was first built from, so changing the
+ * project's template later only affects reports generated after the change.
+ */
+export async function pinReportTemplate(inspectionId: string, pinnedTemplateId: string | null | undefined, usedTemplateId: string | null): Promise<void> {
+  if (pinnedTemplateId || !usedTemplateId) return
+  const { error } = await getSupabase()
+    .from('inspections')
+    .update({ report_template_id: usedTemplateId })
+    .eq('id', inspectionId)
+    .is('report_template_id', null)
+  if (error) console.warn('[template] Could not pin report template:', error.message)
 }
 
 /** Bust the local template cache for a firm (call after uploading a new template). */

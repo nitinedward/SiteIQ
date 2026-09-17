@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { Shell, Btn, Card, Spinner } from '@/components/Shell'
+import { loadReportTemplates, type ReportTemplate } from '@/lib/reportTemplates'
 
 type Project = { id: string; name: string; project_number: string }
 type Drawing = { id: string; title: string; number: string; file_url: string; project_id: string }
@@ -23,6 +24,11 @@ export default function SettingsPage() {
   const [templateDragging, setTemplateDragging]   = useState(false)
   const [drawingDragging, setDrawingDragging]     = useState(false)
   const [templateUploading, setTemplateUploading] = useState(false)
+  const [templates, setTemplates]                 = useState<ReportTemplate[]>([])
+  const [newTemplateName, setNewTemplateName]     = useState('')
+  const [templateBusyId, setTemplateBusyId]       = useState<string | null>(null)
+  const [renamingId, setRenamingId]               = useState<string | null>(null)
+  const [renameValue, setRenameValue]             = useState('')
   const [drawingUploading, setDrawingUploading]   = useState(false)
   const [drawingTitle, setDrawingTitle]           = useState('')
   const [drawingNumber, setDrawingNumber]         = useState('')
@@ -40,6 +46,8 @@ export default function SettingsPage() {
   const [disconnecting, setDisconnecting] = useState(false)
 
   const templateInputRef = useRef<HTMLInputElement>(null)
+  const replaceInputRef  = useRef<HTMLInputElement>(null)
+  const replaceTargetRef = useRef<ReportTemplate | null>(null)
   const drawingInputRef  = useRef<HTMLInputElement>(null)
 
   const SUPABASE_URL      = 'https://vbaewualqaxhbmqgnhdt.supabase.co'
@@ -90,6 +98,7 @@ export default function SettingsPage() {
       setFirm(firmData)
       setFirmId(firmData?.id ?? '')
       setFirmNameEdit(firmData?.name ?? '')
+      setTemplates(await loadReportTemplates(firmData?.id ?? ''))
 
       const { data: proj } = await supabase
         .from('projects')
@@ -141,32 +150,104 @@ export default function SettingsPage() {
     setTimeout(() => setUploadSuccess(''), 3000)
   }
 
-  // ── TEMPLATE UPLOAD ────────────────────────────────────
-  const uploadTemplate = async (file: File) => {
+  // ── REPORT TEMPLATES ───────────────────────────────────
+  const flash = (msg: string) => { setUploadSuccess(msg); setTimeout(() => setUploadSuccess(''), 3000) }
+
+  const reloadTemplates = async (id = firm?.id ?? '') => setTemplates(await loadReportTemplates(id))
+
+  /** Upload a .docx to the report-templates bucket, overwriting that path. Returns its URL. */
+  const putTemplateFile = async (fileName: string, file: File) => {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/report-templates/${fileName}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'x-upsert': 'true' },
+      body: await file.arrayBuffer(),
+    })
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+    return `${SUPABASE_URL}/storage/v1/object/report-templates/${fileName}`
+  }
+
+  // firms.report_template_url mirrors the default template: installed mobile
+  // apps check it before offering AI reports. The legacy cache is keyed on it.
+  const mirrorDefault = async (fileUrl: string | null) => {
+    await supabase.from('firms').update({ report_template_url: fileUrl }).eq('id', firm!.id)
+    setFirm(prev => prev ? { ...prev, report_template_url: fileUrl } : prev)
+    await fetch('/api/docs/cache-template', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ firmId: firm!.id }),
+    }).catch(() => { /* non-critical */ })
+  }
+
+  const addTemplate = async (file: File) => {
     if (!file.name.endsWith('.docx')) { alert('Please upload a .docx Word document'); return }
+    const name = newTemplateName.trim() || file.name.replace(/\.docx$/i, '')
     setTemplateUploading(true)
     try {
-      const fileName = `template-${firm?.id}.docx`
-      const buffer   = await file.arrayBuffer()
-      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/report-templates/${fileName}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'x-upsert': 'true' },
-        body: buffer,
-      })
-      if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
-      const templateUrl = `${SUPABASE_URL}/storage/v1/object/report-templates/${fileName}`
-      await supabase.from('firms').update({ report_template_url: templateUrl }).eq('id', firm!.id)
-      setFirm(prev => prev ? { ...prev, report_template_url: templateUrl } : prev)
-      // Bust the server-side template cache so the next generate picks up the new file
-      await fetch('/api/docs/cache-template', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ firmId: firm!.id }),
-      }).catch(() => { /* non-critical */ })
-      setUploadSuccess('Template uploaded successfully!')
-      setTimeout(() => setUploadSuccess(''), 3000)
-    } catch { alert('Upload failed. Please try again.') }
+      const id = crypto.randomUUID()
+      const fileUrl = await putTemplateFile(`template-${firm!.id}-${id}.docx`, file)
+      const isDefault = templates.length === 0
+      const { error } = await supabase.from('report_templates').insert({ id, firm_id: firm!.id, name, file_url: fileUrl, is_default: isDefault })
+      if (error) throw error
+      if (isDefault) await mirrorDefault(fileUrl)
+      setNewTemplateName('')
+      await reloadTemplates()
+      flash(`Template "${name}" added`)
+    } catch (err) { console.error(err); alert('Upload failed. Please try again.') }
     finally { setTemplateUploading(false) }
+  }
+
+  const replaceTemplate = async (t: ReportTemplate, file: File) => {
+    if (!file.name.endsWith('.docx')) { alert('Please upload a .docx Word document'); return }
+    setTemplateBusyId(t.id)
+    try {
+      // Same path, so the default keeps matching firms.report_template_url.
+      await putTemplateFile(t.file_url.split('/').pop()!, file)
+      // updated_at is part of the server's cache key, so the new file is used straight away.
+      const { error } = await supabase.from('report_templates').update({ updated_at: new Date().toISOString() }).eq('id', t.id)
+      if (error) throw error
+      if (t.is_default) await mirrorDefault(t.file_url)
+      await reloadTemplates()
+      flash(`Template "${t.name}" replaced`)
+    } catch (err) { console.error(err); alert('Upload failed. Please try again.') }
+    finally { setTemplateBusyId(null) }
+  }
+
+  const renameTemplate = async (t: ReportTemplate) => {
+    const name = renameValue.trim()
+    setRenamingId(null)
+    if (!name || name === t.name) return
+    const { error } = await supabase.from('report_templates').update({ name }).eq('id', t.id)
+    if (error) { alert('Could not rename the template.'); return }
+    await reloadTemplates()
+  }
+
+  const makeDefault = async (t: ReportTemplate) => {
+    setTemplateBusyId(t.id)
+    try {
+      // Clear the old default first: at most one default per firm is enforced.
+      const cleared = await supabase.from('report_templates').update({ is_default: false }).eq('firm_id', firm!.id).eq('is_default', true)
+      if (cleared.error) throw cleared.error
+      const set = await supabase.from('report_templates').update({ is_default: true }).eq('id', t.id)
+      if (set.error) throw set.error
+      await mirrorDefault(t.file_url)
+      await reloadTemplates()
+      flash(`"${t.name}" is now the default template`)
+    } catch (err) { console.error(err); alert('Could not change the default template.'); await reloadTemplates() }
+    finally { setTemplateBusyId(null) }
+  }
+
+  const deleteTemplate = async (t: ReportTemplate) => {
+    if (t.is_default && templates.length > 1) { alert('Make another template the default before removing this one.'); return }
+    if (!confirm(`Remove the template "${t.name}"?\n\nProjects using it will switch to the firm default for new reports. Reports already generated are not changed.`)) return
+    setTemplateBusyId(t.id)
+    try {
+      const { error } = await supabase.from('report_templates').delete().eq('id', t.id)
+      if (error) throw error
+      if (t.is_default) await mirrorDefault(null)
+      await reloadTemplates()
+      flash(`Template "${t.name}" removed`)
+    } catch (err) { console.error(err); alert('Could not remove the template.') }
+    finally { setTemplateBusyId(null) }
   }
 
   // ── DRAWING UPLOAD ─────────────────────────────────────
@@ -195,7 +276,7 @@ export default function SettingsPage() {
   const handleDrop = (e: React.DragEvent, type: 'template' | 'drawing') => {
     e.preventDefault()
     const file = e.dataTransfer.files[0]; if (!file) return
-    if (type === 'template') { setTemplateDragging(false); uploadTemplate(file) }
+    if (type === 'template') { setTemplateDragging(false); addTemplate(file) }
     else { setDrawingDragging(false); if (!file.name.endsWith('.pdf')) { alert('Please upload a PDF file'); return }; setPendingDrawing(file); if (!drawingTitle) setDrawingTitle(file.name.replace('.pdf', '')) }
   }
 
@@ -322,27 +403,70 @@ export default function SettingsPage() {
         {/* ── CARD 2: Report Template ──────────────────────── */}
         <Card className="settings-card">
           <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-line)' }}>
-            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 3 }}>Report template</h2>
+            <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 3 }}>Report templates</h2>
             <p style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.6, marginBottom: 10 }}>
-              Upload your firm's Word template (.docx). Use these placeholders where AI content is inserted:
+              Upload a Word template (.docx) for each letterhead, e.g. one per office. Each project uses the template chosen for it, or the default. Changing a project's template only affects reports generated afterwards. Use these placeholders where AI content is inserted:
             </p>
             <div style={{ background: 'var(--paper)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)', padding: '9px 12px', fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-ink)', lineHeight: 1.8 }}>
               {'{{project_name}}  {{date}}  {{report_no}}  {{engineer_name}}  {{weather}}'}<br/>
               {'{{site_contact}}  {{purpose}}  {{findings}}  {{recommendations}}'}
             </div>
           </div>
-          <div style={{ padding: 22 }}>
-            {firm?.report_template_url ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--sage)', flexShrink: 0 }} />
-                  <span style={{ fontFamily: 'var(--f-text)', fontSize: 13.5, color: 'var(--text-ink)' }}>
-                    Template uploaded — AI reports enabled
-                  </span>
-                </div>
-                <Btn variant="outline" small onClick={() => templateInputRef.current?.click()}>Replace</Btn>
+          <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {templates.length > 0 && (
+              <div style={{ border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)' }}>
+                {templates.map((t, i) => (
+                  <div key={t.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
+                    padding: '12px 14px', borderTop: i === 0 ? 'none' : '1px solid var(--border-line)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, flex: '1 1 200px' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--sage)', flexShrink: 0 }} />
+                      {renamingId === t.id ? (
+                        <input
+                          autoFocus value={renameValue}
+                          onChange={e => setRenameValue(e.target.value)}
+                          onBlur={() => renameTemplate(t)}
+                          onKeyDown={e => { if (e.key === 'Enter') renameTemplate(t); if (e.key === 'Escape') setRenamingId(null) }}
+                          style={{ ...inputStyle, padding: '6px 10px', fontSize: 14 }}
+                        />
+                      ) : (
+                        <span
+                          title="Click to rename"
+                          onClick={() => { setRenamingId(t.id); setRenameValue(t.name) }}
+                          style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-ink)', cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        >
+                          {t.name}
+                        </span>
+                      )}
+                      {t.is_default && (
+                        <span style={{ background: 'var(--indigo-soft)', color: 'var(--indigo)', fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, flexShrink: 0 }}>
+                          Default
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {templateBusyId === t.id ? <Spinner size={16} /> : (
+                        <>
+                          {!t.is_default && <Btn variant="outline" small onClick={() => makeDefault(t)}>Make default</Btn>}
+                          <Btn variant="outline" small onClick={() => { replaceTargetRef.current = t; replaceInputRef.current?.click() }}>Replace</Btn>
+                          <Btn variant="outline" small onClick={() => deleteTemplate(t)}>Remove</Btn>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ) : (
+            )}
+
+            <div>
+              <label style={labelStyle}>{templates.length > 0 ? 'Add another template' : 'Add a template'}</label>
+              <input
+                value={newTemplateName}
+                onChange={e => setNewTemplateName(e.target.value)}
+                placeholder="Template name, e.g. Auckland office"
+                style={{ ...inputStyle, marginBottom: 10 }}
+              />
               <div
                 onDragOver={e => { e.preventDefault(); setTemplateDragging(true) }}
                 onDragLeave={() => setTemplateDragging(false)}
@@ -367,9 +491,11 @@ export default function SettingsPage() {
                   </>
                 )}
               </div>
-            )}
+            </div>
             <input ref={templateInputRef} type="file" accept=".docx" style={{ display: 'none' }}
-              onChange={e => e.target.files?.[0] && uploadTemplate(e.target.files[0])} />
+              onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) addTemplate(f) }} />
+            <input ref={replaceInputRef} type="file" accept=".docx" style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; const t = replaceTargetRef.current; if (f && t) replaceTemplate(t, f) }} />
           </div>
         </Card>
 

@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { Shell, Badge, Btn, Spinner, Card, NewProjectModal } from '@/components/Shell'
 import { reportDisplayName } from '@/lib/reportFileName'
+import { loadReportTemplates, defaultTemplateLabel, type ReportTemplate } from '@/lib/reportTemplates'
 import { SiteNoteModal } from '@/components/SiteNoteModal'
 import {
   SiteNote, NoteStatus, loadProjectSiteNotes, setSiteNoteStatus, formatNoteDate,
@@ -18,7 +19,7 @@ const supabase = createClient(
   ).replace(/^﻿/, '').trim()
 )
 
-type Project = { id: string; name: string; project_number: string; address: string; client_name: string; status: string }
+type Project = { id: string; name: string; project_number: string; address: string; client_name: string; status: string; report_template_id?: string | null }
 type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; file_name: string; preview_url?: string | null; created_at: string; sort_order?: number | null }
 type Member  = { id: string; user_id: string; full_name: string; email: string; role: string }
 
@@ -191,6 +192,7 @@ function AdminPageInner() {
 
   const [editingProject, setEditingProject] = useState(false)
   const [editForm, setEditForm]             = useState<Partial<Project>>({})
+  const [reportTemplates, setReportTemplates] = useState<ReportTemplate[]>([])
 
   const [saving, setSaving]         = useState(false)
 
@@ -244,11 +246,13 @@ function AdminPageInner() {
     setEditingJoinCode(firm.join_code ?? '')
     setFullName(member.full_name)
 
-    const [{ data: projs }, { data: mems }] = await Promise.all([
+    const [{ data: projs }, { data: mems }, templates] = await Promise.all([
       supabase.from('projects').select('*').eq('firm_id', firm.id).order('created_at', { ascending: false }),
       supabase.from('firm_members').select('id, user_id, full_name, email, role').eq('firm_id', firm.id),
+      loadReportTemplates(firm.id),
     ])
 
+    setReportTemplates(templates)
     setProjects(projs ?? [])
     setMembers(mems ?? [])
     setLoading(false)
@@ -341,6 +345,8 @@ function AdminPageInner() {
       name: editForm.name?.trim(), project_number: editForm.project_number?.trim(),
       address: editForm.address?.trim(), client_name: editForm.client_name?.trim(),
       status: editForm.status,
+      // Only reports generated from now on use it; existing reports keep the template they were built with.
+      ...(reportTemplates.length > 0 ? { report_template_id: editForm.report_template_id || null } : {}),
     }).eq('id', selectedProject.id).select().single()
     if (updated) { setSelectedProject(updated as Project); setProjects(curr => curr.map(p => p.id === updated.id ? updated as Project : p)) }
     setEditingProject(false)
@@ -1192,6 +1198,22 @@ function AdminPageInner() {
                           status:  v => setEditForm(p => ({ ...p, status: v })),
                         }
                       )}
+                      {reportTemplates.length > 1 && (
+                        <div style={{ marginTop: 14 }}>
+                          <FieldLabel>Report Template</FieldLabel>
+                          <FSel
+                            value={editForm.report_template_id ?? ''}
+                            onChange={v => setEditForm(p => ({ ...p, report_template_id: v || null }))}
+                            options={[
+                              { value: '', label: defaultTemplateLabel(reportTemplates) },
+                              ...reportTemplates.map(t => ({ value: t.id, label: t.name })),
+                            ]}
+                          />
+                          <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 6, lineHeight: 1.5 }}>
+                            Applies to reports generated from now on. Reports already generated keep their current template.
+                          </div>
+                        </div>
+                      )}
                       <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
                         <Btn variant="outline" onClick={() => setEditingProject(false)} style={{ flex: 1 }}>Cancel</Btn>
                         <Btn variant="primary" onClick={saveEdit} disabled={saving} style={{ flex: 1 }}>
@@ -1215,6 +1237,11 @@ function AdminPageInner() {
                         {selectedProject.client_name && (
                           <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)', marginTop: 4 }}>
                             {selectedProject.client_name}
+                          </div>
+                        )}
+                        {reportTemplates.length > 1 && (
+                          <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 4 }}>
+                            Template: {reportTemplates.find(t => t.id === selectedProject.report_template_id)?.name ?? defaultTemplateLabel(reportTemplates)}
                           </div>
                         )}
                       </div>
