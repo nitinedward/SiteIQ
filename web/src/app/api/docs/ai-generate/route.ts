@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
-import { writeWithAttachments } from '@/lib/attachmentSections'
+import { writeWithRebuiltAttachments } from '@/lib/rebuildAttachments'
 import { noteLabel, noteDictation, noteBulletLine } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 
@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[ai-generate] Starting for:', inspectionId)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin
 
     const [inspRes, obsRes] = await Promise.all([
       supabase
@@ -225,12 +226,12 @@ Return:
         projectId: inspection.project_id,
       })
       await pinReportTemplate(inspectionId, pinnedTemplateId, templateId)
-      carried = await writeWithAttachments(inspectionId, buffer)
+      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, appUrl)
       console.log('AI document generated using firm template')
     } else {
       console.log('No firm_id — generating AI doc from scratch')
       const buffer = await generateServerReport(inspection, observations, aiText)
-      carried = await writeWithAttachments(inspectionId, buffer)
+      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, appUrl)
     }
 
     return NextResponse.json({ success: true, preview: aiText.slice(0, 200), carried })

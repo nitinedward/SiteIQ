@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { saveDoc } from '@/lib/docStorage'
-import { writeWithAttachments } from '@/lib/attachmentSections'
+import { writeWithRebuiltAttachments } from '@/lib/rebuildAttachments'
 import { noteBulletLine, noteDictation } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 
@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
     // edits made in OnlyOffice. `force` is the "use the plain notes text"
     // action: the user has asked for the written sections to go back to the
     // raw observation transcripts, in place of the AI's prose. Inserted
-    // photos and markups survive it — see writeWithAttachments below.
+    // photos and markups survive it — see writeWithRebuiltAttachments below.
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin
     const { error: existErr } = await supabase.storage
       .from('reports')
       .createSignedUrl(`${inspectionId}.docx`, 10)
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
       // A forced rewrite replaces a document that may already hold inserted
       // photos and markups; a first generation has nothing to carry.
       carried = force
-        ? await writeWithAttachments(inspectionId, buffer)
+        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, appUrl)
         : (await saveDoc(inspectionId, buffer), [])
       console.log('Document generated from firm template')
     } else {
@@ -148,7 +149,7 @@ export async function POST(request: NextRequest) {
 
       const buffer = await generateServerReport(inspection, observations, undefined, photoAttachments)
       carried = force
-        ? await writeWithAttachments(inspectionId, buffer)
+        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, appUrl)
         : (await saveDoc(inspectionId, buffer), [])
     }
 
