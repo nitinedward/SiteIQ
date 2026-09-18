@@ -14,6 +14,9 @@ import {
 } from '@/lib/attachmentSections'
 
 const REL_IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
+// External links need TargetMode="External" on the relationship, which is
+// what makes a picture clickable in Word and in the PDF converted from it.
+const REL_HYPERLINK = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink'
 
 type PhotoInput   = { url: string; zoneLabel: string }
 type DrawingInput = {
@@ -35,10 +38,10 @@ function getMaxRId(relsXml: string): number {
 
 function addRelEntries(
   relsXml: string,
-  entries: { id: string; type: string; target: string }[]
+  entries: { id: string; type: string; target: string; external?: boolean }[]
 ): string {
   const lines = entries.map(e =>
-    `  <Relationship Id="${e.id}" Type="${e.type}" Target="${e.target}"/>`
+    `  <Relationship Id="${e.id}" Type="${e.type}" Target="${xmlEscape(e.target)}"${e.external ? ' TargetMode="External"' : ''}/>`
   ).join('\n')
   return relsXml.replace('</Relationships>', `${lines}\n</Relationships>`)
 }
@@ -50,17 +53,24 @@ function buildDrawingImageXml(rId: string, docPrId: number): string {
   return buildInlineImage(rId, docPrId, w, h)
 }
 
-/** Inline image XML — no surrounding <w:p>, just the <w:drawing> element. */
-function buildInlineImage(rId: string, docPrId: number, cx: number, cy: number): string {
+/** Makes a picture clickable — the same click target in Word and in a PDF
+ *  converted from it. `linkRId` is a relationship of hyperlink type pointing
+ *  at an external address. */
+const HLINK = (linkRId: string) =>
+  `<a:hlinkClick xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" r:id="${linkRId}"/>`
+
+/** Inline image XML — no surrounding <w:p>, just the <w:drawing> element.
+ *  With `linkRId`, clicking the picture opens that address. */
+function buildInlineImage(rId: string, docPrId: number, cx: number, cy: number, linkRId?: string | null): string {
   return (
     `<w:drawing>` +
     `<wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0">` +
     `<wp:extent cx="${cx}" cy="${cy}"/>` +
-    `<wp:docPr id="${docPrId}" name="img${docPrId}"/>` +
+    `<wp:docPr id="${docPrId}" name="img${docPrId}">${linkRId ? HLINK(linkRId) : ''}</wp:docPr>` +
     `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">` +
     `<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
     `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
-    `<pic:nvPicPr><pic:cNvPr id="${docPrId}" name="img${docPrId}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    `<pic:nvPicPr><pic:cNvPr id="${docPrId}" name="img${docPrId}">${linkRId ? HLINK(linkRId) : ''}</pic:cNvPr><pic:cNvPicPr/></pic:nvPicPr>` +
     `<pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
     `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
     `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
@@ -81,18 +91,19 @@ const NO_BORDERS = (
 /** Build a 3-column table row with 2 photos side by side and a gap column. */
 function buildPhotoTableRow(
   leftRId: string, leftDocPr: number,
-  rightRId: string | null, rightDocPr: number
+  rightRId: string | null, rightDocPr: number,
+  leftLinkRId?: string | null, rightLinkRId?: string | null
 ): string {
   const photoW = 2700000 // ~7.5cm
   const photoH = 2016000 // ~5.6cm (4:3 landscape)
 
-  const buildCell = (rId: string | null, docPr: number, colW: number) => {
+  const buildCell = (rId: string | null, docPr: number, colW: number, linkRId?: string | null) => {
     if (!rId) {
       return `<w:tc><w:tcPr><w:tcW w:w="${colW}" w:type="dxa"/>${NO_BORDERS}</w:tcPr><w:p/></w:tc>`
     }
     return (
       `<w:tc><w:tcPr><w:tcW w:w="${colW}" w:type="dxa"/>${NO_BORDERS}</w:tcPr>` +
-      `<w:p><w:r>${buildInlineImage(rId, docPr, photoW, photoH)}</w:r></w:p>` +
+      `<w:p><w:r>${buildInlineImage(rId, docPr, photoW, photoH, linkRId)}</w:r></w:p>` +
       `</w:tc>`
     )
   }
@@ -114,9 +125,9 @@ function buildPhotoTableRow(
     `<w:gridCol w:w="4480"/><w:gridCol w:w="200"/><w:gridCol w:w="4480"/>` +
     `</w:tblGrid>` +
     `<w:tr>` +
-    buildCell(leftRId, leftDocPr, 4480) +
+    buildCell(leftRId, leftDocPr, 4480, leftLinkRId) +
     `<w:tc><w:tcPr><w:tcW w:w="200" w:type="dxa"/>${NO_BORDERS}</w:tcPr><w:p/></w:tc>` +
-    buildCell(rightRId, rightDocPr, 4480) +
+    buildCell(rightRId, rightDocPr, 4480, rightLinkRId) +
     `</w:tr></w:tbl>` +
     `<w:p><w:pPr><w:spacing w:after="120"/></w:pPr></w:p>`
   )
@@ -276,7 +287,7 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
       if (ctChanged) zip.updateFile('[Content_Types].xml', Buffer.from(ctXml, 'utf-8'))
     }
 
-    const newRels: { id: string; type: string; target: string }[] = []
+    const newRels: { id: string; type: string; target: string; external?: boolean }[] = []
     // Built separately so each can be placed in its own bookmark.
     let drawingsXml = ''
     let photosXml   = ''
@@ -332,6 +343,7 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
 
           // Fetch and embed left photo
           let leftRId = ''
+          let leftLinkRId: string | null = null
           try {
             console.log('[append] Fetching photo:', leftPhoto.url)
             const res = await fetch(leftPhoto.url)
@@ -344,6 +356,10 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
               leftRId = `rId${nextRId}`
               newRels.push({ id: leftRId, type: REL_IMAGE, target: `media/${name}` })
               nextRId++
+              // Clicking the photo opens the full-size original.
+              leftLinkRId = `rId${nextRId}`
+              newRels.push({ id: leftLinkRId, type: REL_HYPERLINK, target: leftPhoto.url, external: true })
+              nextRId++
             }
           } catch (err) {
             console.error(`[append] Failed to fetch photo: ${leftPhoto.url}`, err)
@@ -351,6 +367,7 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
 
           // Fetch and embed right photo
           let rightRId: string | null = null
+          let rightLinkRId: string | null = null
           if (rightPhoto) {
             try {
               const res = await fetch(rightPhoto.url)
@@ -362,6 +379,9 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
                 rightRId = `rId${nextRId}`
                 newRels.push({ id: rightRId, type: REL_IMAGE, target: `media/${name}` })
                 nextRId++
+                rightLinkRId = `rId${nextRId}`
+                newRels.push({ id: rightLinkRId, type: REL_HYPERLINK, target: rightPhoto.url, external: true })
+                nextRId++
               }
             } catch (err) {
               console.error(`[append] Failed to fetch photo: ${rightPhoto.url}`, err)
@@ -369,7 +389,7 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
           }
 
           if (leftRId || rightRId) {
-            photosXml += buildPhotoTableRow(leftRId, docPrId++, rightRId, docPrId++)
+            photosXml += buildPhotoTableRow(leftRId, docPrId++, rightRId, docPrId++, leftLinkRId, rightLinkRId)
           }
 
           photoCount += rightPhoto ? 2 : 1
