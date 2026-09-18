@@ -203,6 +203,7 @@ Return:
         engineer_user:   engineer.user,
         client_email:    client?.client_email ?? '',
         project_name:    projects.name              ?? '',
+        job_no:          projects.project_number    ?? '',
         report_no:       inspection.report_no       ?? '',
         site_contact:    inspection.site_contact    ?? '',
         contact_phone:   inspection.contact_phone   ?? '',

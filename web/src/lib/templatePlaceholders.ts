@@ -27,7 +27,8 @@ export const PLACEHOLDERS: PlaceholderDef[] = [
 
   // Filled from the project, the inspection and the engineer.
   { name: 'project_name', kind: 'data', description: 'Project name' },
-  { name: 'report_no', kind: 'data', description: 'Report number, e.g. 007' },
+  { name: 'job_no', kind: 'data', description: 'Job number — the project’s number, e.g. PRJ-2024-001' },
+  { name: 'report_no', kind: 'data', description: 'Report number, counted per project, e.g. 007' },
   { name: 'date', kind: 'data', description: 'Date of the visit' },
   { name: 'time', kind: 'data', description: 'Time the inspection was started, e.g. 14:00' },
   { name: 'engineer_name', kind: 'data', description: 'The engineer’s full name' },

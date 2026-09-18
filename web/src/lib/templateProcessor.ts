@@ -23,6 +23,8 @@ export type TemplateData = {
   /** The client's address, from the project. Blank when none is set. */
   client_email: string
   project_name: string
+  /** The project's own number — the job, not the visit. */
+  job_no: string
   report_no: string
   site_contact: string
   contact_phone: string
@@ -296,6 +298,7 @@ export async function fillTemplate(
     '{{engineer_user}}':   data.engineer_user   || '',
     '{{client_email}}':    data.client_email    || '',
     '{{project_name}}':    data.project_name    || '',
+    '{{job_no}}':          data.job_no          || '',
     '{{report_no}}':       data.report_no       || '',
     '{{site_contact}}':    data.site_contact    || '',
     '{{contact_phone}}':   data.contact_phone   || '',
