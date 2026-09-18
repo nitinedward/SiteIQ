@@ -117,6 +117,27 @@ function mergeRunsContainingPlaceholders(xml: string): string {
 }
 
 /**
+ * Strip Word content controls, keeping everything inside them.
+ *
+ * The template is built from content controls — a date picker, "click or tap"
+ * boxes, locked labels. Filling a placeholder only changes the text inside
+ * its control, so the finished report still showed shaded boxes, and the
+ * locked ones (w:lock) couldn't be edited in the editor at all. The controls
+ * are wrappers, so dropping the wrapper tags leaves the paragraphs, rows and
+ * runs they held exactly where they were.
+ */
+function flattenContentControls(xml: string): string {
+  return xml
+    .replace(/<w:sdtPr>[\s\S]*?<\/w:sdtPr>/g, '')
+    .replace(/<w:sdtEndPr>[\s\S]*?<\/w:sdtEndPr>/g, '')
+    .replace(/<w:sdtPr\/>|<w:sdtEndPr\/>/g, '')
+    .replace(/<\/?w:sdtContent>/g, '')
+    .replace(/<\/?w:sdt>/g, '')
+    // Placeholder styling, which otherwise leaves filled text looking greyed out.
+    .replace(/<w:rStyle w:val="PlaceholderText"\/>/g, '')
+}
+
+/**
  * Replace the entire <w:p> block that contains `placeholder` with `replacementXml`.
  * Uses a tempered greedy token to avoid crossing paragraph boundaries.
  * Returns the original xml unchanged if no match is found.
@@ -324,10 +345,14 @@ export async function fillTemplate(
 
     // Strip any remaining green placeholder colour (#00B050) — applies to inline
     // fields whose <w:rPr> wasn't replaced as part of a paragraph-level swap.
-    const cleanedXml = xml.replace(/<w:color w:val="00B050"\/>/g, '<w:color w:val="000000"/>')
-    if (cleanedXml !== xml || changed) {
-      zip.updateFile('word/document.xml', Buffer.from(cleanedXml, 'utf-8'))
-    }
+    // The report is a document to edit, not a form, so the template's content
+    // controls come off with it — otherwise the written sections stay boxed and
+    // the locked ones can't be edited at all.
+    const cleanedXml = flattenContentControls(
+      xml.replace(/<w:color w:val="00B050"\/>/g, '<w:color w:val="000000"/>')
+    )
+    zip.updateFile('word/document.xml', Buffer.from(cleanedXml, 'utf-8'))
+    if (!changed) console.log('[templateProcessor] No placeholders replaced in document.xml')
   }
 
   // Process headers/footers: inline fields only
@@ -345,8 +370,9 @@ export async function fillTemplate(
       }
     }
 
-    if (changed) {
-      zip.updateFile(fileName, Buffer.from(xml, 'utf-8'))
+    const flattened = flattenContentControls(xml)
+    if (changed || flattened !== xml) {
+      zip.updateFile(fileName, Buffer.from(flattened, 'utf-8'))
       console.log(`[templateProcessor] Replaced inline fields in ${fileName}`)
     }
   }
