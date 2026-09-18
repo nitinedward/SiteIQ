@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import { Shell, Badge, Btn, Spinner, Card, NewProjectModal } from '@/components/Shell'
 import { reportDisplayName } from '@/lib/reportFileName'
 import { loadReportTemplates, defaultTemplateLabel, type ReportTemplate } from '@/lib/reportTemplates'
+import { parseRecipients, type Recipient } from '@/lib/reportRecipients'
 import { SiteNoteModal } from '@/components/SiteNoteModal'
 import {
   SiteNote, NoteStatus, loadProjectSiteNotes, setSiteNoteStatus, formatNoteDate, noteReportRef,
@@ -19,7 +20,7 @@ const supabase = createClient(
   ).replace(/^﻿/, '').trim()
 )
 
-type Project = { id: string; name: string; project_number: string; address: string; client_name: string; client_email?: string | null; status: string; report_template_id?: string | null }
+type Project = { id: string; name: string; project_number: string; address: string; client_name: string; client_email?: string | null; report_recipients?: Recipient[] | string | null; status: string; report_template_id?: string | null }
 type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; file_name: string; preview_url?: string | null; created_at: string; sort_order?: number | null }
 type Member  = { id: string; user_id: string; full_name: string; email: string; role: string }
 
@@ -192,6 +193,8 @@ function AdminPageInner() {
 
   const [editingProject, setEditingProject] = useState(false)
   const [editForm, setEditForm]             = useState<Partial<Project>>({})
+  // Who this project's reports are issued to — filled into every report.
+  const [recipients, setRecipients]         = useState<Recipient[]>([])
   const [reportTemplates, setReportTemplates] = useState<ReportTemplate[]>([])
 
   const [saving, setSaving]         = useState(false)
@@ -336,7 +339,12 @@ function AdminPageInner() {
     setSavingAssignment(false)
   }
 
-  const startEdit = () => { if (!selectedProject) return; setEditForm({ ...selectedProject }); setEditingProject(true) }
+  const startEdit = () => {
+    if (!selectedProject) return
+    setEditForm({ ...selectedProject })
+    setRecipients(parseRecipients(selectedProject.report_recipients))
+    setEditingProject(true)
+  }
 
   const saveEdit = async () => {
     if (!selectedProject || !editForm.name?.trim()) return
@@ -348,6 +356,10 @@ function AdminPageInner() {
       // editing a project keeps working before the migration is run.
       ...('client_email' in selectedProject ? { client_email: editForm.client_email?.trim() || null } : {}),
       status: editForm.status,
+      // Likewise, only sent once sql/project_report_recipients.sql has run.
+      ...('report_recipients' in selectedProject
+        ? { report_recipients: recipients.filter(r => r.name.trim() || r.email.trim()).map(r => ({ name: r.name.trim(), email: r.email.trim() })) }
+        : {}),
       // Only reports generated from now on use it; existing reports keep the template they were built with.
       ...(reportTemplates.length > 0 ? { report_template_id: editForm.report_template_id || null } : {}),
     }).eq('id', selectedProject.id).select().single()
@@ -1249,6 +1261,23 @@ function AdminPageInner() {
                           status:  v => setEditForm(p => ({ ...p, status: v })),
                         }
                       )}
+                      <div style={{ marginTop: 14 }}>
+                        <FieldLabel>Issued To</FieldLabel>
+                        <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginBottom: 8, lineHeight: 1.5 }}>
+                          Everyone this project’s reports are issued to. Filled into every report from now on, so nobody retypes them.
+                        </div>
+                        {recipients.map((r, i) => (
+                          <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr) auto', gap: 8, marginBottom: 8 }}>
+                            <FInp value={r.name} onChange={v => setRecipients(curr => curr.map((x, j) => j === i ? { ...x, name: v } : x))} placeholder="Name" />
+                            <FInp value={r.email} onChange={v => setRecipients(curr => curr.map((x, j) => j === i ? { ...x, email: v } : x))} placeholder="Email" />
+                            <Btn variant="outline" small onClick={() => setRecipients(curr => curr.filter((_, j) => j !== i))}>Remove</Btn>
+                          </div>
+                        ))}
+                        <Btn variant="outline" small onClick={() => setRecipients(curr => [...curr, { name: '', email: '' }])}>
+                          {recipients.length === 0 ? 'Add a recipient' : 'Add another'}
+                        </Btn>
+                      </div>
+
                       {reportTemplates.length > 1 && (
                         <div style={{ marginTop: 14 }}>
                           <FieldLabel>Report Template</FieldLabel>

@@ -5,6 +5,7 @@ import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildPar
 import { writeWithRebuiltAttachments } from '@/lib/rebuildAttachments'
 import { noteLabel, noteDictation, noteBulletLine } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
+import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,13 +64,20 @@ export async function POST(request: NextRequest) {
     const firmId       = projects.firm_id as string | undefined
 
     const engineer = await loadReportEngineer(supabase, inspection as any, firmId)
-    // Read on its own so a database without the client_email column yet
-    // (see sql/project_client_email.sql) still generates reports.
+    // Read on their own so a database without these columns yet (see
+    // sql/project_client_email.sql and sql/project_report_recipients.sql)
+    // still generates reports.
     const { data: client } = await supabase
       .from('projects')
       .select('client_email')
       .eq('id', inspection.project_id)
       .single()
+    const { data: recipientRow } = await supabase
+      .from('projects')
+      .select('report_recipients')
+      .eq('id', inspection.project_id)
+      .single()
+    const recipients = parseRecipients((recipientRow as any)?.report_recipients)
 
     // The site notes decide what the report lists: one bullet per note, in
     // order, under the note's own label. The AI only rewrites each note's
@@ -209,8 +217,10 @@ Return:
         contact_phone:   inspection.contact_phone   ?? '',
         weather:         inspection.weather         ?? '',
         drawings:        (inspection as any).drawing_ref ?? '',
-        emailed_to_1:    projects.client_name       ?? '',
-        emailed_to_2:    '',
+        emailed_to_1:    recipients[0]?.name || (projects.client_name ?? ''),
+        emailed_to_2:    recipientNames(recipients.slice(1)),
+        issued_to:       recipientNames(recipients) || (projects.client_name ?? ''),
+        issued_to_emails: recipientEmails(recipients),
         purpose:         buildParagraphXml(purposeText),
         findings:        buildBulletXml(findingLines.length > 0 ? findingLines : ['No specific findings recorded.']),
         recommendations: buildBulletXml(contractorLines),

@@ -32,6 +32,10 @@ export type TemplateData = {
   drawings: string
   emailed_to_1: string
   emailed_to_2: string
+  /** Everyone the project issues its reports to, by name. */
+  issued_to: string
+  /** Their addresses, in the same order. */
+  issued_to_emails: string
   /** Word XML produced by buildParagraphXml() */
   purpose: string
   /** Word XML produced by buildBulletXml() */
@@ -306,6 +310,8 @@ export async function fillTemplate(
     '{{drawings}}':        data.drawings        || '',
     '{{emailed_to_1}}':    data.emailed_to_1    || '',
     '{{emailed_to_2}}':    data.emailed_to_2    || '',
+    '{{issued_to}}':       data.issued_to       || '',
+    '{{issued_to_emails}}': data.issued_to_emails || '',
     '{{date}}':            dateStr,
     '{{time}}':            data.time            || '',
   }
