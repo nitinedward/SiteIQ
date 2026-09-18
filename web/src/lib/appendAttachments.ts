@@ -79,6 +79,17 @@ function buildInlineImage(rId: string, docPrId: number, cx: number, cy: number, 
   )
 }
 
+/** Small underlined caption beneath a photo, linking to the full-size image. */
+function photoLinkCaption(linkRId: string): string {
+  return (
+    `<w:p><w:pPr><w:spacing w:before="20" w:after="60"/></w:pPr>` +
+    `<w:hyperlink r:id="${linkRId}">` +
+    `<w:r><w:rPr><w:color w:val="2C5282"/><w:u w:val="single"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>` +
+    `<w:t>View full-size photo</w:t></w:r>` +
+    `</w:hyperlink></w:p>`
+  )
+}
+
 const NO_BORDERS = (
   `<w:tcBorders>` +
   `<w:top w:val="none" w:sz="0" w:space="0" w:color="auto"/>` +
@@ -104,6 +115,10 @@ function buildPhotoTableRow(
     return (
       `<w:tc><w:tcPr><w:tcW w:w="${colW}" w:type="dxa"/>${NO_BORDERS}</w:tcPr>` +
       `<w:p><w:r>${buildInlineImage(rId, docPr, photoW, photoH, linkRId)}</w:r></w:p>` +
+      // The picture's own link is dropped when OnlyOffice converts to PDF, so
+      // the caption carries it: a text hyperlink survives the conversion and
+      // is the only clickable way to the full-size photo in the finished PDF.
+      (linkRId ? photoLinkCaption(linkRId) : '') +
       `</w:tc>`
     )
   }
