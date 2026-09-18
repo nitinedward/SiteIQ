@@ -5,18 +5,21 @@ import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { setPendingDrawingSelection } from '../lib/pendingSelection';
+import { latestRevisions, revisionsOf, revisionCount } from '../lib/drawingRevisions';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../lib/theme';
 
 const T = theme.colors;
 const R = theme.radius;
 
-type Drawing = { id: string; title: string; number: string; revision: string };
+type Drawing = { id: string; title: string; number: string; revision: string; created_at: string };
 
 export default function SelectDrawingsScreen() {
   const { project_id, selected } = useLocalSearchParams();
   const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [loading, setLoading]   = useState(true);
+  // Which sheet's older revisions are open, by drawing number.
+  const [historyFor, setHistoryFor] = useState<string | null>(null);
   const [picked, setPicked]     = useState<string[]>(
     String(selected ?? '').split(',').filter(Boolean)
   );
@@ -25,7 +28,7 @@ export default function SelectDrawingsScreen() {
     setLoading(true);
     const { data } = await supabase
       .from('drawings')
-      .select('id,title,number,revision')
+      .select('id,title,number,revision,created_at')
       .eq('project_id', String(project_id))
       .order('number', { ascending: true });
     setDrawings((data as Drawing[]) ?? []);
@@ -63,19 +66,53 @@ export default function SelectDrawingsScreen() {
             <View style={S.emptyCard}>
               <Text style={S.emptyText}>No drawings — admin uploads via web portal</Text>
             </View>
-          ) : drawings.map(d => {
-            const sel = picked.includes(d.id);
+          ) : latestRevisions(drawings).map(d => {
+            const count   = revisionCount(drawings, d);
+            const older   = revisionsOf(drawings, d).slice(1);
+            const isOpen  = historyFor === (d.number ?? '').trim();
+            const rows    = isOpen ? [d, ...older] : [d];
+
             return (
-              <TouchableOpacity key={d.id} style={[S.row, sel && S.rowActive]}
-                onPress={() => toggle(d.id)} activeOpacity={0.7}>
-                <View style={[S.checkbox, sel && S.checkboxActive]}>
-                  {sel && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
-                </View>
-                <View style={S.rowInfo}>
-                  <Text style={S.rowTitle} numberOfLines={1}>{d.title}</Text>
-                  <Text style={S.rowMeta}>{d.number ? `${d.number} · ` : ''}Rev {d.revision}</Text>
-                </View>
-              </TouchableOpacity>
+              <View key={d.id}>
+                {rows.map((rev, i) => {
+                  const sel       = picked.includes(rev.id);
+                  const superseded = i > 0;
+                  return (
+                    <TouchableOpacity
+                      key={rev.id}
+                      style={[S.row, sel && S.rowActive, superseded && S.rowOlder]}
+                      onPress={() => toggle(rev.id)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[S.checkbox, sel && S.checkboxActive]}>
+                        {sel && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
+                      </View>
+                      <View style={S.rowInfo}>
+                        <Text style={S.rowTitle} numberOfLines={1}>{rev.title}</Text>
+                        <Text style={S.rowMeta}>
+                          {rev.number ? `${rev.number} · ` : ''}Rev {rev.revision}
+                          {superseded ? ' · superseded' : ''}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {count > 1 && (
+                  <TouchableOpacity
+                    style={S.revToggle}
+                    onPress={() => setHistoryFor(isOpen ? null : (d.number ?? '').trim())}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={S.revToggleText}>
+                      {isOpen
+                        ? 'Hide older revisions'
+                        : `Show ${count - 1} older revision${count - 1 === 1 ? '' : 's'}`}
+                    </Text>
+                    <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={14} color={T.indigo} />
+                  </TouchableOpacity>
+                )}
+              </View>
             );
           })}
           <View style={{ height: 90 }} />
@@ -107,6 +144,9 @@ const S = StyleSheet.create({
     borderWidth: 1.5, borderColor: T.line,
   },
   rowActive:    { borderColor: T.indigo, backgroundColor: T.indigoSoft },
+  rowOlder:     { marginLeft: 16, borderStyle: 'dashed' },
+  revToggle:    { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingLeft: 14, marginBottom: 8 },
+  revToggleText:{ fontSize: 12, fontWeight: '600', color: T.indigo },
   checkbox:     { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: T.line, alignItems: 'center', justifyContent: 'center', backgroundColor: T.surface },
   checkboxActive:{ backgroundColor: T.indigo, borderColor: T.indigo },
   rowInfo:      { flex: 1 },

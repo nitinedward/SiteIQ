@@ -7,7 +7,8 @@ import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { theme } from '../../lib/theme';
+import { theme } from '../../lib/theme'
+import { latestRevisions, revisionCount } from '../../lib/drawingRevisions';
 import { FooterNav } from '../../components/FooterNav';
 
 const T = theme.colors;
@@ -46,6 +47,9 @@ export default function ProjectDetailScreen() {
   const [error, setError]             = useState('');
   const [photoCount, setPhotoCount]   = useState(0);
   const [showAllDrawings, setShowAllDrawings] = useState(false);
+  // Older revisions of a sheet stay out of the list until asked for, as on
+  // the web portal — the current sheet is the one worth opening on site.
+  const [showSuperseded, setShowSuperseded] = useState(false);
   const [showAllReports, setShowAllReports] = useState(false);
 
   const fetchData = async () => {
@@ -112,6 +116,12 @@ export default function ProjectDetailScreen() {
 
   const status = statusConfig[project.status];
 
+  // Sheets re-issued at a later revision: only the current one is listed,
+  // with the superseded ones a tap away.
+  const currentDrawings  = latestRevisions(drawings);
+  const visibleDrawings  = showSuperseded ? drawings : currentDrawings;
+  const supersededCount  = drawings.length - currentDrawings.length;
+
   return (
     <View style={S.container}>
       {/* Header */}
@@ -158,7 +168,7 @@ export default function ProjectDetailScreen() {
             <Text style={S.statLabel}>Photos</Text>
           </View>
           <View style={S.statTile}>
-            <Text style={S.statNum}>{drawings.length}</Text>
+            <Text style={S.statNum}>{latestRevisions(drawings).length}</Text>
             <Text style={S.statLabel}>Drawings</Text>
           </View>
         </View>
@@ -167,7 +177,7 @@ export default function ProjectDetailScreen() {
         <View style={S.section}>
           <View style={S.sectionHeaderRow}>
             <Text style={S.sectionTitleRow}>Drawings</Text>
-            {drawings.length > DRAWING_PREVIEW_COUNT && (
+            {visibleDrawings.length > DRAWING_PREVIEW_COUNT && (
               <TouchableOpacity onPress={() => setShowAllDrawings(v => !v)}>
                 <Text style={S.viewAllText}>{showAllDrawings ? 'Show less' : 'View all'}</Text>
               </TouchableOpacity>
@@ -177,7 +187,7 @@ export default function ProjectDetailScreen() {
             <View style={S.emptyCard}>
               <Text style={S.emptyText}>No drawings — admin uploads via web portal</Text>
             </View>
-          ) : (showAllDrawings ? drawings : drawings.slice(0, DRAWING_PREVIEW_COUNT)).map(d => (
+          ) : (showAllDrawings ? visibleDrawings : visibleDrawings.slice(0, DRAWING_PREVIEW_COUNT)).map(d => (
             <TouchableOpacity key={d.id} style={S.row}
               onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, number: d.number, revision: d.revision, file_url: d.file_url, preview_url: d.preview_url ?? '', project_id: project.id, view_only: 'true' } })}
               activeOpacity={0.7}>
@@ -186,11 +196,27 @@ export default function ProjectDetailScreen() {
               </View>
               <View style={S.rowInfo}>
                 <Text style={S.rowTitle} numberOfLines={1}>{d.title}</Text>
-                <Text style={S.rowMeta}>Rev {d.revision}</Text>
+                <Text style={S.rowMeta}>
+                  Rev {d.revision}
+                  {!showSuperseded && revisionCount(drawings, d) > 1
+                    ? ` · ${revisionCount(drawings, d)} revisions`
+                    : ''}
+                  {showSuperseded && !currentDrawings.some(c => c.id === d.id) ? ' · superseded' : ''}
+                </Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={T.mid} />
             </TouchableOpacity>
           ))}
+
+          {supersededCount > 0 && (
+            <TouchableOpacity onPress={() => setShowSuperseded(v => !v)} activeOpacity={0.7} style={{ paddingVertical: 10 }}>
+              <Text style={S.viewAllText}>
+                {showSuperseded
+                  ? 'Hide older revisions'
+                  : `Show ${supersededCount} older revision${supersededCount === 1 ? '' : 's'}`}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* PAST REPORTS */}

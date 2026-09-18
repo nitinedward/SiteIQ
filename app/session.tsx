@@ -10,7 +10,8 @@ import * as SecureStore from 'expo-secure-store';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
-import { theme } from '../lib/theme';
+import { theme } from '../lib/theme'
+import { latestRevisions } from '../lib/drawingRevisions';
 import { transcribeAudio } from '../lib/transcribe';
 import { consumePendingDrawingSelection } from '../lib/pendingSelection';
 
@@ -32,7 +33,7 @@ const WEATHER_OPTIONS = [
 ];
 
 type Step = 'details' | 'capture';
-type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; preview_url: string | null };
+type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; preview_url: string | null; created_at: string };
 type GeneralObservation = { id: string; notes: string | null; transcript: string | null; report_text?: string | null; severity: string | null; observed_at: string; zone_label: string | null };
 
 function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; metering: number }) {
@@ -130,7 +131,7 @@ export default function SessionScreen() {
   };
 
   const fetchDrawings = async () => {
-    const { data, error } = await supabase.from('drawings').select('id,title,number,revision,file_url,preview_url').eq('project_id', String(project_id)).order('number', { ascending: true });
+    const { data, error } = await supabase.from('drawings').select('id,title,number,revision,file_url,preview_url,created_at').eq('project_id', String(project_id)).order('number', { ascending: true });
     console.log('[fetchDrawings] project_id:', project_id, 'rows:', data?.length ?? 0, 'error:', error);
     setAllDrawings(data as Drawing[] ?? []);
   };
@@ -404,7 +405,9 @@ export default function SessionScreen() {
           <View style={S.sectionRow}>
             <Text style={[S.sectionTitle, { marginBottom: 0 }]}>Drawings ({inspDrawings.length})</Text>
             <TouchableOpacity onPress={() => {
-              const unsel = allDrawings.filter(d => !selectedDrawings.includes(d.id));
+              // Only current sheets are offered; a superseded revision is
+              // reachable from "Select drawings", deliberately.
+              const unsel = latestRevisions(allDrawings).filter(d => !selectedDrawings.includes(d.id));
               if (!unsel.length) { Alert.alert('All drawings added', 'All project drawings are already in this inspection.'); return; }
               Alert.alert('Add Drawing', 'Select an additional drawing:', [...unsel.map(d => ({ text: `${d.number ? d.number + ' -' : ''}${d.title}`, onPress: () => setSelectedDrawings(curr => [...curr, d.id]) })), { text: 'Cancel', style: 'cancel' as const }]);
             }}>
@@ -432,7 +435,11 @@ export default function SessionScreen() {
                 <View style={S.drawBadge}><Text style={S.drawBadgeText}>{drawing.number || '-'}</Text></View>
                 <View style={{ flex: 1 }}>
                   <Text style={S.drawTitle}>{drawing.title}</Text>
-                  <Text style={S.drawMeta}>Rev {drawing.revision} - Tap to inspect</Text>
+                  <Text style={S.drawMeta}>
+                    Rev {drawing.revision}
+                    {!latestRevisions(allDrawings).some(d => d.id === drawing.id) ? ' · superseded' : ''}
+                    {' - Tap to inspect'}
+                  </Text>
                 </View>
                 <Text style={S.arrow}>{'→'}</Text>
               </TouchableOpacity>
