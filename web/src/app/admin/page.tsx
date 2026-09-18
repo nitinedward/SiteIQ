@@ -467,11 +467,10 @@ function AdminPageInner() {
     await reloadDrawings()
   }
 
-  /** Deleting a project means deleting what points at it first: the database
-   *  doesn't cascade, so a project with reports or drawings simply refused to
-   *  delete — and the error was thrown away, which looked like nothing
-   *  happening at all. Order matters: notes and zones before the reports they
-   *  belong to, everything before the project itself. */
+  /** Deleting a project deletes what points at it and the files those rows
+   *  point at — see api/projects/delete. The database doesn't cascade, so a
+   *  project with reports or drawings simply refused to delete, and the error
+   *  was thrown away, which looked like nothing happening at all. */
   const deleteProject = async (id: string) => {
     const [{ count: reportCount }, { count: drawingCount }, { count: noteCount }] = await Promise.all([
       supabase.from('inspections').select('id', { count: 'exact', head: true }).eq('project_id', id),
@@ -488,33 +487,27 @@ function AdminPageInner() {
     if (!confirm(
       `Delete this project?\n\n` +
       (attached.length
-        ? `This also deletes ${attached.join(', ')}, including their photos and markups.\n\n`
+        ? `This also deletes ${attached.join(', ')}, along with the stored report files, drawing files and photos.\n\n`
         : '') +
       `This cannot be undone.`
     )) return
 
     setSaving(true)
     try {
-      const { data: inspections } = await supabase.from('inspections').select('id').eq('project_id', id)
-      const inspectionIds = (inspections ?? []).map((i: any) => i.id)
-
-      const steps: { what: string; run: () => Promise<{ error: any }> }[] = [
-        { what: 'site notes', run: async () => await supabase.from('observations').delete().eq('project_id', id) },
-        { what: 'drawing markups', run: async () => await supabase.from('zones').delete().eq('project_id', id) },
-        ...(inspectionIds.length > 0 ? [
-          { what: 'site notes on its reports', run: async () => await supabase.from('observations').delete().in('inspection_id', inspectionIds) },
-          { what: 'markups on its reports', run: async () => await supabase.from('zones').delete().in('inspection_id', inspectionIds) },
-        ] : []),
-        { what: 'site reports', run: async () => await supabase.from('inspections').delete().eq('project_id', id) },
-        { what: 'drawings', run: async () => await supabase.from('drawings').delete().eq('project_id', id) },
-        { what: 'engineer assignments', run: async () => await supabase.from('project_members').delete().eq('project_id', id) },
-        { what: 'the project', run: async () => await supabase.from('projects').delete().eq('id', id) },
-      ]
-
-      for (const step of steps) {
-        const { error } = await step.run()
-        if (error) throw new Error(`Could not delete ${step.what}: ${error.message}`)
-      }
+      // Server-side: the stored reports, drawings and photos need the service
+      // key to remove, and a half-done delete has to be reported rather than
+      // left looking successful.
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/projects/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+        },
+        body: JSON.stringify({ projectId: id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not delete the project')
 
       setSelectedProject(null)
       loadData()
