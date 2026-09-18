@@ -30,7 +30,6 @@ export async function POST(request: NextRequest) {
     // action: the user has asked for the written sections to go back to the
     // raw observation transcripts, in place of the AI's prose. Inserted
     // photos and markups survive it — see writeWithRebuiltAttachments below.
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin
     const { error: existErr } = await supabase.storage
       .from('reports')
       .createSignedUrl(`${inspectionId}.docx`, 10)
@@ -122,7 +121,7 @@ export async function POST(request: NextRequest) {
       // A forced rewrite replaces a document that may already hold inserted
       // photos and markups; a first generation has nothing to carry.
       carried = force
-        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, appUrl)
+        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer)
         : (await saveDoc(inspectionId, buffer), [])
       console.log('Document generated from firm template')
     } else {
@@ -149,7 +148,7 @@ export async function POST(request: NextRequest) {
 
       const buffer = await generateServerReport(inspection, observations, undefined, photoAttachments)
       carried = force
-        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, appUrl)
+        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer)
         : (await saveDoc(inspectionId, buffer), [])
     }
 

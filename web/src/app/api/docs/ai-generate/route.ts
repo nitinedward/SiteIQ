@@ -39,7 +39,6 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[ai-generate] Starting for:', inspectionId)
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin
 
     const [inspRes, obsRes] = await Promise.all([
       supabase
@@ -226,12 +225,12 @@ Return:
         projectId: inspection.project_id,
       })
       await pinReportTemplate(inspectionId, pinnedTemplateId, templateId)
-      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, appUrl)
+      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer)
       console.log('AI document generated using firm template')
     } else {
       console.log('No firm_id — generating AI doc from scratch')
       const buffer = await generateServerReport(inspection, observations, aiText)
-      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, appUrl)
+      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer)
     }
 
     return NextResponse.json({ success: true, preview: aiText.slice(0, 200), carried })

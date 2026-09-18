@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { saveDoc } from './docStorage'
 import { carryAttachmentsForward } from './attachmentSections'
+import { appendAttachments } from './appendAttachments'
 
 /**
  * Rebuilding a regenerated report's photo and markup sections from the
@@ -93,7 +94,7 @@ async function loadDrawings(inspectionId: string, projectId: string): Promise<Re
 
 /**
  * Stores a regenerated document, then rebuilds its photo and markup
- * sections through /api/docs/append. Returns what was rebuilt, for the
+ * sections. Returns what was rebuilt, for the
  * caller to report back to the UI. Never throws: a report whose sections
  * can't be rebuilt keeps the document that was just written.
  */
@@ -101,7 +102,6 @@ export async function writeWithRebuiltAttachments(
   inspectionId: string,
   projectId: string,
   buffer: Buffer,
-  appUrl: string,
 ): Promise<string[]> {
   let photos: RebuiltPhoto[] = []
   let drawings: RebuiltDrawing[] = []
@@ -121,14 +121,11 @@ export async function writeWithRebuiltAttachments(
   await saveDoc(inspectionId, buffer)
 
   try {
-    const res = await fetch(`${appUrl}/api/docs/append`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ inspectionId, photos, drawings }),
-    })
-    if (!res.ok) throw new Error(`append returned ${res.status}`)
-    const data = await res.json()
-    console.log('[attachments] rebuilt —', data.photosAdded ?? photos.length, 'photos,', data.drawingsAdded ?? drawings.length, 'markups')
+    // In-process rather than a call back into /api/docs/append: a function
+    // calling its own deployment over HTTP answers to whatever protection
+    // sits in front of it, and a failure there costs the report its photos.
+    const result = await appendAttachments({ inspectionId, photos, drawings })
+    console.log('[attachments] rebuilt —', result.photosAdded, 'photos,', result.drawingsAdded, 'markups')
   } catch (err) {
     console.error('[attachments] rebuild failed, document written without them:', err)
     return []
