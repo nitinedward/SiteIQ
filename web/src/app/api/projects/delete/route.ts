@@ -116,6 +116,12 @@ export async function POST(request: NextRequest) {
         { what: 'markups on its reports', run: async () => await supabase.from('zones').delete().in('inspection_id', inspectionIds) },
       ] : []),
       { what: 'drawing markups', run: async () => await supabase.from('zones').delete().eq('project_id', projectId) },
+      // The `reports` table holds report content from before reports became
+      // Word documents. Its rows still block an inspection from being
+      // deleted, which is what made a project refuse to delete at all.
+      ...(inspectionIds.length > 0 ? [
+        { what: 'stored report content', run: async () => await supabase.from('reports').delete().in('inspection_id', inspectionIds) },
+      ] : []),
       { what: 'site reports', run: async () => await supabase.from('inspections').delete().eq('project_id', projectId) },
       { what: 'drawings', run: async () => await supabase.from('drawings').delete().eq('project_id', projectId) },
       { what: 'engineer assignments', run: async () => await supabase.from('project_members').delete().eq('project_id', projectId) },
