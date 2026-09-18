@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     const projects     = (inspection.projects as any) ?? {}
     const firmId       = projects.firm_id as string | undefined
 
-    const engineer = await loadReportEngineer(supabase, inspection as any)
+    const engineer = await loadReportEngineer(supabase, inspection as any, firmId)
     // Read on its own so a database without the client_email column yet
     // (see sql/project_client_email.sql) still generates reports.
     const { data: client } = await supabase

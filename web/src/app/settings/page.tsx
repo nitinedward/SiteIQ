@@ -4,10 +4,11 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { Shell, Btn, Card, Spinner } from '@/components/Shell'
 import { loadReportTemplates, type ReportTemplate } from '@/lib/reportTemplates'
+import { PLACEHOLDERS, type TemplateCheck } from '@/lib/templateCheck'
 
 type Project = { id: string; name: string; project_number: string }
 type Drawing = { id: string; title: string; number: string; file_url: string; project_id: string }
-type Firm    = { id: string; name: string; join_code?: string; report_template_url: string | null }
+type Firm    = { id: string; name: string; join_code?: string; report_template_url: string | null; report_email_domain?: string | null }
 type MsToken = { connected_email: string; expires_at: string; onedrive_folder_id: string | null } | null
 
 export default function SettingsPage() {
@@ -39,6 +40,15 @@ export default function SettingsPage() {
   // firm name editing
   const [firmNameEdit, setFirmNameEdit]   = useState('')
   const [savingFirmName, setSavingFirmName] = useState(false)
+
+  // The domain reports write engineer addresses against, e.g. "yourfirm.co.nz"
+  const [emailDomainEdit, setEmailDomainEdit]     = useState('')
+  const [savingEmailDomain, setSavingEmailDomain] = useState(false)
+
+  // What each uploaded template does with the placeholders it contains.
+  const [checks, setChecks]           = useState<Record<string, TemplateCheck>>({})
+  const [checkingId, setCheckingId]   = useState<string | null>(null)
+  const [showPlaceholders, setShowPlaceholders] = useState(false)
 
   // Microsoft 365 state
   const [msToken, setMsToken]         = useState<MsToken>(null)
@@ -87,7 +97,7 @@ export default function SettingsPage() {
 
       const { data: member } = await supabase
         .from('firm_members')
-        .select('firm_id, role, full_name, firms(id, name, join_code, report_template_url)')
+        .select('firm_id, role, full_name, firms(id, name, join_code, report_template_url, report_email_domain)')
         .eq('user_id', user.id)
         .single()
 
@@ -98,6 +108,7 @@ export default function SettingsPage() {
       setFirm(firmData)
       setFirmId(firmData?.id ?? '')
       setFirmNameEdit(firmData?.name ?? '')
+      setEmailDomainEdit(firmData?.report_email_domain ?? '')
       setTemplates(await loadReportTemplates(firmData?.id ?? ''))
 
       const { data: proj } = await supabase
@@ -150,8 +161,48 @@ export default function SettingsPage() {
     setTimeout(() => setUploadSuccess(''), 3000)
   }
 
+  // ── REPORT EMAIL DOMAIN ────────────────────────────────
+  const saveEmailDomain = async () => {
+    if (!firm) return
+    // Typed as a domain, not an address: reports build "first.last@" themselves.
+    const domain = emailDomainEdit.trim().toLowerCase().replace(/^@/, '').replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+    setSavingEmailDomain(true)
+    const { error } = await supabase.from('firms').update({ report_email_domain: domain || null }).eq('id', firm.id)
+    setSavingEmailDomain(false)
+    if (error) {
+      alert(
+        /report_email_domain/.test(error.message)
+          ? 'The database doesn’t have this field yet. Run web/sql/firm_email_domain.sql once in the Supabase SQL editor.'
+          : error.message
+      )
+      return
+    }
+    setEmailDomainEdit(domain)
+    setFirm(prev => prev ? { ...prev, report_email_domain: domain || null } : prev)
+    flash(domain ? 'Report email domain saved' : 'Report email domain cleared')
+  }
+
   // ── REPORT TEMPLATES ───────────────────────────────────
   const flash = (msg: string) => { setUploadSuccess(msg); setTimeout(() => setUploadSuccess(''), 3000) }
+
+  /** Reads an uploaded template back and reports what it will fill in. */
+  const checkTemplateFile = async (t: ReportTemplate, quiet = false) => {
+    if (!quiet) setCheckingId(t.id)
+    try {
+      const res = await fetch('/api/templates/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId: t.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not check the template')
+      setChecks(prev => ({ ...prev, [t.id]: data.check as TemplateCheck }))
+    } catch (err: any) {
+      if (!quiet) alert(err.message)
+    } finally {
+      if (!quiet) setCheckingId(null)
+    }
+  }
 
   const reloadTemplates = async (id = firm?.id ?? '') => setTemplates(await loadReportTemplates(id))
 
@@ -191,6 +242,8 @@ export default function SettingsPage() {
       if (isDefault) await mirrorDefault(fileUrl)
       setNewTemplateName('')
       await reloadTemplates()
+      // Say straight away what the file will and won't fill in.
+      await checkTemplateFile({ id, name, file_url: fileUrl } as ReportTemplate, true)
       flash(`Template "${name}" added`)
     } catch (err) { console.error(err); alert('Upload failed. Please try again.') }
     finally { setTemplateUploading(false) }
@@ -207,6 +260,7 @@ export default function SettingsPage() {
       if (error) throw error
       if (t.is_default) await mirrorDefault(t.file_url)
       await reloadTemplates()
+      await checkTemplateFile(t, true)
       flash(`Template "${t.name}" replaced`)
     } catch (err) { console.error(err); alert('Upload failed. Please try again.') }
     finally { setTemplateBusyId(null) }
@@ -382,6 +436,23 @@ export default function SettingsPage() {
               </div>
             </div>
             <div>
+              <label style={labelStyle}>Report Email Domain</label>
+              <p style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginBottom: 8, lineHeight: 1.5 }}>
+                Reports address the engineer at this domain, e.g. <strong>firstname.lastname@{emailDomainEdit.trim() || 'yourfirm.co.nz'}</strong>. Leave empty to print no address.
+              </p>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <input
+                  value={emailDomainEdit}
+                  onChange={e => setEmailDomainEdit(e.target.value)}
+                  placeholder="yourfirm.co.nz"
+                  style={{ ...inputStyle, flex: 1 }}
+                />
+                <Btn variant="primary" onClick={saveEmailDomain} disabled={savingEmailDomain || emailDomainEdit === (firm?.report_email_domain ?? '')}>
+                  {savingEmailDomain ? 'Saving…' : 'Save'}
+                </Btn>
+              </div>
+            </div>
+            <div>
               <label style={labelStyle}>Join Code</label>
               <p style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginBottom: 8, lineHeight: 1.5 }}>
                 Share this with engineers — they enter it when signing up on the mobile app.
@@ -407,10 +478,40 @@ export default function SettingsPage() {
             <p style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', lineHeight: 1.6, marginBottom: 10 }}>
               Upload a Word template (.docx) for each letterhead, e.g. one per office. Each project uses the template chosen for it, or the default. Changing a project's template only affects reports generated afterwards. Use these placeholders where AI content is inserted:
             </p>
-            <div style={{ background: 'var(--paper)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)', padding: '9px 12px', fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-ink)', lineHeight: 1.8 }}>
-              {'{{project_name}}  {{date}}  {{report_no}}  {{engineer_name}}  {{weather}}'}<br/>
-              {'{{site_contact}}  {{purpose}}  {{findings}}  {{recommendations}}'}
-            </div>
+            <button
+              onClick={() => setShowPlaceholders(v => !v)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                fontFamily: 'var(--f-heading)', fontSize: 13, fontWeight: 700, color: 'var(--indigo)',
+              }}
+            >
+              {showPlaceholders ? 'Hide the list of placeholders' : 'Show the list of placeholders'}
+            </button>
+
+            {showPlaceholders && (
+              <div style={{ background: 'var(--paper)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)', padding: '12px 14px', marginTop: 10 }}>
+                {(['ai', 'data'] as const).map(kind => (
+                  <div key={kind} style={{ marginBottom: kind === 'ai' ? 14 : 0 }}>
+                    <div style={{ fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 6 }}>
+                      {kind === 'ai' ? 'Written by the AI — each needs a line of its own' : 'Filled in from your project and inspection — can sit mid-sentence'}
+                    </div>
+                    {PLACEHOLDERS.filter(p => p.kind === kind).map(p => (
+                      <div key={p.name} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '3px 0' }}>
+                        <code style={{ fontFamily: 'var(--f-mono)', fontSize: 11.5, color: 'var(--indigo)', whiteSpace: 'nowrap' }}>
+                          {`{{${p.name}}}`}
+                        </code>
+                        <span style={{ fontFamily: 'var(--f-text)', fontSize: 12.5, color: 'var(--text-mid)' }}>
+                          {p.description}{p.required ? ' (required)' : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 12, lineHeight: 1.6, borderTop: '1px solid var(--border-line)', paddingTop: 10 }}>
+                  Anything else in double braces is printed exactly as typed. Type each placeholder in one go so Word doesn’t split it, and avoid Word content controls and date pickers — plain text works.
+                </div>
+              </div>
+            )}
           </div>
           <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}>
             {templates.length > 0 && (
@@ -449,11 +550,51 @@ export default function SettingsPage() {
                       {templateBusyId === t.id ? <Spinner size={16} /> : (
                         <>
                           {!t.is_default && <Btn variant="outline" small onClick={() => makeDefault(t)}>Make default</Btn>}
+                          <Btn variant="outline" small onClick={() => checkTemplateFile(t)} disabled={checkingId === t.id}>
+                            {checkingId === t.id ? 'Checking…' : 'Check'}
+                          </Btn>
                           <Btn variant="outline" small onClick={() => { replaceTargetRef.current = t; replaceInputRef.current?.click() }}>Replace</Btn>
                           <Btn variant="outline" small onClick={() => deleteTemplate(t)}>Remove</Btn>
                         </>
                       )}
                     </div>
+
+                    {checks[t.id] && (
+                      <div style={{ width: '100%', fontFamily: 'var(--f-text)', fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-mid)' }}>
+                        {(() => {
+                          const c = checks[t.id]
+                          const problems: string[] = []
+                          if (c.missingRequired.length) problems.push(`Nothing will be written where the report needs it: ${c.missingRequired.map(n => `{{${n}}}`).join(', ')} ${c.missingRequired.length === 1 ? 'is' : 'are'} missing from the file.`)
+                          if (c.unknown.length) problems.push(`Not filled in, printed as typed: ${c.unknown.map(n => `{{${n}}}`).join(', ')}. Check the spelling against the list below.`)
+                          if (c.sharingParagraph.length) problems.push(`${c.sharingParagraph.map(n => `{{${n}}}`).join(', ')} shares a line with other words — the whole line is replaced, so that text would be lost. Put the placeholder on its own line.`)
+                          if (c.inHeaderFooter.length) problems.push(`${c.inHeaderFooter.map(n => `{{${n}}}`).join(', ')} is in a header or footer, where written sections can't go.`)
+                          return (
+                            <div style={{
+                              background: problems.length ? 'var(--clay-soft)' : 'var(--sage-soft)',
+                              border: `1px solid ${problems.length ? 'rgba(229,115,91,.3)' : 'rgba(91,146,121,.3)'}`,
+                              borderRadius: 'var(--radius-sm)', padding: '10px 12px', marginTop: 4,
+                            }}>
+                              <div style={{ fontWeight: 700, color: problems.length ? 'var(--clay-ink)' : 'var(--sage-ink)', marginBottom: problems.length ? 6 : 0 }}>
+                                {problems.length
+                                  ? `${problems.length} thing${problems.length === 1 ? '' : 's'} to fix in this template`
+                                  : `Ready — fills in ${c.found.length} field${c.found.length === 1 ? '' : 's'}`}
+                              </div>
+                              {problems.map((p, i) => <div key={i}>• {p}</div>)}
+                              {c.found.length > 0 && (
+                                <div style={{ marginTop: problems.length ? 6 : 4 }}>
+                                  Uses: {c.found.map(n => `{{${n}}}`).join(', ')}
+                                </div>
+                              )}
+                              {c.contentControls > 0 && (
+                                <div style={{ marginTop: 4 }}>
+                                  {c.contentControls} Word content control{c.contentControls === 1 ? '' : 's'} (date pickers, locked fields) — removed automatically from generated reports.
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

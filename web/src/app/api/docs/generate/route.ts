@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     console.log('Generating doc for:', inspectionId, '| firm:', firmId)
 
-    const engineer = await loadReportEngineer(supabase, inspection as any)
+    const engineer = await loadReportEngineer(supabase, inspection as any, firmId)
     // Read on its own so a database without the client_email column yet
     // (see sql/project_client_email.sql) still generates reports.
     const { data: client } = await supabase
