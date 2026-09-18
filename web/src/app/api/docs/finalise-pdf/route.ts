@@ -4,6 +4,38 @@ import { forceSaveAndWait, convertDocxToPdf } from '@/lib/onlyofficeConvert'
 import { reportFileNameFor } from '@/lib/reportFileNameServer'
 import { ensurePdfTitle } from '@/lib/pdfTitle'
 import { syncReportWordingToNotes, type WordingSyncResult } from '@/lib/reportWordingSync'
+import { addDrawingHotspots, type HotspotSpec } from '@/lib/reportPdfHotspots'
+import { createClient } from '@supabase/supabase-js'
+
+/** The markups on this report's drawings, for the clickable areas. */
+async function loadHotspotSpec(inspectionId: string): Promise<HotspotSpec> {
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
+      (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()
+    )
+    const { data } = await supabase
+      .from('zones')
+      .select('id, label, x_percent, y_percent, markup_type, shape_data, drawings(number, revision)')
+      .eq('inspection_id', inspectionId)
+
+    return {
+      zones: (data ?? []).map((z: any) => ({
+        id: z.id,
+        label: z.label,
+        x_percent: z.x_percent,
+        y_percent: z.y_percent,
+        markup_type: z.markup_type ?? 'pin',
+        shape_data: z.shape_data ?? null,
+        drawingNumber: z.drawings?.number ?? null,
+        drawingRevision: z.drawings?.revision ?? null,
+      })),
+    }
+  } catch (err) {
+    console.warn('[finalise-pdf] could not load markups for hotspots:', err)
+    return { zones: [] }
+  }
+}
 
 export const dynamic = 'force-dynamic'
 // Force-save (~10s) + conversion polling (~90s worst case for a large,
@@ -48,7 +80,11 @@ export async function POST(request: NextRequest) {
     const converted = await convertDocxToPdf(inspectionId, appUrl, title)
     // Stamped again here rather than trusting the conversion to have taken
     // the title — this is the copy that gets viewed, downloaded and emailed.
-    const { bytes: pdfBuffer } = await ensurePdfTitle(converted, title)
+    const { bytes: stamped } = await ensurePdfTitle(converted, title)
+
+    // The drawings arrive from the conversion as flat pictures; this puts the
+    // markups back to work, each area jumping to its own photos.
+    const pdfBuffer = await addDrawingHotspots(Buffer.from(stamped), await loadHotspotSpec(inspectionId))
 
     await savePdf(inspectionId, pdfBuffer)
     console.log('[finalise-pdf] PDF stored as:', title, 'size:', pdfBuffer.length)
