@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { Shell, Btn, Card, Spinner } from '@/components/Shell'
 import { loadReportTemplates, type ReportTemplate } from '@/lib/reportTemplates'
-import { PLACEHOLDERS, type TemplateCheck } from '@/lib/templateCheck'
+import { PLACEHOLDERS, type TemplateCheck } from '@/lib/templatePlaceholders'
 
 type Project = { id: string; name: string; project_number: string }
 type Drawing = { id: string; title: string; number: string; file_url: string; project_id: string }
