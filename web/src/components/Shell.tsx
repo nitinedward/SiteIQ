@@ -491,6 +491,7 @@ export function NewProjectModal({ firmId, userId, onClose, onCreated }: {
   const [number, setNumber]   = useState('')
   const [address, setAddress] = useState('')
   const [client, setClient]   = useState('')
+  const [clientEmail, setClientEmail] = useState('')
   const [status, setStatus]   = useState('ACTIVE')
   const [templateId, setTemplateId] = useState('')
   const [templates, setTemplates]   = useState<ReportTemplate[]>([])
@@ -505,6 +506,8 @@ export function NewProjectModal({ firmId, userId, onClose, onCreated }: {
       name: name.trim(), project_number: number.trim() || `PRJ-${Date.now().toString().slice(-6)}`,
       address: address.trim(), client_name: client.trim(),
       firm_id: firmId, status,
+      // Only sent when given, so creating projects still works before the client_email migration.
+      ...(clientEmail.trim() ? { client_email: clientEmail.trim() } : {}),
       // Only sent when chosen, so creating projects still works before the templates migration.
       ...(templateId ? { report_template_id: templateId } : {}),
     }).select().single()
@@ -547,6 +550,7 @@ export function NewProjectModal({ firmId, userId, onClose, onCreated }: {
             </div>
             <NPMField label="Address"><NPMInput value={address} onChange={setAddress} placeholder="123 Queen St, Auckland" /></NPMField>
             <NPMField label="Client"><NPMInput value={client} onChange={setClient} placeholder="e.g. Auckland Council" /></NPMField>
+            <NPMField label="Client Email"><NPMInput value={clientEmail} onChange={setClientEmail} placeholder="Shown under “Issued To” on reports" /></NPMField>
             {templates.length > 1 && (
               <NPMField label="Report Template">
                 <select

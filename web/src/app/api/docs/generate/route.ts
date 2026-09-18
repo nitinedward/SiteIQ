@@ -5,7 +5,7 @@ import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { saveDoc } from '@/lib/docStorage'
 import { writeWithAttachments } from '@/lib/attachmentSections'
 import { noteBulletLine, noteDictation } from '@/lib/reportNotes'
-import { loadReportEngineer } from '@/lib/reportEngineer'
+import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,6 +65,13 @@ export async function POST(request: NextRequest) {
     console.log('Generating doc for:', inspectionId, '| firm:', firmId)
 
     const engineer = await loadReportEngineer(supabase, inspection as any)
+    // Read on its own so a database without the client_email column yet
+    // (see sql/project_client_email.sql) still generates reports.
+    const { data: client } = await supabase
+      .from('projects')
+      .select('client_email')
+      .eq('id', inspection.project_id)
+      .single()
 
     // Build findings as Word bullet XML from observations
     const observations = obsRes.data ?? []
@@ -88,7 +95,7 @@ export async function POST(request: NextRequest) {
       const templateData: TemplateData = {
         engineer_name:   engineer.name,
         engineer_user:   engineer.user,
-        client_email:    engineer.email,
+        client_email:    client?.client_email ?? '',
         project_name:    projects.name              ?? '',
         report_no:       inspection.report_no       ?? '',
         site_contact:    inspection.site_contact    ?? '',
@@ -102,6 +109,7 @@ export async function POST(request: NextRequest) {
         recommendations: buildBulletXml([]),
         other_activity:  buildParagraphXml(''),
         date:            inspection.date            ?? '',
+        time:            inspectionTime(inspection.created_at),
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined

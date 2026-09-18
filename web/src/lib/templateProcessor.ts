@@ -20,6 +20,7 @@ export type TemplateData = {
   /** The engineer's email name — "nitin.edward" — for templates that write
    *  the address themselves as {{engineer_user}}@yourfirm.co.nz */
   engineer_user: string
+  /** The client's address, from the project. Blank when none is set. */
   client_email: string
   project_name: string
   report_no: string
@@ -38,6 +39,8 @@ export type TemplateData = {
   /** Word XML produced by buildParagraphXml() */
   other_activity: string
   date?: string
+  /** When the inspection was started, as "14:00". */
+  time?: string
 }
 
 // ── XML Helpers ────────────────────────────────────────────────────────────────
@@ -280,6 +283,7 @@ export async function fillTemplate(
     '{{emailed_to_1}}':    data.emailed_to_1    || '',
     '{{emailed_to_2}}':    data.emailed_to_2    || '',
     '{{date}}':            dateStr,
+    '{{time}}':            data.time            || '',
   }
 
   // Process document.xml: paragraph-level replacement first, then inline

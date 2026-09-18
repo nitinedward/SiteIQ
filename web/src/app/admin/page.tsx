@@ -19,7 +19,7 @@ const supabase = createClient(
   ).replace(/^﻿/, '').trim()
 )
 
-type Project = { id: string; name: string; project_number: string; address: string; client_name: string; status: string; report_template_id?: string | null }
+type Project = { id: string; name: string; project_number: string; address: string; client_name: string; client_email?: string | null; status: string; report_template_id?: string | null }
 type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; file_name: string; preview_url?: string | null; created_at: string; sort_order?: number | null }
 type Member  = { id: string; user_id: string; full_name: string; email: string; role: string }
 
@@ -344,6 +344,9 @@ function AdminPageInner() {
     const { data: updated } = await supabase.from('projects').update({
       name: editForm.name?.trim(), project_number: editForm.project_number?.trim(),
       address: editForm.address?.trim(), client_name: editForm.client_name?.trim(),
+      // Sent only once the column exists (sql/project_client_email.sql), so
+      // editing a project keeps working before the migration is run.
+      ...('client_email' in selectedProject ? { client_email: editForm.client_email?.trim() || null } : {}),
       status: editForm.status,
       // Only reports generated from now on use it; existing reports keep the template they were built with.
       ...(reportTemplates.length > 0 ? { report_template_id: editForm.report_template_id || null } : {}),
@@ -875,8 +878,8 @@ function AdminPageInner() {
 
   // ── helpers ───────────────────────────────────────────────────────────────
   const projectFormFields = (
-    vals: { name: string; number: string; address: string; client: string; status: string },
-    set: { name: (v: string) => void; number: (v: string) => void; address: (v: string) => void; client: (v: string) => void; status: (v: string) => void }
+    vals: { name: string; number: string; address: string; client: string; clientEmail: string; status: string },
+    set: { name: (v: string) => void; number: (v: string) => void; address: (v: string) => void; client: (v: string) => void; clientEmail: (v: string) => void; status: (v: string) => void }
   ) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div><FieldLabel>Project Name *</FieldLabel><FInp value={vals.name} onChange={set.name} placeholder="e.g. Auckland Mall Carpark" /></div>
@@ -886,6 +889,7 @@ function AdminPageInner() {
       </div>
       <div><FieldLabel>Address</FieldLabel><FInp value={vals.address} onChange={set.address} placeholder="123 Queen St, Auckland" /></div>
       <div><FieldLabel>Client</FieldLabel><FInp value={vals.client} onChange={set.client} placeholder="e.g. Auckland Council" /></div>
+      <div><FieldLabel>Client Email</FieldLabel><FInp value={vals.clientEmail} onChange={set.clientEmail} placeholder="Shown under “Issued To” on reports" /></div>
     </div>
   )
 
@@ -1189,12 +1193,13 @@ function AdminPageInner() {
                     <>
                       <div style={{ fontFamily: 'var(--f-heading)', fontSize: 20, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 18 }}>Edit Project</div>
                       {projectFormFields(
-                        { name: editForm.name ?? '', number: editForm.project_number ?? '', address: editForm.address ?? '', client: editForm.client_name ?? '', status: editForm.status ?? 'ACTIVE' },
+                        { name: editForm.name ?? '', number: editForm.project_number ?? '', address: editForm.address ?? '', client: editForm.client_name ?? '', clientEmail: editForm.client_email ?? '', status: editForm.status ?? 'ACTIVE' },
                         {
                           name:    v => setEditForm(p => ({ ...p, name: v })),
                           number:  v => setEditForm(p => ({ ...p, project_number: v })),
                           address: v => setEditForm(p => ({ ...p, address: v })),
                           client:  v => setEditForm(p => ({ ...p, client_name: v })),
+                          clientEmail: v => setEditForm(p => ({ ...p, client_email: v })),
                           status:  v => setEditForm(p => ({ ...p, status: v })),
                         }
                       )}

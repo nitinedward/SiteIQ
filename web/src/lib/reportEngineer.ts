@@ -31,3 +31,16 @@ export async function loadReportEngineer(
   const user = name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '')
   return { name, user, email: `${user}@${EMAIL_DOMAIN}` }
 }
+
+/**
+ * The time a report prints against its date — when the inspection was
+ * started, in New Zealand time. Blank if the row has no timestamp.
+ */
+export function inspectionTime(createdAt: string | null | undefined): string {
+  if (!createdAt) return ''
+  const d = new Date(createdAt)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleTimeString('en-NZ', {
+    timeZone: 'Pacific/Auckland', hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+}

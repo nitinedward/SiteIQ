@@ -4,7 +4,7 @@ import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
 import { writeWithAttachments } from '@/lib/attachmentSections'
 import { noteLabel, noteDictation, noteBulletLine } from '@/lib/reportNotes'
-import { loadReportEngineer } from '@/lib/reportEngineer'
+import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,6 +63,13 @@ export async function POST(request: NextRequest) {
     const firmId       = projects.firm_id as string | undefined
 
     const engineer = await loadReportEngineer(supabase, inspection as any)
+    // Read on its own so a database without the client_email column yet
+    // (see sql/project_client_email.sql) still generates reports.
+    const { data: client } = await supabase
+      .from('projects')
+      .select('client_email')
+      .eq('id', inspection.project_id)
+      .single()
 
     // The site notes decide what the report lists: one bullet per note, in
     // order, under the note's own label. The AI only rewrites each note's
@@ -194,7 +201,7 @@ Return:
       const templateData: TemplateData = {
         engineer_name:   engineer.name,
         engineer_user:   engineer.user,
-        client_email:    engineer.email,
+        client_email:    client?.client_email ?? '',
         project_name:    projects.name              ?? '',
         report_no:       inspection.report_no       ?? '',
         site_contact:    inspection.site_contact    ?? '',
@@ -209,6 +216,7 @@ Return:
         // Nothing is recorded for this on site, so it's left for the engineer to fill in.
         other_activity:  buildParagraphXml(''),
         date:            inspection.date            ?? '',
+        time:            inspectionTime(inspection.created_at),
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined
