@@ -90,6 +90,10 @@ export default function SessionScreen() {
   const [siteContact, setSiteContact]   = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [purpose, setPurpose]           = useState('');
+  // Fixed when the screen opens, not re-read on every render, so the time
+  // saved on the report is the time shown while filling the details in.
+  const [startTime, setStartTime]       = useState(() =>
+    new Date().toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit', hour12: false }));
   const [reportNo, setReportNo]         = useState('');
   const [allDrawings, setAllDrawings]         = useState<Drawing[]>([]);
   const [selectedDrawings, setSelectedDrawings] = useState<string[]>([]);
@@ -258,7 +262,7 @@ export default function SessionScreen() {
     // Recorded so the report can print who carried out the inspection.
     const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase.from('inspections').insert({
-      project_id: String(project_id), date: todayShort, weather, created_by: user?.id ?? null,
+      project_id: String(project_id), date: todayShort, start_time: startTime.trim(), weather, created_by: user?.id ?? null,
       site_contact: siteContact.trim(), contact_phone: contactPhone.trim(),
       drawing_ref: drawingRef, report_no: reportNo.trim(), purpose: purpose.trim(), status: 'IN_PROGRESS',
     }).select().single();
@@ -293,7 +297,7 @@ export default function SessionScreen() {
           <View style={S.banner}>
             <Text style={S.bannerProject}>{project_name}</Text>
             <Text style={S.bannerDate}>{today}</Text>
-            <Text style={S.bannerTime}>{nowTime}</Text>
+            <Text style={S.bannerTime}>{startTime}</Text>
           </View>
 
           {/* Weather */}
@@ -315,6 +319,10 @@ export default function SessionScreen() {
             <Text style={S.label}>Site Contact Name</Text>
             <Text style={S.hint}>Auto-filled from your last inspection</Text>
             <TextInput style={S.input} placeholder="e.g. John Smith" placeholderTextColor={T.mid} value={siteContact} onChangeText={setSiteContact} autoCapitalize="words" />
+
+            <Text style={S.label}>Inspection Time</Text>
+            <Text style={S.hint}>Printed on the report beside the date</Text>
+            <TextInput style={S.input} placeholder="14:00" placeholderTextColor={T.mid} value={startTime} onChangeText={setStartTime} keyboardType="numbers-and-punctuation" maxLength={5} />
           </View>
 
           {/* Drawings */}

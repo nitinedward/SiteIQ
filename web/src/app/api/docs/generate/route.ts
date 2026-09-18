@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
         recommendations: buildBulletXml([]),
         other_activity:  buildParagraphXml(''),
         date:            inspection.date            ?? '',
-        time:            inspectionTime(inspection.created_at),
+        time:            inspectionTime(inspection as any),
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined

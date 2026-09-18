@@ -216,7 +216,7 @@ Return:
         // Nothing is recorded for this on site, so it's left for the engineer to fill in.
         other_activity:  buildParagraphXml(''),
         date:            inspection.date            ?? '',
-        time:            inspectionTime(inspection.created_at),
+        time:            inspectionTime(inspection as any),
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined

@@ -33,12 +33,15 @@ export async function loadReportEngineer(
 }
 
 /**
- * The time a report prints against its date — when the inspection was
- * started, in New Zealand time. Blank if the row has no timestamp.
+ * The time a report prints against its date: the time recorded when the
+ * inspection was started, else when the report row was created, read in
+ * New Zealand time. Blank if there's neither.
  */
-export function inspectionTime(createdAt: string | null | undefined): string {
-  if (!createdAt) return ''
-  const d = new Date(createdAt)
+export function inspectionTime(inspection: { start_time?: string | null; created_at?: string | null }): string {
+  const recorded = inspection.start_time?.trim()
+  if (recorded) return recorded
+  if (!inspection.created_at) return ''
+  const d = new Date(inspection.created_at)
   if (isNaN(d.getTime())) return ''
   return d.toLocaleTimeString('en-NZ', {
     timeZone: 'Pacific/Auckland', hour: '2-digit', minute: '2-digit', hour12: false,
