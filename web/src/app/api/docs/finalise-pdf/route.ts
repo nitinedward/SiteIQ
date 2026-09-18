@@ -84,7 +84,9 @@ export async function POST(request: NextRequest) {
 
     // The drawings arrive from the conversion as flat pictures; this puts the
     // markups back to work, each area jumping to its own photos.
-    const pdfBuffer = await addDrawingHotspots(Buffer.from(stamped), await loadHotspotSpec(inspectionId))
+    const hotspots = await addDrawingHotspots(Buffer.from(stamped), await loadHotspotSpec(inspectionId))
+    const pdfBuffer = hotspots.bytes
+    console.log('[finalise-pdf] drawing hotspots:', hotspots.added, hotspots.reason ?? '')
 
     await savePdf(inspectionId, pdfBuffer)
     console.log('[finalise-pdf] PDF stored as:', title, 'size:', pdfBuffer.length)
@@ -99,7 +101,7 @@ export async function POST(request: NextRequest) {
       console.error('[finalise-pdf] Could not save report wording to notes:', err)
     }
 
-    return NextResponse.json({ success: true, pdfSize: pdfBuffer.length, wording }, { headers: cors })
+    return NextResponse.json({ success: true, pdfSize: pdfBuffer.length, wording, hotspots: { added: hotspots.added, reason: hotspots.reason } }, { headers: cors })
   } catch (err: any) {
     console.error('[finalise-pdf] error:', err)
     // Never a partial success — the caller must not mark the report

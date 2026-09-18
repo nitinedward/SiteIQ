@@ -70,12 +70,14 @@ function addLink(doc: PDFDocument, page: any, rect: [number, number, number, num
   else page.node.set(PDFName.of('Annots'), doc.context.obj([ref]))
 }
 
-export async function addDrawingHotspots(pdfBytes: Buffer, spec: HotspotSpec): Promise<Buffer> {
+export type HotspotOutcome = { bytes: Buffer; added: number; reason?: string }
+
+export async function addDrawingHotspots(pdfBytes: Buffer, spec: HotspotSpec): Promise<HotspotOutcome> {
   const zonesWithDrawing = spec.zones.filter(z => (z.drawingNumber ?? '').trim())
-  if (zonesWithDrawing.length === 0) return pdfBytes
+  if (zonesWithDrawing.length === 0) return { bytes: pdfBytes, added: 0, reason: 'no markups on this report' }
 
   const items = await readTextItems(new Uint8Array(pdfBytes))
-  if (!items) return pdfBytes
+  if (!items) return { bytes: pdfBytes, added: 0, reason: 'could not read the PDF text' }
 
   try {
     const doc = await PDFDocument.load(pdfBytes, { updateMetadata: false })
@@ -92,6 +94,7 @@ export async function addDrawingHotspots(pdfBytes: Buffer, spec: HotspotSpec): P
     }
 
     let added = 0
+    const missed: string[] = []
     const byDrawing = new Map<string, HotspotZone[]>()
     for (const z of zonesWithDrawing) {
       const key = `${z.drawingNumber}|${z.drawingRevision ?? ''}`
@@ -104,7 +107,7 @@ export async function addDrawingHotspots(pdfBytes: Buffer, spec: HotspotSpec): P
       // The caption appendAttachments writes under each drawing.
       const caption = items.find(i => i.text.startsWith(`Ref: ${number}`) && i.text.includes(revision || ''))
         ?? items.find(i => i.text.startsWith(`Ref: ${number}`))
-      if (!caption) { console.warn('[hotspots] no caption found for drawing', number); continue }
+      if (!caption) { missed.push(`no caption for ${number}`); continue }
 
       // The picture sits below its caption, unless it wouldn't fit — Word
       // then pushes it to the top of the next page.
@@ -120,7 +123,8 @@ export async function addDrawingHotspots(pdfBytes: Buffer, spec: HotspotSpec): P
 
       for (const zone of zones) {
         const target = photoPageFor(zone.label)
-        if (target === null || target === imagePage) continue
+        if (target === null) { missed.push(`no photo page for ${zone.label}`); continue }
+        if (target === imagePage) { missed.push(`${zone.label} photos on the drawing page`); continue }
 
         // zoneHotspots works in the picture's own coordinates, measured from
         // its bottom-left, so the rects only need shifting onto the page.
@@ -144,11 +148,11 @@ export async function addDrawingHotspots(pdfBytes: Buffer, spec: HotspotSpec): P
       }
     }
 
-    if (added === 0) return pdfBytes
+    if (added === 0) return { bytes: pdfBytes, added: 0, reason: missed.join('; ') || 'nothing to link' }
     console.log('[hotspots] added', added, 'clickable areas to the drawings')
-    return Buffer.from(await doc.save())
-  } catch (err) {
+    return { bytes: Buffer.from(await doc.save()), added, reason: missed.join('; ') || undefined }
+  } catch (err: any) {
     console.warn('[hotspots] skipped:', err)
-    return pdfBytes
+    return { bytes: pdfBytes, added: 0, reason: String(err?.message ?? err).slice(0, 200) }
   }
 }
