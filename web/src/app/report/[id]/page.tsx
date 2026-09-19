@@ -911,10 +911,9 @@ export default function ReportPage() {
         if (data.photosAdded)   parts.push(`${data.photosAdded} photo${data.photosAdded === 1 ? '' : 's'}`)
         if (data.drawingsAdded) parts.push(`${data.drawingsAdded} markup${data.drawingsAdded === 1 ? '' : 's'}`)
         setInsertResult(
-          (parts.length
+          parts.length
             ? `${parts.join(' and ')} added at the end of the report — scroll to the last pages.`
-            : `${label[0].toUpperCase()}${label.slice(1)} removed from the report.`) +
-          (data.legacyMigrated ? ' (Both sections were rebuilt this once — from here they update separately.)' : '')
+            : `${label[0].toUpperCase()}${label.slice(1)} removed from the report.`
         )
         setTimeout(() => setInsertResult(''), 8000)
         setMobileTab('document')
@@ -1924,41 +1923,23 @@ export default function ReportPage() {
                 )}
               </div>
 
-              {/* Photos and markups are inserted separately — each owns its
-                  own section of the document, so updating one leaves the
-                  other untouched. Within a section the current selection
-                  replaces what was there, which is how deselecting something
-                  removes it rather than only ever adding more. */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                {([
-                  {
-                    section: 'photos' as const,
-                    label: 'Insert Photos',
-                    busyLabel: 'Photos...',
-                    count: selPhotoCount,
-                    disabled: false,
-                    title: "Rebuilds the photo pages from the selected photos, leaving the markups and the report text alone",
-                  },
-                  {
-                    section: 'drawings' as const,
-                    label: 'Insert Markups',
-                    busyLabel: 'Markups...',
-                    count: selDrawingCount,
-                    disabled: drawings.length === 0,
-                    title: drawings.length === 0
-                      ? 'This project has no drawings to mark up'
-                      : 'Rebuilds the markup pages from the selected drawings, leaving the photos and the report text alone',
-                  },
-                ]).map(btn => {
-                  const blocked = inserting || !docReady || reportStatus === 'finalised' || btn.disabled
+              {/* One button, both sections. Photos and markups were inserted
+                  separately once, which meant choosing a photo and a markup
+                  took two rounds — and either button appeared to insert both
+                  anyway. Tick what belongs in the report, press Insert, and
+                  the document matches the selection: whatever is unticked is
+                  removed from it. */}
+              <div style={{ display: 'flex', marginBottom: 8 }}>
+                {(() => {
+                  const blocked = inserting || !docReady || reportStatus === 'finalised'
+                  const total = selPhotoCount + selDrawingCount
                   return (
                     <button
-                      key={btn.section}
-                      onClick={() => insertAttachments([btn.section])}
+                      onClick={() => insertAttachments(['photos', 'drawings'])}
                       disabled={blocked}
                       title={reportStatus === 'finalised'
                         ? 'This report is finalised and frozen — reopen it to make changes'
-                        : btn.title}
+                        : 'Rebuilds the photo and markup pages from what is selected, leaving the report text alone'}
                       style={{
                         flex: 1,
                         background: inserting ? 'var(--paper)' : 'var(--indigo)',
@@ -1980,17 +1961,17 @@ export default function ReportPage() {
                       {inserting ? (
                         <>
                           <div style={{ width: 12, height: 12, border: '2px solid var(--border-line)', borderTopColor: 'var(--text-mid)', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
-                          {btn.busyLabel}
+                          Inserting...
                         </>
                       ) : (
                         <>
                           <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                          {btn.label}{btn.count > 0 ? ` (${btn.count})` : ''}
+                          Insert into Report{total > 0 ? ` (${total})` : ''}
                         </>
                       )}
                     </button>
                   )
-                })}
+                })()}
               </div>
 
               {insertResult && (
