@@ -1,66 +1,97 @@
-import { PDFDocument, PDFName } from 'pdf-lib'
+import zlib from 'zlib'
+import { PDFDocument, PDFName, PDFRawStream } from 'pdf-lib'
 import { zoneHotspots, type MarkupZone } from './zoneHotspots'
 
 /**
  * Makes the marked-up drawings in the finalised report clickable: each area,
  * pin or scribble jumps to that zone's photos later in the same PDF.
  *
- * The report is written as a Word document and converted by OnlyOffice, so
- * the drawing arrives as a flat picture with nothing clickable on it. The
- * links are added afterwards, straight onto the PDF, by finding where each
- * drawing and each photo heading landed.
+ * The report is a Word document converted by OnlyOffice, so a drawing
+ * arrives as a flat picture — the markups an engineer drew on site are
+ * decoration by the time the report is finalised. The links are added
+ * afterwards, onto the PDF itself.
  *
- * Internal jumps rather than links out to the hosted photos: they work
- * offline, in every viewer, and in a copy that was emailed or archived.
+ * Finding the pictures is the whole problem. OnlyOffice paints every image
+ * as a tiling pattern rather than an image XObject, and writes text with
+ * subset fonts carrying no readable characters, so neither the pictures nor
+ * the captions can be found by name or by text. What they do have is size:
+ * drawings are placed at 425x301pt and photos at 213x159pt, the extents
+ * appendAttachments writes. So the pattern fills are read out of each page's
+ * content stream, sorted by size, and matched in document order against what
+ * was inserted.
  *
- * Best-effort throughout — a drawing whose caption can't be found simply
- * gets no hotspots, and the report is returned untouched if anything fails.
+ * Internal jumps rather than links to the hosted photos: they work offline,
+ * in every viewer, and in a copy that was emailed or archived.
+ *
+ * Best-effort throughout: anything that can't be matched is left without
+ * links, and the report is returned untouched if the parse fails.
  */
 
-/** The drawing picture's size in the document (EMU), from appendAttachments. */
-const IMAGE_W_PT = 5400000 / 12700
-const IMAGE_H_PT = 3827160 / 12700
-/** Gap between a caption's baseline and the top of the picture below it. */
-const CAPTION_GAP = 10
+/** Sizes appendAttachments places pictures at, in points. */
+const DRAWING_W = 5400000 / 12700
+const DRAWING_H = 3827160 / 12700
+const PHOTO_W = 2700000 / 12700
+const PHOTO_H = 2016000 / 12700
+const SIZE_TOLERANCE = 6
 
 export type HotspotZone = MarkupZone & { drawingNumber: string | null; drawingRevision: string | null }
 
 export type HotspotSpec = {
   zones: HotspotZone[]
-  /** The drawing's own page size, which shape_data is measured against. */
-  drawingSize?: { width: number; height: number }
+  /** Drawing numbers in the order the report lists them. */
+  drawingOrder: string[]
+  /** Zone labels in the order their photos appear, with how many each has. */
+  photoGroups: { zoneLabel: string; count: number }[]
+  /** Each drawing's own page size — the units shape_data is stored in —
+   *  keyed by drawing number. */
+  drawingSizes?: Record<string, { width: number; height: number }>
 }
 
-type TextItem = { text: string; x: number; y: number; page: number }
+export type HotspotOutcome = { bytes: Buffer; added: number; reason?: string }
 
-/** Every text run in the PDF with its position, or null if it can't be read. */
-async function readTextItems(bytes: Uint8Array): Promise<TextItem[] | null> {
-  try {
-    // Imported here so a failure to load it can't break finalising.
-    const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.js')
-    const pdf = await pdfjs.getDocument({ data: bytes, useSystemFonts: true, disableWorker: true, isEvalSupported: false }).promise
-    const items: TextItem[] = []
-    for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p)
-      const content = await page.getTextContent()
-      for (const item of content.items as any[]) {
-        const text = String(item.str ?? '').trim()
-        if (!text) continue
-        items.push({ text, x: item.transform[4], y: item.transform[5], page: p - 1 })
-      }
-    }
-    return items
-  } catch (err) {
-    console.warn('[hotspots] could not read the PDF text:', err)
-    return null
+type PlacedImage = { page: number; x0: number; y0: number; x1: number; y1: number; w: number; h: number }
+
+function pageContent(doc: PDFDocument, page: any): string {
+  const contents = doc.context.lookup(page.node.get(PDFName.of('Contents')))
+  const streams = contents instanceof PDFRawStream
+    ? [contents]
+    : ((contents as any)?.asArray?.() ?? []).map((r: any) => doc.context.lookup(r))
+  return streams
+    .map((st: any) => {
+      if (!st?.contents) return ''
+      try { return zlib.inflateSync(Buffer.from(st.contents)).toString('latin1') }
+      catch { return Buffer.from(st.contents).toString('latin1') }
+    })
+    .join('\n')
+}
+
+/** Every pattern-filled rectangle on a page — one per picture. */
+function placedImages(content: string, pageIndex: number): PlacedImage[] {
+  const out: PlacedImage[] = []
+  for (const block of content.split(/\bq\b/)) {
+    if (!/\/Pattern cs/.test(block) || !/scn/.test(block)) continue
+    const cm = block.match(/([\d.\-]+) ([\d.\-]+) ([\d.\-]+) ([\d.\-]+) ([\d.\-]+) ([\d.\-]+) cm/)
+    const points = [...block.matchAll(/([\d.\-]+) ([\d.\-]+) (?:m|l)\b/g)].map(m => [parseFloat(m[1]), parseFloat(m[2])])
+    if (!cm || points.length < 2) continue
+    const tx = parseFloat(cm[5]), ty = parseFloat(cm[6])
+    const xs = points.map(p => p[0]), ys = points.map(p => p[1])
+    const x0 = Math.min(...xs) + tx, x1 = Math.max(...xs) + tx
+    const y0 = Math.min(...ys) + ty, y1 = Math.max(...ys) + ty
+    out.push({ page: pageIndex, x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 })
   }
+  // Document order: down the page, then across.
+  return out.sort((a, b) => (b.y1 - a.y1) || (a.x0 - b.x0))
 }
+
+const isSize = (img: PlacedImage, w: number, h: number) =>
+  Math.abs(img.w - w) < SIZE_TOLERANCE && Math.abs(img.h - h) < SIZE_TOLERANCE
 
 function addLink(doc: PDFDocument, page: any, rect: [number, number, number, number], targetRef: any) {
   const annot = doc.context.obj({
     Type: 'Annot',
     Subtype: 'Link',
     Rect: rect,
+    // No visible border — the markup itself already shows where to click.
     Border: [0, 0, 0],
     A: { S: 'GoTo', D: [targetRef, 'XYZ', null, null, null] },
   })
@@ -70,86 +101,74 @@ function addLink(doc: PDFDocument, page: any, rect: [number, number, number, num
   else page.node.set(PDFName.of('Annots'), doc.context.obj([ref]))
 }
 
-export type HotspotOutcome = { bytes: Buffer; added: number; reason?: string }
-
 export async function addDrawingHotspots(pdfBytes: Buffer, spec: HotspotSpec): Promise<HotspotOutcome> {
-  const zonesWithDrawing = spec.zones.filter(z => (z.drawingNumber ?? '').trim())
-  if (zonesWithDrawing.length === 0) return { bytes: pdfBytes, added: 0, reason: 'no markups on this report' }
-
-  const items = await readTextItems(new Uint8Array(pdfBytes))
-  if (!items) return { bytes: pdfBytes, added: 0, reason: 'could not read the PDF text' }
+  const zones = spec.zones.filter(z => (z.drawingNumber ?? '').trim())
+  if (zones.length === 0) return { bytes: pdfBytes, added: 0, reason: 'no markups on this report' }
+  if (spec.drawingOrder.length === 0) return { bytes: pdfBytes, added: 0, reason: 'no drawings in the report' }
 
   try {
     const doc = await PDFDocument.load(pdfBytes, { updateMetadata: false })
     const pages = doc.getPages()
 
-    // Where the photographs start — zone headings before this are the
-    // drawings' own titles, not photo headings.
-    const photosStart = items.find(i => /^SITE PHOTOGRAPHS$/i.test(i.text))?.page ?? Infinity
+    const images: PlacedImage[] = []
+    pages.forEach((page, i) => images.push(...placedImages(pageContent(doc, page), i)))
 
-    /** The page a zone's photos are on, by its heading. */
-    const photoPageFor = (label: string): number | null => {
-      const hit = items.find(i => i.page >= photosStart && i.text.toLowerCase() === label.trim().toLowerCase())
-      return hit ? hit.page : null
+    const drawingImages = images.filter(i => isSize(i, DRAWING_W, DRAWING_H))
+    const photoImages = images.filter(i => isSize(i, PHOTO_W, PHOTO_H))
+    if (drawingImages.length === 0) {
+      return { bytes: pdfBytes, added: 0, reason: 'could not find the drawings in the PDF' }
+    }
+
+    // The nth picture of drawing size is the nth drawing the report lists.
+    // A rebuilt report can carry the section more than once; the last copy is
+    // the one that stands, so later placements win.
+    const placementOf = new Map<string, PlacedImage>()
+    spec.drawingOrder.forEach((number, i) => {
+      for (let k = i; k < drawingImages.length; k += spec.drawingOrder.length) {
+        placementOf.set(number.trim(), drawingImages[k])
+      }
+    })
+
+    // Photos run group by group, so counting them off gives the page each
+    // zone's photos start on.
+    const photoPageOf = new Map<string, number>()
+    let cursor = 0
+    for (const group of spec.photoGroups) {
+      const first = photoImages[cursor]
+      if (first) photoPageOf.set(group.zoneLabel.trim().toLowerCase(), first.page)
+      cursor += group.count
     }
 
     let added = 0
     const missed: string[] = []
-    const byDrawing = new Map<string, HotspotZone[]>()
-    for (const z of zonesWithDrawing) {
-      const key = `${z.drawingNumber}|${z.drawingRevision ?? ''}`
-      if (!byDrawing.has(key)) byDrawing.set(key, [])
-      byDrawing.get(key)!.push(z)
-    }
+    for (const zone of zones) {
+      const placement = placementOf.get((zone.drawingNumber ?? '').trim())
+      if (!placement) { missed.push(`no placement for ${zone.drawingNumber}`); continue }
+      const target = photoPageOf.get(zone.label.trim().toLowerCase())
+      if (target === undefined) { missed.push(`no photos for ${zone.label}`); continue }
+      if (target === placement.page) { missed.push(`${zone.label} photos share the drawing's page`); continue }
 
-    for (const [key, zones] of byDrawing) {
-      const [number, revision] = key.split('|')
-      // The caption appendAttachments writes under each drawing.
-      const caption = items.find(i => i.text.startsWith(`Ref: ${number}`) && i.text.includes(revision || ''))
-        ?? items.find(i => i.text.startsWith(`Ref: ${number}`))
-      if (!caption) { missed.push(`no caption for ${number}`); continue }
-
-      // The picture sits below its caption, unless it wouldn't fit — Word
-      // then pushes it to the top of the next page.
-      let imagePage = caption.page
-      let imageTop = caption.y - CAPTION_GAP
-      let imageLeft = caption.x
-      if (imageTop - IMAGE_H_PT < 40 && imagePage + 1 < pages.length) {
-        imagePage = caption.page + 1
-        imageTop = pages[imagePage].getHeight() - 60
-      }
-      const page = pages[imagePage]
-      if (!page) continue
-
-      for (const zone of zones) {
-        const target = photoPageFor(zone.label)
-        if (target === null) { missed.push(`no photo page for ${zone.label}`); continue }
-        if (target === imagePage) { missed.push(`${zone.label} photos on the drawing page`); continue }
-
-        // zoneHotspots works in the picture's own coordinates, measured from
-        // its bottom-left, so the rects only need shifting onto the page.
-        const rects = zoneHotspots(
-          zone,
-          IMAGE_W_PT,
-          IMAGE_H_PT,
-          spec.drawingSize?.width ?? IMAGE_W_PT,
-          spec.drawingSize?.height ?? IMAGE_H_PT,
+      // zoneHotspots works within the picture, measured from its bottom-left.
+      // shape_data is measured in the drawing's own page units, so the
+      // drawing's size is what normalises it — not the size it was placed at.
+      const source = spec.drawingSizes?.[(zone.drawingNumber ?? '').trim()]
+      const rects = zoneHotspots(
+        zone, placement.w, placement.h,
+        source?.width ?? placement.w, source?.height ?? placement.h,
+      )
+      for (const [x0, y0, x1, y1] of rects) {
+        addLink(
+          doc,
+          pages[placement.page],
+          [placement.x0 + x0, placement.y0 + y0, placement.x0 + x1, placement.y0 + y1],
+          pages[target].ref,
         )
-        for (const [x0, y0, x1, y1] of rects) {
-          const rect: [number, number, number, number] = [
-            imageLeft + x0,
-            imageTop - IMAGE_H_PT + y0,
-            imageLeft + x1,
-            imageTop - IMAGE_H_PT + y1,
-          ]
-          addLink(doc, page, rect, pages[target].ref)
-          added++
-        }
+        added++
       }
     }
 
     if (added === 0) return { bytes: pdfBytes, added: 0, reason: missed.join('; ') || 'nothing to link' }
-    console.log('[hotspots] added', added, 'clickable areas to the drawings')
+    console.log('[hotspots] added', added, 'clickable areas across', drawingImages.length, 'drawing placements')
     return { bytes: Buffer.from(await doc.save()), added, reason: missed.join('; ') || undefined }
   } catch (err: any) {
     console.warn('[hotspots] skipped:', err)

@@ -6,21 +6,89 @@ import { ensurePdfTitle } from '@/lib/pdfTitle'
 import { syncReportWordingToNotes, type WordingSyncResult } from '@/lib/reportWordingSync'
 import { addDrawingHotspots, type HotspotSpec } from '@/lib/reportPdfHotspots'
 import { createClient } from '@supabase/supabase-js'
+import { PDFDocument } from 'pdf-lib'
 
-/** The markups on this report's drawings, for the clickable areas. */
+/**
+ * What the clickable areas need: the markups, and the order the report lists
+ * its drawings and photo groups in — the same order appendAttachments wrote
+ * them, which is how each picture in the PDF is identified.
+ */
 async function loadHotspotSpec(inspectionId: string): Promise<HotspotSpec> {
+  const empty: HotspotSpec = { zones: [], drawingOrder: [], photoGroups: [] }
   try {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
       (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()
     )
-    const { data } = await supabase
-      .from('zones')
-      .select('id, label, x_percent, y_percent, markup_type, shape_data, drawings(number, revision)')
-      .eq('inspection_id', inspectionId)
+
+    const [{ data: zoneRows }, { data: noteRows }, { data: inspection }] = await Promise.all([
+      supabase
+        .from('zones')
+        .select('id, label, x_percent, y_percent, markup_type, shape_data, drawings(number, revision)')
+        .eq('inspection_id', inspectionId),
+      supabase
+        .from('observations')
+        .select('zone_label, photos')
+        .eq('inspection_id', inspectionId)
+        .order('id', { ascending: true }),
+      supabase.from('inspections').select('project_id').eq('id', inspectionId).single(),
+    ])
+
+    // Drawings are listed in the order the markup images were captured,
+    // which the rebuild sorts by drawing number.
+    const { data: assets } = await supabase.storage
+      .from('reports')
+      .list(`drawing-assets/${inspectionId}`, { limit: 100 })
+    const { data: drawings } = inspection?.project_id
+      ? await supabase.from('drawings').select('number').eq('project_id', inspection.project_id)
+      : { data: [] as any[] }
+
+    const drawingOrder = (assets ?? [])
+      .filter(f => f.name.endsWith('.png'))
+      .map(f => {
+        const stem = f.name.replace(/\.png$/i, '')
+        const match = (drawings ?? []).find((d: any) => (d.number ?? '').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 60) === stem)
+        return (match?.number ?? stem) as string
+      })
+      .sort((a, b) => a.localeCompare(b))
+
+    // Photos are grouped by note, in note order.
+    const photoGroups: { zoneLabel: string; count: number }[] = []
+    for (const note of noteRows ?? []) {
+      const raw = (note as any).photos
+      const list = Array.isArray(raw) ? raw : (() => { try { return JSON.parse(raw || '[]') } catch { return [] } })()
+      const count = list.filter((u: unknown) => typeof u === 'string' && (u as string).startsWith('http')).length
+      if (count === 0) continue
+      const zoneLabel = (note as any).zone_label || 'General Observation'
+      const existing = photoGroups.find(g => g.zoneLabel === zoneLabel)
+      if (existing) existing.count += count
+      else photoGroups.push({ zoneLabel, count })
+    }
+
+    // A markup's shape is stored in the drawing's own page units, so each
+    // drawing's page size is read from the drawing itself.
+    const drawingSizes: Record<string, { width: number; height: number }> = {}
+    const referenced = [...new Set((zoneRows ?? []).map((z: any) => z.drawings?.number).filter(Boolean))]
+    if (referenced.length > 0 && inspection?.project_id) {
+      const { data: files } = await supabase
+        .from('drawings')
+        .select('number, file_url')
+        .eq('project_id', inspection.project_id)
+        .in('number', referenced as string[])
+      await Promise.all((files ?? []).map(async (d: any) => {
+        try {
+          const res = await fetch(d.file_url, { cache: 'no-store' })
+          if (!res.ok) return
+          const pdf = await PDFDocument.load(await res.arrayBuffer(), { updateMetadata: false })
+          const page = pdf.getPages()[0]
+          if (page) drawingSizes[String(d.number).trim()] = { width: page.getWidth(), height: page.getHeight() }
+        } catch { /* fall back to the placed size */ }
+      }))
+    }
 
     return {
-      zones: (data ?? []).map((z: any) => ({
+      drawingSizes,
+      zones: (zoneRows ?? []).map((z: any) => ({
         id: z.id,
         label: z.label,
         x_percent: z.x_percent,
@@ -30,10 +98,12 @@ async function loadHotspotSpec(inspectionId: string): Promise<HotspotSpec> {
         drawingNumber: z.drawings?.number ?? null,
         drawingRevision: z.drawings?.revision ?? null,
       })),
+      drawingOrder,
+      photoGroups,
     }
   } catch (err) {
     console.warn('[finalise-pdf] could not load markups for hotspots:', err)
-    return { zones: [] }
+    return empty
   }
 }
 
