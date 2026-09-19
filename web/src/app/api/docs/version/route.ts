@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDocVersion, getDocKey } from '@/lib/docStorage'
+import { getDocVersion, getDocKey, getDocSourceUrl } from '@/lib/docStorage'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,15 +29,19 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [version, key] = await Promise.all([
+    const [version, key, sourceUrl] = await Promise.all([
       getDocVersion(inspectionId),
       getDocKey(inspectionId),
+      // Handed to the editor so the Document Server reads the file straight
+      // from storage instead of through this app — see getDocSourceUrl.
+      getDocSourceUrl(inspectionId),
     ])
 
     return NextResponse.json(
       {
         exists: !!key,
         key,
+        sourceUrl: key ? sourceUrl : null,
         tag: version?.tag ?? null,
         updatedAt: version?.updatedAt ?? null,
         size: version?.size ?? null,

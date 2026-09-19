@@ -193,6 +193,24 @@ export async function getDocVersion(inspectionId: string): Promise<DocVersion | 
  *  no document yet. Callers must pass this exact string both to the editor
  *  and to any CommandService call (force-save, drop, meta) that targets the
  *  open session. */
+/**
+ * A short-lived URL the Document Server can fetch the report from directly.
+ *
+ * Serving the .docx through /api/docs/<id> meant the function downloaded the
+ * whole file into memory before replying — measured at 4.5-5.2s before the
+ * first byte and 9-17s in total for a 25MB report, against 0.46s to first
+ * byte straight from storage. The editor can't render until that finishes,
+ * which was most of the wait when opening a report.
+ *
+ * The callback URL stays ours, so saving is unchanged.
+ */
+export async function getDocSourceUrl(inspectionId: string, expiresIn = 3600): Promise<string | null> {
+  const { data } = await getSupabase().storage
+    .from('reports')
+    .createSignedUrl(`${inspectionId}.docx`, expiresIn)
+  return data?.signedUrl ?? null
+}
+
 export async function getDocKey(inspectionId: string): Promise<string | null> {
   const version = await getDocVersion(inspectionId)
   if (!version) return null

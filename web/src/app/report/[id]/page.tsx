@@ -53,6 +53,8 @@ export default function ReportPage() {
   // The Document Server's identity for the *stored content* — fetched from
   // the file itself, never counted locally. See refreshDocKey below.
   const [docKey,             setDocKey]              = useState<string | null>(null)
+  /** Signed storage URL the editor loads the document from. */
+  const [docSourceUrl,       setDocSourceUrl]        = useState<string | null>(null)
   const [selectedPhotos,     setSelectedPhotos]      = useState<SelectedPhoto[]>([])
   const [drawings,           setDrawings]            = useState<DrawingInfo[]>([])
   const [loadingAttachments, setLoadingAttachments]  = useState(false)
@@ -193,10 +195,14 @@ export default function ReportPage() {
       const data = await res.json().catch(() => ({}))
       const key: string = res.ok && data?.key ? data.key : fallback
       console.log('[docKey]', key, data?.updatedAt ?? '')
+      // The Document Server reads the file straight from storage with this;
+      // without it the editor waits on this app to relay the whole document.
+      setDocSourceUrl(res.ok && data?.sourceUrl ? data.sourceUrl : null)
       setDocKey(key)
       return key
     } catch (err) {
       console.warn('[docKey] lookup failed, using a fresh key:', err)
+      setDocSourceUrl(null)
       setDocKey(fallback)
       return fallback
     }
@@ -2130,6 +2136,7 @@ export default function ReportPage() {
                     <OnlyOfficeEditor
                       key={`${docKey}:${editorKey}`}
                       documentKey={docKey}
+                      documentUrl={docSourceUrl}
                       inspectionId={inspectionId}
                       fileName={`${baseFileName()}.docx`}
                       onRename={renameFromEditor}

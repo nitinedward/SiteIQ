@@ -14,6 +14,11 @@ interface OnlyOfficeEditorProps {
    *  current one. The host must pass the same string to any CommandService
    *  call aimed at this session. */
   documentKey: string
+  /** Where the Document Server fetches the file. A signed storage URL keeps
+   *  the whole document out of this app's request path — relaying it meant
+   *  nothing reached the editor until the function had the entire file in
+   *  memory, seconds before the first byte. Falls back to /api/docs/<id>. */
+  documentUrl?: string | null
   onReady?: () => void
   onError?: () => void
   /** Enables renaming from the editor's own title in the top bar. Receives
@@ -31,6 +36,7 @@ export default function OnlyOfficeEditor({
   fileName,
   editable,
   documentKey,
+  documentUrl,
   onReady,
   onError,
   onRename,
@@ -69,8 +75,12 @@ export default function OnlyOfficeEditor({
 
     const initEditor = async () => {
       try {
-        // Add timestamp to docUrl so OO always re-fetches fresh content
-        const docUrl      = `${appUrl}/api/docs/${inspectionId}?t=${Date.now()}`
+        // Straight from storage when the host supplies a signed URL; the
+        // relay through this app is the fallback. Either way the URL is
+        // unique per open, so the Document Server can't serve a stale copy.
+        const docUrl = documentUrl
+          ? `${documentUrl}${documentUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
+          : `${appUrl}/api/docs/${inspectionId}?t=${Date.now()}`
         const callbackUrl = `${appUrl}/api/docs/${inspectionId}`
 
         const config: Record<string, any> = {
