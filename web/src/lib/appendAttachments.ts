@@ -9,6 +9,7 @@ import {
   hasLegacySection,
   isSectionName,
   placeSection,
+  removeOrphanSections,
   removeSections,
   wrapSection,
 } from '@/lib/attachmentSections'
@@ -279,6 +280,10 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
     const bookmarksToClear = requested.map(s => SECTION_DEFS[s].bookmark)
     if (legacy) bookmarksToClear.push(LEGACY_SECTION.bookmark)
     ;({ docXml, relsXml } = removeSections(docXml, relsXml, zip, bookmarksToClear))
+
+    // A copy whose bookmarks the editor dropped is invisible to the removal
+    // above, and the report ends up listing the section twice.
+    ;({ docXml } = removeOrphanSections(docXml))
 
     let nextRId = getMaxRId(relsXml) + 1
 

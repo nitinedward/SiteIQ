@@ -173,6 +173,60 @@ function ensureImageContentTypes(zip: AdmZip): void {
 /** Strips the named sections from a document, along with the image
  *  relationships and media parts only they referenced, so repeated
  *  insert/remove cycles don't leak storage into the .docx. */
+/** The headings our sections start with, used to recognise a copy whose
+ *  bookmarks are gone. */
+const SECTION_HEADINGS = ['STRUCTURAL DRAWINGS', 'SITE PHOTOGRAPHS']
+
+/**
+ * Removes a photo or drawing block left behind without its bookmarks.
+ *
+ * OnlyOffice drops our bookmarks when it saves the document, so the next
+ * insert finds nothing to replace and appends a second copy — the report
+ * then shows STRUCTURAL DRAWINGS twice. A block is ours if it starts with
+ * one of our headings; anything still inside a bookmark is left alone,
+ * because that is the copy being managed.
+ *
+ * A block runs to the start of the next bookmarked section, or to the end of
+ * the body, since these sections are always written at the end after a page
+ * break.
+ */
+export function removeOrphanSections(docXml: string): { docXml: string; removed: number } {
+  let removed = 0
+
+  for (let pass = 0; pass < 6; pass++) {
+    const bookmarkRanges = [...docXml.matchAll(/<w:bookmarkStart[^>]*w:name="(siteiq_[a-z]+)"[^>]*\/>/g)]
+      .map(m => {
+        const id = m[0].match(/w:id="(\d+)"/)?.[1]
+        const endTag = id ? docXml.indexOf(`<w:bookmarkEnd w:id="${id}"/>`) : -1
+        return { start: m.index!, end: endTag === -1 ? docXml.length : endTag }
+      })
+    const inBookmark = (at: number) => bookmarkRanges.some(r => at >= r.start && at <= r.end)
+
+    const orphan = SECTION_HEADINGS
+      .flatMap(h => [...docXml.matchAll(new RegExp(`<w:t[^>]*>${h}</w:t>`, 'g'))].map(m => m.index!))
+      .filter(at => !inBookmark(at))
+      .sort((a, b) => a - b)[0]
+    if (orphan === undefined) break
+
+    // Back up to the paragraph holding the heading, and take the page break
+    // before it with the block it belongs to.
+    let from = docXml.lastIndexOf('<w:p', orphan)
+    if (from === -1) break
+    const pageBreak = docXml.lastIndexOf('<w:p><w:r><w:br w:type="page"/></w:r></w:p>', from)
+    if (pageBreak !== -1 && from - pageBreak < 200) from = pageBreak
+
+    const nextBookmark = bookmarkRanges.map(r => r.start).filter(at => at > orphan).sort((a, b) => a - b)[0]
+    const to = nextBookmark ?? docXml.lastIndexOf('</w:body>')
+    if (to === -1 || to <= from) break
+
+    docXml = docXml.slice(0, from) + docXml.slice(to)
+    removed++
+  }
+
+  if (removed > 0) console.log('[attachments] removed', removed, 'section(s) left behind without bookmarks')
+  return { docXml, removed }
+}
+
 export function removeSections(
   docXml: string,
   relsXml: string,
