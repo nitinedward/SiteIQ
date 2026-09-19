@@ -586,14 +586,30 @@ function AdminPageInner() {
   }
 
   const deleteReport = async (inspectionId: string) => {
-    if (!confirm('Delete this site report? All observations and photos linked to this report will also be deleted.')) return
+    if (!confirm(
+      'Delete this site report?\n\n' +
+      'Its site notes, markups and photos go with it, along with the stored ' +
+      'Word document and PDF. This cannot be undone.'
+    )) return
     setDeletingReportId(inspectionId)
-    await supabase.from('observations').delete().eq('inspection_id', inspectionId)
-    await supabase.from('zones').delete().eq('inspection_id', inspectionId)
-    await supabase.from('inspections').delete().eq('id', inspectionId)
-    setPendingInspections(prev => prev.filter(i => i.id !== inspectionId))
-    setFinalisedInspections(prev => prev.filter(i => i.id !== inspectionId))
-    setDeletingReportId(null)
+    try {
+      // Server-side: the stored document, PDF and photos need the service key.
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/reports/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}` },
+        body: JSON.stringify({ inspectionId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not delete the report')
+      setPendingInspections(prev => prev.filter(i => i.id !== inspectionId))
+      setFinalisedInspections(prev => prev.filter(i => i.id !== inspectionId))
+    } catch (err: any) {
+      console.error('[deleteReport]', err)
+      alert(err.message || 'Could not delete the report.')
+    } finally {
+      setDeletingReportId(null)
+    }
   }
 
   // Renders page 1 of a single-page PDF to a PNG blob. Used to generate a

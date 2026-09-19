@@ -264,16 +264,31 @@ export default function DashboardPage() {
 
   const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/') }
 
-  // delete a site report (also removes observations and zones)
+  // delete a site report — its notes, markups, photos and stored files
   const deleteInspection = async (id: string) => {
-    if (!confirm('Delete this site report? This cannot be undone.')) return
+    if (!confirm(
+      'Delete this site report?\n\n' +
+      'Its site notes, markups and photos go with it, along with the stored ' +
+      'Word document and PDF. This cannot be undone.'
+    )) return
     setDeletingId(id)
-    await supabase.from('observations').delete().eq('inspection_id', id)
-    await supabase.from('zones').delete().eq('inspection_id', id)
-    await supabase.from('inspections').delete().eq('id', id)
-    setPendingReports(prev => prev.filter(i => i.id !== id))
-    setFinalisedReports(prev => prev.filter(i => i.id !== id))
-    setDeletingId(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/reports/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}` },
+        body: JSON.stringify({ inspectionId: id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not delete the report')
+      setPendingReports(prev => prev.filter(i => i.id !== id))
+      setFinalisedReports(prev => prev.filter(i => i.id !== id))
+    } catch (err: any) {
+      console.error('[deleteInspection]', err)
+      alert(err.message || 'Could not delete the report.')
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   // derived data
