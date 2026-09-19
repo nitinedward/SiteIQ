@@ -60,6 +60,12 @@ export default function ReportPage() {
   const [downloading,        setDownloading]         = useState(false)
   const [showDownloadMenu,   setShowDownloadMenu]     = useState(false)
   const [customFileName,     setCustomFileName]       = useState<string | null>(null)
+  // The report's number, correctable here: the notes show whichever number
+  // the report carries, so fixing a typo fixes their references too.
+  const [reportNoValue,      setReportNoValue]        = useState<string | null>(null)
+  const [editingReportNo,    setEditingReportNo]      = useState(false)
+  const [reportNoDraft,      setReportNoDraft]        = useState('')
+  const [savingReportNo,     setSavingReportNo]       = useState(false)
   const [fileNameDraft,      setFileNameDraft]        = useState('')
   const [savingFileName,     setSavingFileName]       = useState(false)
   const [zipProgress,        setZipProgress]          = useState<{ done: number; total: number } | null>(null)
@@ -103,6 +109,7 @@ export default function ReportPage() {
       // undefined until the report_file_name column exists; null/'' means
       // "use the derived name".
       setCustomFileName((inspRes.data as any)?.report_file_name ?? null)
+      setReportNoValue((inspRes.data as any)?.report_no ?? null)
       setLoading(false)
 
       loadAttachments(id)
@@ -382,6 +389,38 @@ export default function ReportPage() {
       )
     } finally {
       setSavingFileName(false)
+    }
+  }
+
+  /** Saves a corrected report number.
+   *
+   *  Site notes reference the report, not the number, so their "Site Report
+   *  007" labels follow this straight away. The generated document doesn't:
+   *  {{report_no}} was filled in when it was written, so the number in the
+   *  document stays until the text is regenerated — which is what the note
+   *  after saving says. */
+  const saveReportNo = async () => {
+    const next = reportNoDraft.trim()
+    if (!next || next === reportNoValue) { setEditingReportNo(false); return }
+    setSavingReportNo(true)
+    try {
+      const { error } = await supabase
+        .from('inspections')
+        .update({ report_no: next })
+        .eq('id', inspectionId)
+      if (error) throw error
+      setReportNoValue(next)
+      setEditingReportNo(false)
+      setInsertResult(
+        `Report number changed to ${next}. Site notes now reference it. ` +
+        `The number printed inside the document updates when the text is regenerated.`
+      )
+      setTimeout(() => setInsertResult(''), 9000)
+    } catch (err: any) {
+      console.error('[reportNo] save failed:', err)
+      alert('Could not save the report number: ' + (err?.message || 'unknown error'))
+    } finally {
+      setSavingReportNo(false)
     }
   }
 
@@ -1144,7 +1183,7 @@ export default function ReportPage() {
   if (!pageData) return null
 
   const projectName     = pageData.project?.name ?? ''
-  const reportNo        = pageData.inspection?.report_no ?? ''
+  const reportNo        = reportNoValue ?? pageData.inspection?.report_no ?? ''
   const selPhotoCount   = selectedPhotos.filter(p => p.selected).length
   const selDrawingCount = drawings.filter(d => d.selected && d.captured).length
   const totalAttachments = selPhotoCount + selDrawingCount
@@ -1230,6 +1269,48 @@ export default function ReportPage() {
             >
               {reportDisplayName(customFileName, projectName)}
             </span>
+
+            {/* The report's number, editable — a typo here is what every site
+                note on the report quotes. Frozen once finalised. */}
+            {editingReportNo ? (
+              <input
+                autoFocus
+                value={reportNoDraft}
+                onChange={e => setReportNoDraft(e.target.value)}
+                onBlur={saveReportNo}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') saveReportNo()
+                  if (e.key === 'Escape') setEditingReportNo(false)
+                }}
+                disabled={savingReportNo}
+                style={{
+                  width: 74, padding: '2px 8px', borderRadius: 99,
+                  border: '1.5px solid var(--indigo)', outline: 'none',
+                  fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-ink)',
+                  background: 'var(--surface)',
+                }}
+              />
+            ) : (
+              <button
+                onClick={() => {
+                  if (reportStatus === 'finalised') return
+                  setReportNoDraft(reportNoValue ?? '')
+                  setEditingReportNo(true)
+                }}
+                title={reportStatus === 'finalised'
+                  ? 'This report is finalised — reopen it to change the number'
+                  : 'Click to correct the report number. Site notes follow it; the document updates when the text is regenerated.'}
+                style={{
+                  padding: '2px 8px', borderRadius: 99, flexShrink: 0,
+                  background: 'var(--paper)', border: '1px solid var(--border-line)',
+                  fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-mid)',
+                  cursor: reportStatus === 'finalised' ? 'default' : 'pointer',
+                }}
+              >
+                #{reportNoValue || '—'}
+              </button>
+            )}
+
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 3,
               padding: '2px 8px', borderRadius: 99, fontFamily: 'var(--f-heading)', fontSize: 10, fontWeight: 700,
