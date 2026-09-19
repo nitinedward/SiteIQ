@@ -170,12 +170,43 @@ function ensureImageContentTypes(zip: AdmZip): void {
 
 // ── REMOVAL ─────────────────────────────────────────────────────────────────
 
-/** Strips the named sections from a document, along with the image
- *  relationships and media parts only they referenced, so repeated
- *  insert/remove cycles don't leak storage into the .docx. */
 /** The headings our sections start with, used to recognise a copy whose
  *  bookmarks are gone. */
 const SECTION_HEADINGS = ['STRUCTURAL DRAWINGS', 'SITE PHOTOGRAPHS']
+
+/** The body's top-level blocks — paragraphs, tables, bookmarks and the
+ *  trailing sectPr — as offsets, so a block can be removed whole. */
+function bodyBlocks(docXml: string): { tag: string; start: number; end: number }[] {
+  const bodyStart = docXml.indexOf('<w:body>')
+  const bodyEnd = docXml.lastIndexOf('</w:body>')
+  if (bodyStart === -1 || bodyEnd === -1) return []
+
+  const blocks: { tag: string; start: number; end: number }[] = []
+  const re = /<(w:p|w:tbl|w:sectPr|w:bookmarkStart|w:bookmarkEnd)(\s[^>]*)?(\/?)>/g
+  re.lastIndex = bodyStart
+  let m: RegExpExecArray | null
+  while ((m = re.exec(docXml)) && m.index < bodyEnd) {
+    const tag = m[1]
+    if (m[3] === '/' || tag.startsWith('w:bookmark')) {
+      blocks.push({ tag, start: m.index, end: m.index + m[0].length })
+      continue
+    }
+    // Walk to the matching close, allowing for nesting — a table holds
+    // paragraphs, and a paragraph can hold another inside a text box.
+    let depth = 1
+    const inner = new RegExp(`</?${tag}(?:\\s[^>]*)?(/?)>`, 'g')
+    inner.lastIndex = m.index + m[0].length
+    let n: RegExpExecArray | null = null
+    while (depth > 0 && (n = inner.exec(docXml))) {
+      if (n[0].startsWith('</')) depth--
+      else if (n[1] !== '/') depth++
+    }
+    const end = depth === 0 ? inner.lastIndex : m.index + m[0].length
+    blocks.push({ tag, start: m.index, end })
+    re.lastIndex = end
+  }
+  return blocks
+}
 
 /**
  * Removes a photo or drawing block left behind without its bookmarks.
@@ -186,40 +217,47 @@ const SECTION_HEADINGS = ['STRUCTURAL DRAWINGS', 'SITE PHOTOGRAPHS']
  * one of our headings; anything still inside a bookmark is left alone,
  * because that is the copy being managed.
  *
- * A block runs to the start of the next bookmarked section, or to the end of
- * the body, since these sections are always written at the end after a page
- * break.
+ * Whole blocks only, and never the body's closing sectPr: cutting on raw
+ * offsets once left a half-open paragraph and a body with no page setup,
+ * which OnlyOffice turned into a two-page ruin of a report.
  */
 export function removeOrphanSections(docXml: string): { docXml: string; removed: number } {
   let removed = 0
 
   for (let pass = 0; pass < 6; pass++) {
-    const bookmarkRanges = [...docXml.matchAll(/<w:bookmarkStart[^>]*w:name="(siteiq_[a-z]+)"[^>]*\/>/g)]
-      .map(m => {
-        const id = m[0].match(/w:id="(\d+)"/)?.[1]
-        const endTag = id ? docXml.indexOf(`<w:bookmarkEnd w:id="${id}"/>`) : -1
-        return { start: m.index!, end: endTag === -1 ? docXml.length : endTag }
-      })
-    const inBookmark = (at: number) => bookmarkRanges.some(r => at >= r.start && at <= r.end)
+    const blocks = bodyBlocks(docXml)
+    if (blocks.length === 0) break
 
-    const orphan = SECTION_HEADINGS
-      .flatMap(h => [...docXml.matchAll(new RegExp(`<w:t[^>]*>${h}</w:t>`, 'g'))].map(m => m.index!))
-      .filter(at => !inBookmark(at))
-      .sort((a, b) => a - b)[0]
-    if (orphan === undefined) break
+    const bookmarkStarts = blocks
+      .filter(b => b.tag === 'w:bookmarkStart' && /w:name="siteiq_/.test(docXml.slice(b.start, b.end)))
+      .map(b => b.start)
+    const bookmarkEnds = blocks.filter(b => b.tag === 'w:bookmarkEnd').map(b => b.end)
+    const inBookmark = (at: number) =>
+      bookmarkStarts.some(start => at >= start && at <= (bookmarkEnds.find(e => e > start) ?? docXml.length))
 
-    // Back up to the paragraph holding the heading, and take the page break
-    // before it with the block it belongs to.
-    let from = docXml.lastIndexOf('<w:p', orphan)
-    if (from === -1) break
-    const pageBreak = docXml.lastIndexOf('<w:p><w:r><w:br w:type="page"/></w:r></w:p>', from)
-    if (pageBreak !== -1 && from - pageBreak < 200) from = pageBreak
+    const headingIndex = blocks.findIndex(b =>
+      b.tag === 'w:p' &&
+      !inBookmark(b.start) &&
+      SECTION_HEADINGS.some(h => docXml.slice(b.start, b.end).includes(`<w:t>${h}</w:t>`))
+    )
+    if (headingIndex === -1) break
 
-    const nextBookmark = bookmarkRanges.map(r => r.start).filter(at => at > orphan).sort((a, b) => a - b)[0]
-    const to = nextBookmark ?? docXml.lastIndexOf('</w:body>')
-    if (to === -1 || to <= from) break
+    // Our sections open with a page break, which belongs to the block.
+    let from = headingIndex
+    const prior = blocks[headingIndex - 1]
+    if (prior?.tag === 'w:p' && docXml.slice(prior.start, prior.end).includes('w:type="page"')) from = headingIndex - 1
 
-    docXml = docXml.slice(0, from) + docXml.slice(to)
+    // Stop at the next bookmarked section, or at the page setup that closes
+    // the body — never take that with us.
+    let to = blocks.length
+    for (let i = from + 1; i < blocks.length; i++) {
+      const b = blocks[i]
+      if (b.tag === 'w:sectPr') { to = i; break }
+      if (b.tag === 'w:bookmarkStart' && /w:name="siteiq_/.test(docXml.slice(b.start, b.end))) { to = i; break }
+    }
+    if (to <= from) break
+
+    docXml = docXml.slice(0, blocks[from].start) + docXml.slice(blocks[to - 1].end)
     removed++
   }
 
@@ -227,6 +265,9 @@ export function removeOrphanSections(docXml: string): { docXml: string; removed:
   return { docXml, removed }
 }
 
+/** Strips the named sections from a document, along with the image
+ *  relationships and media parts only they referenced, so repeated
+ *  insert/remove cycles don't leak storage into the .docx. */
 export function removeSections(
   docXml: string,
   relsXml: string,
