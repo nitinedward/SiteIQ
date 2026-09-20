@@ -15,7 +15,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.nitinedward.SiteIQ",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "SiteIQ needs camera access to capture site inspection photos.",
@@ -28,7 +28,7 @@
     },
     "android": {
       "package": "com.nitinedward.siteiq",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
