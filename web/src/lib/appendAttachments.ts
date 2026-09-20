@@ -1,4 +1,5 @@
 import AdmZip from 'adm-zip'
+import sharp from 'sharp'
 import { xmlEscape } from '@/lib/templateProcessor'
 import { saveDoc, loadDoc } from '@/lib/docStorage'
 import {
@@ -13,6 +14,52 @@ import {
   removeSections,
   wrapSection,
 } from '@/lib/attachmentSections'
+
+/**
+ * Site photos go into the report at the size it prints them, not at camera
+ * resolution.
+ *
+ * A phone photo is ~2.7MB, so ten of them made a 25MB document and a 17MB
+ * PDF — and every step afterwards moved those megabytes again: the editor
+ * loading the file, OnlyOffice converting it, the finalise reading it back.
+ * The report places a photo at 7.5cm wide, which is under 900px at print
+ * resolution, so 1600px is already generous.
+ *
+ * The stored original is untouched — the "View full-size photo" link still
+ * goes to it.
+ */
+const PHOTO_MAX_DIM = 1600
+const PHOTO_QUALITY = 78
+/** Markups are line work on a drawing, so they stay PNG and keep more detail. */
+const DRAWING_MAX_DIM = 2400
+
+async function shrinkPhoto(buffer: Buffer): Promise<{ buffer: Buffer; ext: string }> {
+  try {
+    const out = await sharp(buffer)
+      .rotate()                                   // honour the camera's orientation
+      .resize(PHOTO_MAX_DIM, PHOTO_MAX_DIM, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: PHOTO_QUALITY, mozjpeg: true })
+      .toBuffer()
+    // A photo already smaller than the target isn't worth re-encoding.
+    return out.length < buffer.length ? { buffer: out, ext: 'jpg' } : { buffer, ext: 'jpg' }
+  } catch (err) {
+    console.warn('[append] could not shrink a photo, using it as it is:', err)
+    return { buffer, ext: 'jpg' }
+  }
+}
+
+async function shrinkDrawing(buffer: Buffer): Promise<Buffer> {
+  try {
+    const out = await sharp(buffer)
+      .resize(DRAWING_MAX_DIM, DRAWING_MAX_DIM, { fit: 'inside', withoutEnlargement: true })
+      .png({ compressionLevel: 9, palette: true })
+      .toBuffer()
+    return out.length < buffer.length ? out : buffer
+  } catch (err) {
+    console.warn('[append] could not shrink a markup, using it as it is:', err)
+    return buffer
+  }
+}
 
 const REL_IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 // External links need TargetMode="External" on the relationship, which is
@@ -248,6 +295,28 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
       })
     )
 
+    // Every photo fetched once, in parallel, and shrunk to the size the
+    // report prints it at. Fetching them one at a time inside the layout loop
+    // measured 4.3s for ten photos against 0.4s together, and embedding the
+    // camera-resolution original is what made a report 25MB.
+    const photoFiles = new Map<string, { buffer: Buffer; ext: string }>()
+    if (requested.includes('photos')) {
+      await Promise.all([...new Set(validPhotos.map(p => p.url))].map(async url => {
+        try {
+          const res = await fetch(url)
+          if (!res.ok) return
+          photoFiles.set(url, await shrinkPhoto(Buffer.from(await res.arrayBuffer())))
+        } catch (err) {
+          console.error('[append] Failed to fetch photo:', url, err)
+        }
+      }))
+      const total = [...photoFiles.values()].reduce((n, p) => n + p.buffer.length, 0)
+      console.log('[append]', photoFiles.size, 'photos ready,', (total / 1e6).toFixed(1), 'MB after shrinking')
+    }
+
+    // Markups shrink too — a captured A3 sheet came in at ~2.8MB.
+    const shrunkDrawings = await Promise.all(drawingBuffers.map(b => (b ? shrinkDrawing(b) : Promise.resolve(null))))
+
     const zip = new AdmZip(docBuffer)
 
     // ── Relationships file ───────────────────────────────────────────────────
@@ -324,7 +393,7 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
         if (!imgBuffer) return
 
         const mediaName = `appendDrawing${i + 1}.png`
-        zip.addFile(`word/media/${mediaName}`, imgBuffer)
+        zip.addFile(`word/media/${mediaName}`, shrunkDrawings[i] ?? imgBuffer)
 
         const rId = `rId${nextRId++}`
         newRels.push({ id: rId, type: REL_IMAGE, target: `media/${mediaName}` })
@@ -361,52 +430,29 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
           const leftPhoto  = zonePhotos[i]
           const rightPhoto = zonePhotos[i + 1] ?? null
 
-          // Fetch and embed left photo
-          let leftRId = ''
-          let leftLinkRId: string | null = null
-          try {
-            console.log('[append] Fetching photo:', leftPhoto.url)
-            const res = await fetch(leftPhoto.url)
-            if (res.ok) {
-              const buf  = Buffer.from(await res.arrayBuffer())
-              console.log('[append] Photo size:', buf.byteLength)
-              const ext  = leftPhoto.url.toLowerCase().includes('.png') ? 'png' : 'jpg'
-              const name = `photo_${nextRId}.${ext}`
-              zip.addFile(`word/media/${name}`, buf)
-              leftRId = `rId${nextRId}`
-              newRels.push({ id: leftRId, type: REL_IMAGE, target: `media/${name}` })
-              nextRId++
-              // Clicking the photo opens the full-size original.
-              leftLinkRId = `rId${nextRId}`
-              newRels.push({ id: leftLinkRId, type: REL_HYPERLINK, target: leftPhoto.url, external: true })
-              nextRId++
-            }
-          } catch (err) {
-            console.error(`[append] Failed to fetch photo: ${leftPhoto.url}`, err)
+          /** Embeds one photo from the prefetch, with a link to its original. */
+          const embed = (photo: PhotoInput | null): { rId: string | null; linkRId: string | null } => {
+            const file = photo ? photoFiles.get(photo.url) : undefined
+            if (!photo || !file) return { rId: null, linkRId: null }
+
+            const name = `photo_${nextRId}.${file.ext}`
+            zip.addFile(`word/media/${name}`, file.buffer)
+            const rId = `rId${nextRId}`
+            newRels.push({ id: rId, type: REL_IMAGE, target: `media/${name}` })
+            nextRId++
+            // Clicking the photo opens the full-size original.
+            const linkRId = `rId${nextRId}`
+            newRels.push({ id: linkRId, type: REL_HYPERLINK, target: photo.url, external: true })
+            nextRId++
+            return { rId, linkRId }
           }
 
-          // Fetch and embed right photo
-          let rightRId: string | null = null
-          let rightLinkRId: string | null = null
-          if (rightPhoto) {
-            try {
-              const res = await fetch(rightPhoto.url)
-              if (res.ok) {
-                const buf  = Buffer.from(await res.arrayBuffer())
-                const ext  = rightPhoto.url.toLowerCase().includes('.png') ? 'png' : 'jpg'
-                const name = `photo_${nextRId}.${ext}`
-                zip.addFile(`word/media/${name}`, buf)
-                rightRId = `rId${nextRId}`
-                newRels.push({ id: rightRId, type: REL_IMAGE, target: `media/${name}` })
-                nextRId++
-                rightLinkRId = `rId${nextRId}`
-                newRels.push({ id: rightLinkRId, type: REL_HYPERLINK, target: rightPhoto.url, external: true })
-                nextRId++
-              }
-            } catch (err) {
-              console.error(`[append] Failed to fetch photo: ${rightPhoto.url}`, err)
-            }
-          }
+          const left = embed(leftPhoto)
+          const right = embed(rightPhoto)
+          const leftRId = left.rId ?? ''
+          const leftLinkRId = left.linkRId
+          const rightRId = right.rId
+          const rightLinkRId = right.linkRId
 
           if (leftRId || rightRId) {
             photosXml += buildPhotoTableRow(leftRId, docPrId++, rightRId, docPrId++, leftLinkRId, rightLinkRId)
