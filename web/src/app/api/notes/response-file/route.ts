@@ -126,8 +126,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'This site note belongs to another firm' }, { status: 403, headers: cors })
     }
 
+    // Under the note's own folder, and no climbing back out of it: storage
+    // keys are literal, so `a/../b` names no real object today, but a path
+    // this route accepts should never depend on that.
     const prefix = `note-responses/${observationId}/`
-    const safe = [...new Set((paths as string[]).filter(p => typeof p === 'string' && p.startsWith(prefix)))]
+    const safe = [...new Set((paths as string[]).filter(p =>
+      typeof p === 'string' && p.startsWith(prefix) && !p.split('/').includes('..')
+    ))]
     if (safe.length === 0) {
       return NextResponse.json({ error: 'Those files do not belong to this note' }, { status: 400, headers: cors })
     }
