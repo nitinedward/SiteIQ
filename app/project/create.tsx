@@ -30,7 +30,9 @@ export default function CreateProjectScreen() {
       address: address.trim(),
       client: client.trim(),
       firm_id: firm?.id,
-      status: 'active',
+      // Uppercase, as the rest of the app writes and reads it — a lowercase
+      // status matched nothing in the detail screen's lookup and crashed it.
+      status: 'ACTIVE',
     }).select('id').single()
 
     // An engineer's project list is what they're assigned to, so without

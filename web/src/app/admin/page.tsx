@@ -210,6 +210,7 @@ function AdminPageInner() {
   const [loadingInspections, setLoadingInspections] = useState(false)
   const [deletingReportId, setDeletingReportId]   = useState<string | null>(null)
   const [currentUserId, setCurrentUserId]         = useState('')
+  const [isAdmin, setIsAdmin]                     = useState(false)
   const [copiedCode, setCopiedCode]               = useState(false)
   const [uploadProgress, setUploadProgress]       = useState<string | null>(null)
   const [uploadMsg, setUploadMsg]                 = useState<{ ok: boolean; text: string } | null>(null)
@@ -219,13 +220,15 @@ function AdminPageInner() {
   useEffect(() => { loadData() }, [])
 
   useEffect(() => {
-    setTab(searchParams.get('tab') === 'team' ? 'team' : 'projects')
+    // The team tab is the admin's; an engineer landing on ?tab=team from a
+    // stale link gets the projects list rather than an empty page.
+    setTab(searchParams.get('tab') === 'team' && isAdmin ? 'team' : 'projects')
     if (searchParams.get('new') === '1') {
       setShowNewProject(true)
       setSelectedProject(null)
       router.replace('/admin', { scroll: false })
     }
-  }, [searchParams])
+  }, [searchParams, isAdmin])
 
   // ── existing functions (unchanged) ────────────────────────────────────────
   const loadData = async () => {
@@ -240,7 +243,13 @@ function AdminPageInner() {
       .eq('user_id', user.id)
       .single()
 
-    if (member?.role !== 'admin') { router.push('/dashboard'); return }
+    // Engineers belong here too — it is the only place a project can be
+    // opened. They see the projects they are on, and none of the controls
+    // that add, change or remove things.
+    if (!member) { router.push('/dashboard'); return }
+    const admin = member.role === 'admin'
+    setIsAdmin(admin)
+    if (!admin) setTab('projects')
 
     const firm = member.firms as any
     setFirmId(firm.id)
@@ -249,11 +258,20 @@ function AdminPageInner() {
     setEditingJoinCode(firm.join_code ?? '')
     setFullName(member.full_name)
 
-    const [{ data: projs }, { data: mems }, templates] = await Promise.all([
+    const [{ data: allProjs }, { data: mems }, templates] = await Promise.all([
       supabase.from('projects').select('*').eq('firm_id', firm.id).order('created_at', { ascending: false }),
       supabase.from('firm_members').select('id, user_id, full_name, email, role').eq('firm_id', firm.id),
       loadReportTemplates(firm.id),
     ])
+
+    // An admin oversees the whole firm; an engineer sees what they are on,
+    // the same set the dashboard shows them.
+    let projs = allProjs ?? []
+    if (!admin) {
+      const { data: assignments } = await supabase.from('project_members').select('project_id').eq('user_id', user.id)
+      const mine = new Set((assignments ?? []).map((a: any) => a.project_id))
+      projs = projs.filter(p => mine.has(p.id))
+    }
 
     setReportTemplates(templates)
     setProjects(projs ?? [])
@@ -1055,7 +1073,7 @@ function AdminPageInner() {
   return (
     <Shell
       activePage={tab === 'projects' ? 'projects' : 'team'}
-      role="admin"
+      role={isAdmin ? 'admin' : 'member'}
       fullName={fullName}
       firmName={firmName}
       onSignOut={handleSignOut}
@@ -1316,9 +1334,11 @@ function AdminPageInner() {
                           {saving ? 'Saving…' : 'Save Changes'}
                         </Btn>
                       </div>
-                      <div style={{ marginTop: 10 }}>
-                        <Btn variant="danger" onClick={() => deleteProject(selectedProject.id)} style={{ width: '100%' }}>Delete Project</Btn>
-                      </div>
+                      {isAdmin && (
+                        <div style={{ marginTop: 10 }}>
+                          <Btn variant="danger" onClick={() => deleteProject(selectedProject.id)} style={{ width: '100%' }}>Delete Project</Btn>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -1343,7 +1363,7 @@ function AdminPageInner() {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 20 }}>
                         <Badge status={selectedProject.status} />
-                        <Btn variant="outline" small onClick={startEdit}>Edit</Btn>
+                        {isAdmin && <Btn variant="outline" small onClick={startEdit}>Edit</Btn>}
                       </div>
                     </div>
                   )}
@@ -1897,7 +1917,7 @@ function AdminPageInner() {
       {/* ══════════════════════════════════════════════════════
           TEAM TAB
       ══════════════════════════════════════════════════════ */}
-      {tab === 'team' && (
+      {tab === 'team' && isAdmin && (
         <div style={{ padding: '32px 28px', maxWidth: 860 }}>
 
           {/* Team heading */}

@@ -313,8 +313,11 @@ export default function DashboardPage() {
   }
 
   // derived data
-  const activeProjects  = projects.filter(p => p.status === 'ACTIVE')
-  const onHoldProjects  = projects.filter(p => p.status === 'ON_HOLD')
+  // Compared case-insensitively so a project stored with a lowercase status
+  // still lands in the right panel instead of vanishing from both.
+  const hasStatus = (p: Project, s: string) => (p.status ?? '').toUpperCase() === s
+  const activeProjects  = projects.filter(p => hasStatus(p, 'ACTIVE'))
+  const onHoldProjects  = projects.filter(p => hasStatus(p, 'ON_HOLD'))
   const oneWeekAgo      = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
   const allInspections  = [...pendingReports, ...finalisedReports]
   const siteVisitsThisWeek = allInspections.filter(i => new Date(i.created_at) >= oneWeekAgo).length

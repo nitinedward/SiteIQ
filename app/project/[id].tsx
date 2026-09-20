@@ -115,7 +115,11 @@ export default function ProjectDetailScreen() {
     </View>
   );
 
-  const status = statusConfig[project.status];
+  // Looked up leniently and with a fallback: a status the app doesn't know
+  // came back undefined and crashed this screen on the line that reads it,
+  // so the project simply would not open.
+  const status = statusConfig[(project.status ?? '').toUpperCase() as keyof typeof statusConfig]
+    ?? { colour: T.mid, bg: '#EEF0F2', label: project.status || 'Unknown' };
 
   // Sheets re-issued at a later revision: only the current one is listed,
   // with the superseded ones a tap away.

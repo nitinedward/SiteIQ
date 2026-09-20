@@ -207,7 +207,10 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <NavBtn id="dashboard" label="Dashboard" active={activePage === 'dashboard'} onClick={() => router.push('/dashboard')} />
           <NavBtn id="projects"  label="Projects"  active={activePage === 'projects'}  onClick={() => router.push('/admin')} />
-          <NavBtn id="team"      label="Team"       active={activePage === 'team'}      onClick={() => router.push('/admin?tab=team')} />
+          {/* The team list, the join code and member roles are the admin's. */}
+          {role === 'admin' && (
+            <NavBtn id="team"      label="Team"       active={activePage === 'team'}      onClick={() => router.push('/admin?tab=team')} />
+          )}
         </div>
 
         {/* Bottom section */}
