@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../lib/theme'
 import { latestRevisions, revisionCount } from '../../lib/drawingRevisions';
 import { FooterNav } from '../../components/FooterNav';
+import { deleteReport } from '../../lib/siteNotes';
 
 const T = theme.colors;
 const R = theme.radius;
@@ -55,13 +56,13 @@ export default function ProjectDetailScreen() {
   const fetchData = async () => {
     setLoading(true);
 
-    // Clean up orphaned IN_PROGRESS inspections
+    // Clean up orphaned IN_PROGRESS inspections. Through the server so the
+    // photos and attachments of any notes on them go too — deleting the rows
+    // from here used to strand those files in the bucket for good.
+    // Best-effort: a failure here must not stop the screen loading.
     const { data: orphans } = await supabase.from('inspections').select('id').eq('project_id', id).eq('status', 'IN_PROGRESS');
-    if (orphans?.length) {
-      const ids = orphans.map((o: any) => o.id);
-      await supabase.from('zones').delete().in('inspection_id', ids);
-      await supabase.from('observations').delete().in('inspection_id', ids);
-      await supabase.from('inspections').delete().in('id', ids);
+    for (const orphan of orphans ?? []) {
+      try { await deleteReport(orphan.id) } catch (e) { console.warn('[project] orphan cleanup:', e) }
     }
 
     const [{ data: p, error: pe }, { data: d }, { data: ins }] = await Promise.all([

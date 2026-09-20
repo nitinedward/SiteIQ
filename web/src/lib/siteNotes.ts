@@ -369,6 +369,14 @@ export async function addNoteResponse({
 }
 
 export async function deleteNoteResponse(id: string): Promise<void> {
+  // Read the row first: once it is gone nothing records where its files
+  // live, and they would sit in the bucket for good.
+  const { data: existing } = await supabase
+    .from(NOTE_RESPONSES_TABLE)
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
   // `select()` so the removal can be confirmed. Row-level security filters a
   // delete rather than refusing it, so a comment someone else added comes
   // back as a success that deleted nothing — and the UI would drop it from
@@ -382,6 +390,33 @@ export async function deleteNoteResponse(id: string): Promise<void> {
   if (error) throw new Error(error.message)
   if (!data || data.length === 0) {
     throw new Error('That comment could not be removed — it was added by someone else.')
+  }
+
+  if (existing) await removeResponseFiles(existing)
+}
+
+/** Deletes the stored files of a response that has just been removed.
+ *  Best-effort: the comment is already gone, so a failure here is logged
+ *  rather than shown as a delete that did not work. */
+async function removeResponseFiles(row: any): Promise<void> {
+  const files = toResponse(row).files
+  const paths = files
+    .map(f => f.url?.match(/\/storage\/v1\/object\/(?:public\/|sign\/)?observation-photos\/([^?]+)/)?.[1])
+    .filter(Boolean)
+    .map(p => decodeURIComponent(p as string))
+  if (paths.length === 0) return
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    const res = await fetch('/api/notes/response-file', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ observationId: row.observation_id, paths }),
+    })
+    if (!res.ok) console.warn('[note-response] files left behind:', (await res.json().catch(() => ({}))).error)
+  } catch (err) {
+    console.warn('[note-response] files left behind:', err)
   }
 }
 

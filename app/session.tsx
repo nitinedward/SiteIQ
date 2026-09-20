@@ -14,6 +14,7 @@ import { theme } from '../lib/theme'
 import { latestRevisions } from '../lib/drawingRevisions';
 import { transcribeAudio } from '../lib/transcribe';
 import { consumePendingDrawingSelection } from '../lib/pendingSelection';
+import { deleteSiteNote } from '../lib/siteNotes';
 
 const T = theme.colors;
 const R = theme.radius;
@@ -477,8 +478,10 @@ export default function SessionScreen() {
                         onPress={() => Alert.alert('Delete Observation', 'Delete this general observation? This cannot be undone.', [
                           { text: 'Cancel', style: 'cancel' },
                           { text: 'Delete', style: 'destructive', onPress: async () => {
-                            const { error } = await supabase.from('observations').delete().eq('id', obs.id);
-                            if (error) { Alert.alert('Delete Failed', error.message); return; }
+                            // Through the server so the note's photos and any
+                            // response attachments are removed with it.
+                            try { await deleteSiteNote(obs.id) }
+                            catch (e: any) { Alert.alert('Delete Failed', e?.message ?? 'Please try again.'); return; }
                             setGeneralObservations(curr => curr.filter(o => o.id !== obs.id));
                           } },
                         ])}>

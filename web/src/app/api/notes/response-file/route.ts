@@ -6,8 +6,8 @@ export const maxDuration = 60
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
 export async function OPTIONS() {
@@ -72,5 +72,73 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     console.error('[note-response-file] error:', err)
     return NextResponse.json({ error: err.message ?? 'Upload failed' }, { status: 500, headers: cors })
+  }
+}
+
+/** Removes files that belonged to a deleted response.
+ *
+ *  Deleting the response row alone left its attachment in the bucket with
+ *  nothing recording where it came from — the orphans swept on 2026-09-20
+ *  had exactly this shape. Paths are given in the body as `paths`, and each
+ *  must sit under the note's own prefix, so this can only ever remove a file
+ *  belonging to the note named in the request.
+ *
+ *  Unlike the upload above, this checks the caller: the note must belong to
+ *  a project of their firm. */
+export async function DELETE(request: NextRequest) {
+  try {
+    const { observationId, paths } = await request.json()
+    if (!observationId || !Array.isArray(paths) || paths.length === 0) {
+      return NextResponse.json({ error: 'Missing observationId or paths' }, { status: 400, headers: cors })
+    }
+
+    const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
+    if (!token) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: cors })
+
+    const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
+      serviceKey
+    )
+
+    const { data: { user } } = await supabase.auth.getUser(token)
+    if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: cors })
+
+    const { data: note } = await supabase
+      .from('observations')
+      .select('project_id, inspection_id')
+      .eq('id', observationId)
+      .single()
+    if (!note) return NextResponse.json({ error: 'Site note not found' }, { status: 404, headers: cors })
+
+    let firmId: string | null = null
+    if (note.project_id) {
+      const { data: p } = await supabase.from('projects').select('firm_id').eq('id', note.project_id).single()
+      firmId = p?.firm_id ?? null
+    }
+    if (!firmId && note.inspection_id) {
+      const { data: ins } = await supabase.from('inspections').select('projects(firm_id)').eq('id', note.inspection_id).single()
+      firmId = (ins as any)?.projects?.firm_id ?? null
+    }
+
+    const { data: member } = await supabase.from('firm_members').select('firm_id').eq('user_id', user.id).single()
+    if (!member || !firmId || member.firm_id !== firmId) {
+      return NextResponse.json({ error: 'This site note belongs to another firm' }, { status: 403, headers: cors })
+    }
+
+    const prefix = `note-responses/${observationId}/`
+    const safe = [...new Set((paths as string[]).filter(p => typeof p === 'string' && p.startsWith(prefix)))]
+    if (safe.length === 0) {
+      return NextResponse.json({ error: 'Those files do not belong to this note' }, { status: 400, headers: cors })
+    }
+
+    const { error } = await supabase.storage.from('observation-photos').remove(safe)
+    if (error) throw new Error(error.message)
+
+    console.log('[note-response-file] removed', safe.length, 'file(s) for', observationId)
+    return NextResponse.json({ success: true, removed: safe.length }, { headers: cors })
+  } catch (err: any) {
+    console.error('[note-response-file] delete error:', err)
+    return NextResponse.json({ error: err.message ?? 'Could not remove the file' }, { status: 500, headers: cors })
   }
 }
