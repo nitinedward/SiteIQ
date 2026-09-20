@@ -490,10 +490,13 @@ function NPMInput({ value, onChange, placeholder }: { value: string; onChange: (
  *  shows, reachable from the dashboard so an engineer can put a colleague on
  *  a job without an admin doing it for them. The database allows assigning
  *  anyone in the firm; only deleting the project itself stays admin-only. */
-export function AssignMembersModal({ project, firmId, userId, onClose }: {
+export function AssignMembersModal({ project, firmId, userId, role = '', onClose }: {
   project: { id: string; name: string }
   firmId: string
   userId: string
+  /** An admin sees every project regardless, so only an engineer is warned
+   *  about taking themselves off one. */
+  role?: string
   onClose: () => void
 }) {
   const [members, setMembers] = useState<{ user_id: string; full_name: string; email: string; role: string }[]>([])
@@ -518,6 +521,15 @@ export function AssignMembersModal({ project, firmId, userId, onClose }: {
 
   const toggle = async (memberId: string) => {
     const on = assigned.includes(memberId)
+    // An engineer only sees the projects they are on, so taking themselves
+    // off one hides it from them and leaves them no way back without an
+    // admin. Worth a word before it happens.
+    if (on && memberId === userId && role !== 'admin') {
+      const sure = confirm(
+        `Take yourself off ${project.name}?\n\nIt will disappear from your projects, and only an admin can put you back on it.`
+      )
+      if (!sure) return
+    }
     setSaving(memberId)
     setFailed('')
     const { error } = on

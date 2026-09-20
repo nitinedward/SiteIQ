@@ -363,6 +363,7 @@ export default function DashboardPage() {
           project={assigningProject}
           firmId={firmId}
           userId={userId}
+          role={role}
           onClose={() => setAssigningProject(null)}
         />
       )}
