@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { Shell, Spinner, Card, NewProjectModal } from '@/components/Shell'
+import { Shell, Spinner, Card, NewProjectModal, AssignMembersModal } from '@/components/Shell'
 import { reportDisplayName } from '@/lib/reportFileName'
 
 // ── TYPES ─────────────────────────────────────────────────────────────────────
@@ -77,6 +77,26 @@ function getWeekBuckets(): { start: Date; end: Date; label: string }[] {
 }
 
 // ── PANEL HEADER ──────────────────────────────────────────────────────────────
+/** Sits on a project row and opens the assign list. Stops the click reaching
+ *  the row underneath, which navigates to the project. */
+function TeamBtn({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); onClick() }}
+      title="Who's on this project"
+      style={{
+        background: 'none', border: '1px solid var(--border-line)', color: 'var(--indigo)',
+        borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700,
+        padding: '4px 12px', cursor: 'pointer', transition: 'background .12s',
+      }}
+      onMouseEnter={e => (e.currentTarget.style.background = 'var(--indigo-soft)')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+    >
+      Team
+    </button>
+  )
+}
+
 function PanelHeader({
   title, count, action, accentBorder, extra,
 }: {
@@ -135,6 +155,7 @@ export default function DashboardPage() {
   const [firmId, setFirmId]                   = useState('')
   const [userId, setUserId]                   = useState('')
   const [showNewProject, setShowNewProject]   = useState(false)
+  const [assigningProject, setAssigningProject] = useState<Project | null>(null)
   const [showAllCompleted, setShowAllCompleted] = useState(false)
 
   // new: inspections split by report_status
@@ -334,6 +355,14 @@ export default function DashboardPage() {
           onCreated={load}
         />
       )}
+      {assigningProject && (
+        <AssignMembersModal
+          project={assigningProject}
+          firmId={firmId}
+          userId={userId}
+          onClose={() => setAssigningProject(null)}
+        />
+      )}
       <div className="dash-content" style={{ padding: '32px 36px' }}>
 
         {/* PAGE HEADER */}
@@ -462,10 +491,13 @@ export default function DashboardPage() {
                     <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}>{p.name}</div>
                     <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 2 }}>{p.project_number}</div>
                   </div>
-                  {pCount > 0
-                    ? <span style={{ background: 'var(--marigold-soft)', color: 'var(--marigold-ink)', fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>{pCount} pending</span>
-                    : <span style={{ background: 'var(--sage-soft)', color: 'var(--sage-ink)', fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>Up to date</span>
-                  }
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    {pCount > 0
+                      ? <span style={{ background: 'var(--marigold-soft)', color: 'var(--marigold-ink)', fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>{pCount} pending</span>
+                      : <span style={{ background: 'var(--sage-soft)', color: 'var(--sage-ink)', fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>Up to date</span>
+                    }
+                    <TeamBtn onClick={() => setAssigningProject(p)} />
+                  </div>
                 </div>
               )
             })}
@@ -552,7 +584,10 @@ export default function DashboardPage() {
                     {p.project_number}{p.client_name ? ` · ${p.client_name}` : ''}
                   </div>
                 </div>
-                <span style={{ background: 'var(--marigold-soft)', color: 'var(--marigold-ink)', fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99, flexShrink: 0 }}>On Hold</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <span style={{ background: 'var(--marigold-soft)', color: 'var(--marigold-ink)', fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99 }}>On Hold</span>
+                  <TeamBtn onClick={() => setAssigningProject(p)} />
+                </div>
               </div>
             ))}
           </Card>

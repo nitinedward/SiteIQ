@@ -481,6 +481,115 @@ function NPMInput({ value, onChange, placeholder }: { value: string; onChange: (
   )
 }
 
+/** Who's on a project — the same list of firm members the admin Projects tab
+ *  shows, reachable from the dashboard so an engineer can put a colleague on
+ *  a job without an admin doing it for them. The database allows assigning
+ *  anyone in the firm; only deleting the project itself stays admin-only. */
+export function AssignMembersModal({ project, firmId, userId, onClose }: {
+  project: { id: string; name: string }
+  firmId: string
+  userId: string
+  onClose: () => void
+}) {
+  const [members, setMembers] = useState<{ user_id: string; full_name: string; email: string; role: string }[]>([])
+  const [assigned, setAssigned] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving]   = useState('')
+  const [failed, setFailed]   = useState('')
+
+  useEffect(() => {
+    let live = true
+    Promise.all([
+      supabase.from('firm_members').select('user_id, full_name, email, role').eq('firm_id', firmId).order('joined_at'),
+      supabase.from('project_members').select('user_id').eq('project_id', project.id),
+    ]).then(([{ data: m }, { data: pm }]) => {
+      if (!live) return
+      setMembers(m ?? [])
+      setAssigned((pm ?? []).map((r: any) => r.user_id))
+      setLoading(false)
+    })
+    return () => { live = false }
+  }, [firmId, project.id])
+
+  const toggle = async (memberId: string) => {
+    const on = assigned.includes(memberId)
+    setSaving(memberId)
+    setFailed('')
+    const { error } = on
+      ? await supabase.from('project_members').delete().eq('project_id', project.id).eq('user_id', memberId)
+      : await supabase.from('project_members').insert({ project_id: project.id, user_id: memberId, added_by: userId })
+    setSaving('')
+    // A refusal here is the database's access rules talking, so say so rather
+    // than leaving the tick looking as though it saved.
+    if (error) { setFailed(on ? 'Could not remove them from this project.' : 'Could not add them to this project.'); return }
+    setAssigned(curr => on ? curr.filter(id => id !== memberId) : [...curr, memberId])
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000, padding: 20,
+      }}
+    >
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 440 }}>
+        <Card style={{ padding: 24 }}>
+          <div style={{ fontFamily: 'var(--f-heading)', fontSize: 19, fontWeight: 800, color: 'var(--text-ink)' }}>Who's on this project</div>
+          <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginTop: 4, marginBottom: 16 }}>{project.name}</div>
+
+          {loading ? (
+            <div style={{ padding: '24px 0', textAlign: 'center', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>Loading…</div>
+          ) : members.length === 0 ? (
+            <div style={{ padding: '24px 0', textAlign: 'center', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>No one else in the firm yet</div>
+          ) : (
+            <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {members.map(m => {
+                const on = assigned.includes(m.user_id)
+                return (
+                  <button
+                    key={m.user_id}
+                    onClick={() => toggle(m.user_id)}
+                    disabled={saving === m.user_id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', width: '100%',
+                      padding: '12px 14px', cursor: saving === m.user_id ? 'wait' : 'pointer',
+                      background: on ? 'var(--sage-soft)' : 'var(--surface)',
+                      border: `1.5px solid ${on ? 'var(--sage)' : 'var(--border-line)'}`,
+                      borderRadius: 'var(--radius-sm)', transition: 'background .12s, border-color .12s',
+                    }}
+                  >
+                    <span style={{
+                      width: 20, height: 20, flexShrink: 0, borderRadius: 6,
+                      background: on ? 'var(--sage)' : 'transparent',
+                      border: `1.5px solid ${on ? 'var(--sage)' : 'var(--border-line)'}`,
+                      color: '#fff', fontSize: 13, lineHeight: '17px', textAlign: 'center',
+                    }}>{on ? '✓' : ''}</span>
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: 'block', fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}>
+                        {m.full_name || m.email}
+                      </span>
+                      <span style={{ display: 'block', fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {m.email}{m.role === 'admin' ? ' · Admin' : ''}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {failed && (
+            <div style={{ marginTop: 12, fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--clay-ink)' }}>{failed}</div>
+          )}
+          <Btn variant="outline" onClick={onClose} style={{ width: '100%', marginTop: 18 }}>Done</Btn>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
 /** New Project popup — shared between the admin Projects tab and the
  *  dashboard so "+ New Project" opens the same form in place, wherever
  *  it's clicked from, instead of navigating away first. */
