@@ -340,18 +340,20 @@ export function Shell({ activePage, role = '', fullName = '', firmName = '', onS
         </svg>
         <span style={{ fontSize: 10, fontWeight: activePage === 'projects' ? 600 : 400 }}>Projects</span>
       </button>
-      <button onClick={() => router.push('/admin?tab=team')} style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-        background: 'none', border: 'none', cursor: 'pointer', padding: '8px 16px',
-        color: activePage === 'team' ? 'var(--indigo)' : 'var(--text-mid)', flex: 1,
-      }}>
-        <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-          <circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
-        </svg>
-        <span style={{ fontSize: 10, fontWeight: activePage === 'team' ? 600 : 400 }}>Team</span>
-      </button>
+      {role === 'admin' && (
+        <button onClick={() => router.push('/admin?tab=team')} style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+          background: 'none', border: 'none', cursor: 'pointer', padding: '8px 16px',
+          color: activePage === 'team' ? 'var(--indigo)' : 'var(--text-mid)', flex: 1,
+        }}>
+          <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+          </svg>
+          <span style={{ fontSize: 10, fontWeight: activePage === 'team' ? 600 : 400 }}>Team</span>
+        </button>
+      )}
       <button onClick={() => router.push('/settings')} style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
         background: 'none', border: 'none', cursor: 'pointer', padding: '8px 16px',
