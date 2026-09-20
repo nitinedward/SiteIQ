@@ -184,15 +184,26 @@ export default function LandingPage() {
     if (!userId) { setSignupError('Could not create account. Please try again.'); setSignupLoading(false); return }
 
     if (signupMode === 'create') {
-      const result = await createFirm(firmName.trim(), userId, signupEmail.trim(), fullName.trim())
-      setSignupLoading(false)
-      if (!result) { setSignupError('Account created but could not set up your firm.'); return }
-      setSignupSuccess({ type: 'create', joinCode: result.joinCode })
+      try {
+        const result = await createFirm(firmName.trim(), userId, signupEmail.trim(), fullName.trim())
+        setSignupLoading(false)
+        setSignupSuccess({ type: 'create', joinCode: result.joinCode })
+      } catch (err: any) {
+        setSignupLoading(false)
+        setSignupError(err?.message ?? 'Account created but could not set up your firm.')
+        return
+      }
     } else {
-      const result = await joinFirm(joinCode.trim(), userId, signupEmail.trim(), fullName.trim())
-      setSignupLoading(false)
-      if (!result) { setSignupError('That join code is incorrect. Please check with your admin.'); return }
-      setSignupSuccess({ type: 'join', firmName: result.firmName })
+      try {
+        const result = await joinFirm(joinCode.trim(), userId, signupEmail.trim(), fullName.trim())
+        setSignupLoading(false)
+        setSignupSuccess({ type: 'join', firmName: result.firmName })
+      } catch (err: any) {
+        setSignupLoading(false)
+        // Says what actually went wrong rather than always blaming the code.
+        setSignupError(err?.message ?? 'Could not join the firm. Please try again.')
+        return
+      }
     }
   }
 

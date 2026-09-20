@@ -48,14 +48,19 @@ export default function SignupScreen() {
     if (!userId) { setIsLoading(false); Alert.alert('Error', 'Could not create account.'); return; }
 
     if (mode === 'create') {
-      const result = await createFirm(firmName.trim(), userId, email.trim(), fullName.trim());
-      setIsLoading(false);
-      if (!result) { Alert.alert('Error', 'Account created but could not set up firm.'); return; }
-      Alert.alert(
-        'Firm Created!',
-        `Welcome to SiteIQ!\n\nYour join code is: ${result.joinCode}\n\nShare this with your engineers.`,
-        [{ text: 'Continue', onPress: () => router.replace('/(tabs)/projects') }]
-      );
+      try {
+        const result = await createFirm(firmName.trim(), userId, email.trim(), fullName.trim());
+        setIsLoading(false);
+        Alert.alert(
+          'Firm Created!',
+          `Welcome to SiteIQ!\n\nYour join code is: ${result.joinCode}\n\nShare this with your engineers.`,
+          [{ text: 'Continue', onPress: () => router.replace('/(tabs)/projects') }]
+        );
+      } catch (err: any) {
+        setIsLoading(false);
+        Alert.alert('Could Not Create Firm', err?.message ?? 'Please try again.');
+        return;
+      }
     } else {
       try {
         const result = await joinFirm(joinCode.trim(), userId, email.trim(), fullName.trim());

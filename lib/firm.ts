@@ -63,47 +63,37 @@ export const isAdmin = async (): Promise<boolean> => {
 // ── CREATE A NEW FIRM ──────────────────────────────────
 // Called during signup when engineer chooses "Create firm"
 // They automatically become admin
+/** Starts a firm and makes this account its admin, through the server: the
+ *  app has no session until the confirmation email is opened, and an
+ *  unauthenticated insert into `firms` is rightly refused. The server
+ *  allocates the join code too. */
 export const createFirm = async (
   firmName: string,
   userId: string,
   userEmail: string,
   userName: string
-): Promise<{ firmId: string; joinCode: string } | null> => {
-  const joinCode = generateJoinCode();
+): Promise<{ firmId: string; joinCode: string }> => {
+  const { data: { session } } = await supabase.auth.getSession();
 
-  // Create the firm
-  const { data: firm, error: firmError } = await supabase
-    .from('firms')
-    .insert({
-      name: firmName.trim(),
-      join_code: joinCode,
-      created_by: userId,
-    })
-    .select()
-    .single();
+  const res = await fetch(`${apiBase()}/api/firms/create`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: JSON.stringify({
+      firmName: firmName.trim(),
+      userId,
+      email: userEmail.trim(),
+      fullName: userName.trim(),
+    }),
+  });
 
-  if (firmError) {
-    console.error('Create firm error:', firmError);
-    return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || 'Could not create the firm. Please try again.');
   }
-
-  // Add the creator as admin
-  const { error: memberError } = await supabase
-    .from('firm_members')
-    .insert({
-      firm_id: firm.id,
-      user_id: userId,
-      role: 'admin',
-      full_name: userName,
-      email: userEmail,
-    });
-
-  if (memberError) {
-    console.error('Add admin error:', memberError);
-    return null;
-  }
-
-  return { firmId: firm.id, joinCode };
+  return { firmId: data.firmId, joinCode: data.joinCode };
 };
 
 // ── JOIN AN EXISTING FIRM ──────────────────────────────
