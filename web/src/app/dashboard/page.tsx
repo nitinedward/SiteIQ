@@ -349,7 +349,6 @@ export default function DashboardPage() {
               {projects.length} project{projects.length !== 1 ? 's' : ''} · {firmName}
             </div>
           </div>
-          {role === 'admin' && (
             <button
               onClick={() => setShowNewProject(true)}
               style={{
@@ -373,7 +372,6 @@ export default function DashboardPage() {
             >
               + New Project
             </button>
-          )}
         </div>
 
         {/* STAT CARDS */}
