@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { savePdf } from '@/lib/docStorage'
 import { forceSaveAndWait, convertDocxToPdf } from '@/lib/onlyofficeConvert'
 import { reportFileNameFor } from '@/lib/reportFileNameServer'
-import { ensurePdfTitle } from '@/lib/pdfTitle'
 import { syncReportWordingToNotes, type WordingSyncResult } from '@/lib/reportWordingSync'
 import { addDrawingHotspots, type HotspotSpec } from '@/lib/reportPdfHotspots'
 import { createClient } from '@supabase/supabase-js'
 import { PDFDocument } from 'pdf-lib'
+
+// Drawing page sizes rarely change, so a warm instance keeps them: a finalise
+// otherwise re-downloads a 17MB sheet just to read its dimensions.
+const drawingSizeCache = new Map<string, { width: number; height: number }>()
 
 /**
  * What the clickable areas need: the markups, and the order the report lists
@@ -76,12 +79,18 @@ async function loadHotspotSpec(inspectionId: string): Promise<HotspotSpec> {
         .eq('project_id', inspection.project_id)
         .in('number', referenced as string[])
       await Promise.all((files ?? []).map(async (d: any) => {
+        const cached = drawingSizeCache.get(d.file_url)
+        if (cached) { drawingSizes[String(d.number).trim()] = cached; return }
         try {
-          const res = await fetch(d.file_url, { cache: 'no-store' })
+          const res = await fetch(d.file_url)
           if (!res.ok) return
           const pdf = await PDFDocument.load(await res.arrayBuffer(), { updateMetadata: false })
           const page = pdf.getPages()[0]
-          if (page) drawingSizes[String(d.number).trim()] = { width: page.getWidth(), height: page.getHeight() }
+          if (page) {
+            const size = { width: page.getWidth(), height: page.getHeight() }
+            drawingSizes[String(d.number).trim()] = size
+            drawingSizeCache.set(d.file_url, size)
+          }
         } catch { /* fall back to the placed size */ }
       }))
     }
@@ -147,14 +156,16 @@ export async function POST(request: NextRequest) {
     // The frozen PDF is the copy people keep and pass around, so it carries
     // the report's name inside it rather than the inspection UUID.
     const title = await reportFileNameFor(inspectionId)
-    const converted = await convertDocxToPdf(inspectionId, appUrl, title)
-    // Stamped again here rather than trusting the conversion to have taken
-    // the title — this is the copy that gets viewed, downloaded and emailed.
-    const { bytes: stamped } = await ensurePdfTitle(converted, title)
+    // The markups and the spec are gathered while OnlyOffice converts.
+    const [converted, spec] = await Promise.all([
+      convertDocxToPdf(inspectionId, appUrl, title),
+      loadHotspotSpec(inspectionId),
+    ])
 
-    // The drawings arrive from the conversion as flat pictures; this puts the
-    // markups back to work, each area jumping to its own photos.
-    const hotspots = await addDrawingHotspots(Buffer.from(stamped), await loadHotspotSpec(inspectionId))
+    // One pass over the PDF: the drawings arrive from the conversion as flat
+    // pictures, so the markups are made clickable again, and the title is
+    // stamped at the same time rather than loading and re-saving twice.
+    const hotspots = await addDrawingHotspots(Buffer.from(converted), spec, title)
     const pdfBuffer = hotspots.bytes
     console.log('[finalise-pdf] drawing hotspots:', hotspots.added, hotspots.reason ?? '')
 

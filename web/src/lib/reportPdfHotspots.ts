@@ -49,6 +49,19 @@ export type HotspotSpec = {
 
 export type HotspotOutcome = { bytes: Buffer; added: number; reason?: string }
 
+/** The title still has to be set when no hotspots are added. */
+async function stampOnly(pdfBytes: Buffer, title?: string): Promise<Buffer> {
+  if (!title) return pdfBytes
+  try {
+    const doc = await PDFDocument.load(pdfBytes, { updateMetadata: false })
+    if (doc.getTitle() === title) return pdfBytes
+    doc.setTitle(title)
+    return Buffer.from(await doc.save())
+  } catch {
+    return pdfBytes
+  }
+}
+
 type PlacedImage = { page: number; x0: number; y0: number; x1: number; y1: number; w: number; h: number }
 
 function pageContent(doc: PDFDocument, page: any): string {
@@ -101,10 +114,12 @@ function addLink(doc: PDFDocument, page: any, rect: [number, number, number, num
   else page.node.set(PDFName.of('Annots'), doc.context.obj([ref]))
 }
 
-export async function addDrawingHotspots(pdfBytes: Buffer, spec: HotspotSpec): Promise<HotspotOutcome> {
+/** Adds the hotspots and stamps the title in one pass. Loading and
+ *  re-serialising the PDF twice — once for each — was pure duplication. */
+export async function addDrawingHotspots(pdfBytes: Buffer, spec: HotspotSpec, title?: string): Promise<HotspotOutcome> {
   const zones = spec.zones.filter(z => (z.drawingNumber ?? '').trim())
-  if (zones.length === 0) return { bytes: pdfBytes, added: 0, reason: 'no markups on this report' }
-  if (spec.drawingOrder.length === 0) return { bytes: pdfBytes, added: 0, reason: 'no drawings in the report' }
+  if (zones.length === 0) return { bytes: await stampOnly(pdfBytes, title), added: 0, reason: 'no markups on this report' }
+  if (spec.drawingOrder.length === 0) return { bytes: await stampOnly(pdfBytes, title), added: 0, reason: 'no drawings in the report' }
 
   try {
     const doc = await PDFDocument.load(pdfBytes, { updateMetadata: false })
@@ -116,7 +131,7 @@ export async function addDrawingHotspots(pdfBytes: Buffer, spec: HotspotSpec): P
     const drawingImages = images.filter(i => isSize(i, DRAWING_W, DRAWING_H))
     const photoImages = images.filter(i => isSize(i, PHOTO_W, PHOTO_H))
     if (drawingImages.length === 0) {
-      return { bytes: pdfBytes, added: 0, reason: 'could not find the drawings in the PDF' }
+      return { bytes: await stampOnly(pdfBytes, title), added: 0, reason: 'could not find the drawings in the PDF' }
     }
 
     // The nth picture of drawing size is the nth drawing the report lists.
@@ -167,11 +182,16 @@ export async function addDrawingHotspots(pdfBytes: Buffer, spec: HotspotSpec): P
       }
     }
 
-    if (added === 0) return { bytes: pdfBytes, added: 0, reason: missed.join('; ') || 'nothing to link' }
-    console.log('[hotspots] added', added, 'clickable areas across', drawingImages.length, 'drawing placements')
+    // The title goes on in this same pass — one load and one save for both.
+    const needsTitle = !!title && doc.getTitle() !== title
+    if (needsTitle) doc.setTitle(title!)
+    if (added === 0 && !needsTitle) {
+      return { bytes: pdfBytes, added: 0, reason: missed.join('; ') || 'nothing to link' }
+    }
+    if (added > 0) console.log('[hotspots] added', added, 'clickable areas across', drawingImages.length, 'drawing placements')
     return { bytes: Buffer.from(await doc.save()), added, reason: missed.join('; ') || undefined }
   } catch (err: any) {
     console.warn('[hotspots] skipped:', err)
-    return { bytes: pdfBytes, added: 0, reason: String(err?.message ?? err).slice(0, 200) }
+    return { bytes: await stampOnly(pdfBytes, title), added: 0, reason: String(err?.message ?? err).slice(0, 200) }
   }
 }

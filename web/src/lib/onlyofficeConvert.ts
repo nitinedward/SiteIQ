@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 import { createClient } from '@supabase/supabase-js'
+import { getDocSourceUrl } from '@/lib/docStorage'
 
 const getSecret = () =>
   (process.env.ONLYOFFICE_JWT_SECRET ?? '').replace(/^﻿/, '').trim()
@@ -59,14 +60,23 @@ export async function forceSaveAndWait(inspectionId: string, docKey: string): Pr
     console.error('[forceSaveAndWait] Command failed:', err)
   }
 
-  // Poll for the save callback to persist a new version, regardless of
-  // commandOk — an already-current doc means "before" never changes, which
-  // is fine; we just don't want to convert mid-save.
-  for (let i = 0; i < 10; i++) {
-    await new Promise(r => setTimeout(r, 1000))
+  // No session for this key (error 1) means nobody has the document open, so
+  // there is nothing on its way to storage and nothing to wait for. Waiting
+  // anyway cost ten seconds on every finalise done from a closed report.
+  if (!commandOk && commandResponse?.error === 1) {
+    console.log('[forceSaveAndWait] No open session — nothing to save, converting what is stored')
+    return { saved: false, commandOk, commandResponse }
+  }
+
+  // Otherwise poll for the save callback to land a new version. Checked
+  // often at first: a small report is written in well under a second, and a
+  // one-second floor meant always waiting for it.
+  const deadline = Date.now() + 10_000
+  for (let i = 0; Date.now() < deadline; i++) {
+    await new Promise(r => setTimeout(r, Math.min(250 * (i + 1), 1000)))
     const after = await getDocUpdatedAt(inspectionId)
     if (after && after !== before) {
-      console.log('[forceSaveAndWait] New version observed after', i + 1, 's')
+      console.log('[forceSaveAndWait] New version observed')
       return { saved: true, commandOk, commandResponse }
     }
   }
@@ -180,9 +190,13 @@ export async function convertDocxToPdf(
   const secret = getSecret()
   if (!secret) throw new Error('ONLYOFFICE_JWT_SECRET not configured')
 
-  // Same source the editor itself uses — already proven reliable and
-  // cache-busted (see api/docs/[...path]/route.ts).
-  const sourceUrl = `${appUrl}/api/docs/${inspectionId}?t=${Date.now()}`
+  // Straight from storage where possible: relaying the document through this
+  // app meant the function downloaded the whole file before a byte reached
+  // the Document Server. The app route stays as the fallback.
+  const signed = await getDocSourceUrl(inspectionId)
+  const sourceUrl = signed
+    ? `${signed}&t=${Date.now()}`
+    : `${appUrl}/api/docs/${inspectionId}?t=${Date.now()}`
   const conversionKey = `convert-${inspectionId}-${Date.now()}`
 
   const payload = {
@@ -231,7 +245,10 @@ export async function convertDocxToPdf(
       fileUrl = parsed.fileUrl
       break
     }
-    await new Promise(r => setTimeout(r, 3000))
+    // Ask again quickly at first — a small report converts in about a
+    // second, and a flat three-second gap meant waiting for it regardless —
+    // then ease off so a slow one doesn't hammer the server.
+    await new Promise(r => setTimeout(r, Math.min(500 * (attempt + 1), 3000)))
   }
 
   if (!fileUrl) throw new Error('OnlyOffice conversion did not complete in time')
