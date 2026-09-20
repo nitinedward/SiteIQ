@@ -57,12 +57,18 @@ export default function SignupScreen() {
         [{ text: 'Continue', onPress: () => router.replace('/(tabs)/projects') }]
       );
     } else {
-      const result = await joinFirm(joinCode.trim(), userId, email.trim(), fullName.trim());
-      setIsLoading(false);
-      if (!result) { Alert.alert('Invalid Code', 'The join code is incorrect. Please check with your admin.'); return; }
-      Alert.alert('Joined!', `Welcome to ${result.firmName}!`,
-        [{ text: 'Continue', onPress: () => router.replace('/(tabs)/projects') }]
-      );
+      try {
+        const result = await joinFirm(joinCode.trim(), userId, email.trim(), fullName.trim());
+        setIsLoading(false);
+        Alert.alert('Joined!', `Welcome to ${result.firmName}!`,
+          [{ text: 'Continue', onPress: () => router.replace('/(tabs)/projects') }]
+        );
+      } catch (err: any) {
+        setIsLoading(false);
+        // Says what actually went wrong — a wrong code, an account already in
+        // a firm, or a connection problem — instead of blaming the code.
+        Alert.alert('Could Not Join', err?.message ?? 'Please try again.');
+      }
     }
   };
 
