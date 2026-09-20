@@ -22,7 +22,14 @@ export default function CreateProjectScreen() {
   const handleCreate = async () => {
     if (!name.trim()) { Alert.alert('Required', 'Please enter a project name'); return }
     setLoading(true)
-    const { firm } = await getUserFirm()
+    const { firm, role } = await getUserFirm()
+    // Creating projects is the admin's job — an engineer is added to one.
+    // The database enforces this too; this is so the refusal reads plainly.
+    if (role !== 'admin') {
+      setLoading(false)
+      Alert.alert('Admins Only', 'Ask your firm admin to create the project and add you to it.')
+      return
+    }
     const { error } = await supabase.from('projects').insert({
       name: name.trim(),
       project_number: number.trim() || `PRJ-${Date.now().toString().slice(-6)}`,

@@ -38,6 +38,9 @@ export default function ProjectsScreen() {
   const [firmName, setFirmName]     = useState('')
   const [userName, setUserName]     = useState('')
   const [projectStats, setProjectStats] = useState<Record<string, ProjectStats>>({})
+  // Only an admin creates projects; an engineer works the ones they are
+  // assigned to.
+  const [isAdmin, setIsAdmin]       = useState(false)
 
   // ── Data fetching — identical logic, only added setUserName from existing user object ──
   const fetchProjects = async () => {
@@ -53,6 +56,7 @@ export default function ProjectsScreen() {
     setUserName(memberName?.full_name?.split(' ')[0] || user.email?.split('@')[0] || '')
 
     const { firm, role } = await getUserFirm()
+    setIsAdmin(role === 'admin')
     setFirmName(firm?.name ?? '')
     if (!firm) { setLoading(false); setRefreshing(false); return }
 
@@ -237,14 +241,17 @@ export default function ProjectsScreen() {
         />
       )}
 
-      {/* FAB — single marigold accent on this screen */}
-      <TouchableOpacity
-        style={S.fab}
-        onPress={() => router.push('/project/create')}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="add" size={28} color={T.indigoDeep} />
-      </TouchableOpacity>
+      {/* FAB — single marigold accent on this screen. Admins only: an
+          engineer is added to a project by their admin. */}
+      {isAdmin && (
+        <TouchableOpacity
+          style={S.fab}
+          onPress={() => router.push('/project/create')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={28} color={T.indigoDeep} />
+        </TouchableOpacity>
+      )}
 
     </View>
   )
