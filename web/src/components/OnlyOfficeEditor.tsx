@@ -1,6 +1,11 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { rewordPanelConfigUrl, rewordMenuConfigUrl } from '@/lib/rewordPlugin'
+import { loadDocsApi } from '@/lib/docsApi'
+
+/** How long to wait for the editor's onDocumentReady before uncovering it
+ *  regardless. Long enough for a large report on a cold Document Server. */
+const READY_FALLBACK_MS = 45_000
 
 interface OnlyOfficeEditorProps {
   inspectionId: string
@@ -50,12 +55,12 @@ export default function OnlyOfficeEditor({
   const containerRef  = useRef<HTMLDivElement>(null)
   const editorRef     = useRef<any>(null)
   const scriptLoaded  = useRef(false)
+  const readyFired    = useRef(false)
+  const readyFallback = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [loading,        setLoading]        = useState(true)
   const [error,          setError]          = useState('')
   const [loadingMessage, setLoadingMessage] = useState('Opening editor')
   const [retryTrigger,   setRetryTrigger]   = useState(0)
-
-  const ooUrl = process.env.NEXT_PUBLIC_ONLYOFFICE_SERVER_URL ?? 'http://localhost'
 
   // Keep the host's indicator in step with this component's own state.
   const onLoadingChangeRef = useRef(onLoadingChange)
@@ -190,43 +195,34 @@ export default function OnlyOfficeEditor({
 
         // Attached after signing: callbacks are client-side only and never
         // reach the Document Server, so they are not part of the token.
-        if (onRename && editable) {
-          config.events = {
+        //
+        // Loading ends at onDocumentReady, not when the constructor returns:
+        // the constructor only inserts the iframe, and the editor app and the
+        // document itself load after that. Ending it earlier dropped the
+        // host's indicator onto a still-blank editor, so the wait looked like
+        // it finished and then started again.
+        const finishLoading = () => {
+          if (readyFired.current) return
+          readyFired.current = true
+          if (readyFallback.current) clearTimeout(readyFallback.current)
+          setLoading(false)
+          onReady?.()
+        }
+        config.events = {
+          onDocumentReady: finishLoading,
+          ...(onRename && editable ? {
             onRequestRename: (event: any) => {
               const name = String(event?.data ?? '').trim()
               if (name) onRenameRef.current?.(name)
             },
-          }
+          } : {}),
         }
 
-        // Load script with auto-retry
-        const MAX_RETRIES = 3
-        const RETRY_DELAY = 3000
-        let retryCount = 0
-
-        await new Promise<void>((resolve, reject) => {
-          const attempt = () => {
-            if ((window as any).DocsAPI) { resolve(); return }
-
-            const script   = document.createElement('script')
-            script.src     = `${ooUrl}/web-apps/apps/api/documents/api.js`
-            script.onload  = () => resolve()
-            script.onerror = () => {
-              script.remove()
-              if (retryCount < MAX_RETRIES) {
-                retryCount++
-                setLoadingMessage(
-                  `Retrying (${retryCount}/${MAX_RETRIES})`
-                )
-                setTimeout(attempt, RETRY_DELAY)
-              } else {
-                reject(new Error('OnlyOffice Document Server is not running.'))
-              }
-            }
-            document.head.appendChild(script)
-          }
-          attempt()
-        })
+        // Usually already loaded or in flight — the report page starts it on
+        // mount (see src/lib/docsApi.ts).
+        await loadDocsApi((attempt, max) =>
+          setLoadingMessage(`Retrying (${attempt}/${max})`)
+        )
 
         if (!containerRef.current) return
 
@@ -245,8 +241,11 @@ export default function OnlyOfficeEditor({
         console.log('[editor] DocEditor created:', !!editor)
 
         editorRef.current = editor
-        setLoading(false)
-        onReady?.()
+        setLoadingMessage('Opening document')
+        // The host's indicator covers the editor, so if onDocumentReady never
+        // arrives (an older server build, or an error the editor shows in its
+        // own UI) lift it anyway rather than hiding the editor indefinitely.
+        readyFallback.current = setTimeout(finishLoading, READY_FALLBACK_MS)
       } catch (err: any) {
         console.error('[OnlyOfficeEditor] init error:', err)
         setError(err?.message ?? 'Failed to initialize editor')
@@ -258,6 +257,7 @@ export default function OnlyOfficeEditor({
     initEditor()
 
     return () => {
+      if (readyFallback.current) clearTimeout(readyFallback.current)
       try { editorRef.current?.destroyEditor() } catch {}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -268,6 +268,7 @@ export default function OnlyOfficeEditor({
     setLoading(true)
     setLoadingMessage('Loading document editor...')
     scriptLoaded.current = false
+    readyFired.current = false
     setRetryTrigger(prev => prev + 1)
   }
 
