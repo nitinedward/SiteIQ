@@ -97,7 +97,13 @@ export default function OnlyOfficeEditor({
             url: docUrl,
             permissions: {
               edit: editable,
-              download: true,
+              // Off: the editor's own "Download as" hands the browser an
+              // unnamed file (saved under a random id) and skips what the
+              // page's Download buttons do — saving the latest edits first,
+              // putting in the ticked photos, markups and sketches, and
+              // serving a finalised report's frozen PDF. Downloads go
+              // through those buttons instead.
+              download: false,
               print: true,
               review: false,
               comment: false,
