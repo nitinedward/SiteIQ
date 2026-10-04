@@ -2,6 +2,7 @@ import AdmZip from 'adm-zip'
 import sharp from 'sharp'
 import { xmlEscape } from '@/lib/templateProcessor'
 import { saveDoc, loadDoc } from '@/lib/docStorage'
+import { writePhotoSelection } from '@/lib/photoSelection'
 import {
   ALL_SECTIONS,
   LEGACY_SECTION,
@@ -504,6 +505,11 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
     zip.updateFile('word/document.xml', Buffer.from(docXml, 'utf-8'))
 
     await saveDoc(inspectionId, zip.toBuffer())
+    // Remembered so a later rebuild (regenerating the text) and the report
+    // page both know which photos the report holds — see lib/photoSelection.
+    if (requested.includes('photos')) {
+      await writePhotoSelection(inspectionId, validPhotos.map(p => p.url))
+    }
 
     const photosAdded   = requested.includes('photos')   ? validPhotos.length   : 0
     const drawingsAdded = requested.includes('drawings') ? validDrawings.length : 0

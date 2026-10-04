@@ -3,6 +3,7 @@ import { saveDoc } from './docStorage'
 import { carryAttachmentsForward } from './attachmentSections'
 import { appendAttachments } from './appendAttachments'
 import { NotSettledError } from './quiesceDocument'
+import { readPhotoSelection, writePhotoSelection } from './photoSelection'
 
 /**
  * Rebuilding a regenerated report's photo and markup sections from the
@@ -104,25 +105,49 @@ async function loadDrawings(inspectionId: string, projectId: string): Promise<Re
  * thing this throws is the gate's NotSettledError, and then nothing has been
  * stored — not even the fallback without photos, since storing anything is
  * what would be overwritten.
+ *
+ * Which photos go back in: `selectedUrls` when the caller sends the user's
+ * current selection, otherwise the selection recorded when the photo
+ * section was last written (lib/photoSelection). Only a report with neither
+ * — one from before selections were recorded — gets every photo on the
+ * inspection, as all rebuilds used to. Selected URLs that aren't photos of
+ * this inspection are ignored, so a request can't make the server fetch
+ * anything else.
  */
 export async function writeWithRebuiltAttachments(
   inspectionId: string,
   projectId: string,
   buffer: Buffer,
   gate: Promise<void> = Promise.resolve(),
+  selectedUrls: string[] | null = null,
 ): Promise<string[]> {
-  let photos: RebuiltPhoto[] = []
+  let allPhotos: RebuiltPhoto[] = []
   let drawings: RebuiltDrawing[] = []
+  let selection: string[] | null = selectedUrls
   try {
-    ;[photos, drawings] = await Promise.all([loadPhotos(inspectionId), loadDrawings(inspectionId, projectId)])
+    ;[allPhotos, drawings, selection] = await Promise.all([
+      loadPhotos(inspectionId),
+      loadDrawings(inspectionId, projectId),
+      selectedUrls ? Promise.resolve(selectedUrls) : readPhotoSelection(inspectionId),
+    ])
   } catch (err) {
     console.warn('[attachments] could not read what to rebuild:', err)
   }
+  const chosen = selection ? new Set(selection) : null
+  const photos = chosen ? allPhotos.filter(p => chosen.has(p.url)) : allPhotos
 
   if (photos.length === 0 && drawings.length === 0) {
-    // Nothing recorded — fall back to lifting whatever the old document
-    // holds, which reads the stored file, so only once it is settled.
     await gate
+    if (chosen) {
+      // No photos chosen and no markups: the report goes out without an
+      // attachments section. Not carried forward from the old document —
+      // that would put back exactly the photos that were left out.
+      await saveDoc(inspectionId, buffer)
+      await writePhotoSelection(inspectionId, [])
+      return []
+    }
+    // Nothing recorded at all — fall back to lifting whatever the old
+    // document holds, which reads the stored file, so only once settled.
     const carried = await carryAttachmentsForward(inspectionId, buffer)
     await saveDoc(inspectionId, carried.buffer)
     return carried.carried

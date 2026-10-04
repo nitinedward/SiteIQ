@@ -284,33 +284,50 @@ export default function ReportPage() {
   }, [inspectionId, refreshDocKey, reopenEditor])
 
   // ── TEXT VERSIONS ────────────────────────────────────────────────────────────
-  // Both actions rewrite the written sections of the report and leave the
-  // inserted photos and markups alone — the server lifts those out and
-  // re-attaches them (see src/lib/attachmentSections.ts). So the order stops
-  // mattering: attachments can go in before or after the text is written,
-  // and the text can be switched between the AI version and the raw notes as
-  // often as needed. Hand-edits made in the editor are NOT preserved, since
-  // both actions rebuild the text from the template.
+  // Both actions rewrite the written sections of the report and rebuild the
+  // photo and markup sections after them (see lib/rebuildAttachments). So
+  // the order stops mattering: attachments can go in before or after the
+  // text is written, and the text can be switched between the AI version and
+  // the raw notes as often as needed. Hand-edits made in the editor are NOT
+  // preserved, since both actions rebuild the text from the template.
+  //
+  // The photo section is rebuilt with the photos ticked right now, the same
+  // as Insert would use — so what is ticked is always what the report holds,
+  // and a photo left unticked doesn't come back with the regenerated text.
+
+  /** The ticked photos, sent with a rewrite as `selectedPhotoUrls`. */
+  const tickedPhotoUrls = () => selectedPhotos.filter(p => p.selected).map(p => p.url)
+
+  /** The part of a rewrite's confirmation about photos. Spelled out when
+   *  none are ticked, since that leaves the report without photos. */
+  const rewritePhotoNote = () => {
+    const n = tickedPhotoUrls().length
+    if (n > 0) return `The photo section will hold the ${n} ticked photo${n === 1 ? '' : 's'}, and markups are kept.`
+    if (selectedPhotos.length > 0) return 'No photos are ticked, so the report will have no photos. Markups are kept.'
+    return 'Markups are kept.'
+  }
+
   const generateAIReport = async () => {
     if (!confirm(
       'Rewrite the report text with AI?\n\n' +
-      'The written sections are replaced with the AI version. Inserted photos and markups are kept; ' +
-      'any edits you made by hand in the editor are not.'
+      'The written sections are replaced with the AI version. ' + rewritePhotoNote() + '\n\n' +
+      'Any edits you made by hand in the editor are not kept.'
     )) return
+    const selectedPhotoUrls = tickedPhotoUrls()
     setGeneratingAI(true)
     try {
       await runDocumentRewrite(async (closedKey) => {
         const res = await fetch('/api/docs/ai-generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ inspectionId, docKey: closedKey }),
+          body:    JSON.stringify({ inspectionId, docKey: closedKey, selectedPhotoUrls }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'AI generation failed')
         console.log('[ai-generate] Success:', data)
         setTextVersionResult(
           'Report text rewritten by AI' +
-          (data.carried?.length ? ' — inserted photos and markups kept.' : '.')
+          (data.carried?.length ? ' — photos and markups put back after it.' : '.')
         )
         setTimeout(() => setTextVersionResult(''), 8000)
       }, { step: 'Writing the report with AI' })
@@ -329,22 +346,24 @@ export default function ReportPage() {
     if (!confirm(
       'Rewrite the report text from your site notes?\n\n' +
       'The written sections go back to the raw observations, replacing any AI-written text. ' +
-      'Inserted photos and markups are kept; any edits you made by hand in the editor are not.'
+      rewritePhotoNote() + '\n\n' +
+      'Any edits you made by hand in the editor are not kept.'
     )) return
+    const selectedPhotoUrls = tickedPhotoUrls()
     setGeneratingPlain(true)
     try {
       await runDocumentRewrite(async (closedKey) => {
         const res = await fetch('/api/docs/generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ inspectionId, force: true, docKey: closedKey }),
+          body:    JSON.stringify({ inspectionId, force: true, docKey: closedKey, selectedPhotoUrls }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'Could not rebuild the text from your notes')
         console.log('[plain-generate] Success:', data)
         setTextVersionResult(
           'Report text rebuilt from your site notes' +
-          (data.carried?.length ? ' — inserted photos and markups kept.' : '.')
+          (data.carried?.length ? ' — photos and markups put back after it.' : '.')
         )
         setTimeout(() => setTextVersionResult(''), 8000)
       }, { step: 'Rebuilding the text from your site notes' })
@@ -1084,6 +1103,14 @@ export default function ReportPage() {
   const loadAttachments = useCallback(async (inspId: string) => {
     setLoadingAttachments(true)
     console.log('[loadAttachments] Loading for inspection:', inspId)
+    // Which photos the report holds, read alongside the notes. null when
+    // nothing is recorded yet — see lib/photoSelection.
+    const recordedSelection: Promise<string[] | null> = fetch(
+      `/api/docs/photo-selection?inspectionId=${inspId}`, { cache: 'no-store' }
+    )
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => (Array.isArray(d?.photos) ? d.photos : null))
+      .catch(() => null)
     try {
       const { data: obsData, error: obsError } = await supabase
         .from('observations')
@@ -1113,6 +1140,10 @@ export default function ReportPage() {
         (obsData ?? []).filter((ob: any) => typeof ob.transcript === 'string' && ob.transcript.trim()).length
       )
 
+      // Ticked only if the report already holds them, so the ticks always
+      // describe the report. Nothing is ticked for a report with no recorded
+      // selection: photos are chosen by hand, never all by default.
+      const inReport = new Set((await recordedSelection) ?? [])
       const allPhotos: SelectedPhoto[] = []
       ;(obsData ?? []).forEach((ob: any) => {
         let photos: string[] = []
@@ -1130,7 +1161,7 @@ export default function ReportPage() {
               url, observationId: ob.id,
               zoneLabel: ob.zone_label || 'General Observation',
               zoneId: ob.zone_id ?? null,
-              selected: true,
+              selected: inReport.has(url),
             })
           }
         })

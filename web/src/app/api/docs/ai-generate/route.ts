@@ -7,6 +7,7 @@ import { noteLabel, noteDictation, noteBulletLine } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
 import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
+import { parseSelectedUrls } from '@/lib/photoSelection'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { inspectionId, docKey } = await request.json()
+    const { inspectionId, docKey, selectedPhotoUrls } = await request.json()
+    // The photos ticked on the report page, which the rebuilt photo section
+    // holds; absent (the mobile app) means the selection last recorded.
+    const selectedUrls = parseSelectedUrls(selectedPhotoUrls)
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
     }
@@ -248,12 +252,12 @@ Return:
         projectId: inspection.project_id,
       })
       await pinReportTemplate(inspectionId, pinnedTemplateId, templateId)
-      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, gate)
+      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, gate, selectedUrls)
       console.log('AI document generated using firm template')
     } else {
       console.log('No firm_id — generating AI doc from scratch')
       const buffer = await generateServerReport(inspection, observations, aiText)
-      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, gate)
+      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, gate, selectedUrls)
     }
 
     return NextResponse.json({ success: true, preview: aiText.slice(0, 200), carried })
