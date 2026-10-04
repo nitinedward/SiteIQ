@@ -65,20 +65,23 @@ export async function POST(request: NextRequest) {
 
     console.log('Generating doc for:', inspectionId, '| firm:', firmId)
 
-    const engineer = await loadReportEngineer(supabase, inspection as any, firmId)
-    // Read on their own so a database without these columns yet (see
+    // Independent of each other, so read together. The two project columns
+    // are still read on their own so a database without them yet (see
     // sql/project_client_email.sql and sql/project_report_recipients.sql)
     // still generates reports.
-    const { data: client } = await supabase
-      .from('projects')
-      .select('client_email')
-      .eq('id', inspection.project_id)
-      .single()
-    const { data: recipientRow } = await supabase
-      .from('projects')
-      .select('report_recipients')
-      .eq('id', inspection.project_id)
-      .single()
+    const [engineer, { data: client }, { data: recipientRow }] = await Promise.all([
+      loadReportEngineer(supabase, inspection as any, firmId),
+      supabase
+        .from('projects')
+        .select('client_email')
+        .eq('id', inspection.project_id)
+        .single(),
+      supabase
+        .from('projects')
+        .select('report_recipients')
+        .eq('id', inspection.project_id)
+        .single(),
+    ])
     const recipients = parseRecipients((recipientRow as any)?.report_recipients)
 
     // Build findings as Word bullet XML from observations

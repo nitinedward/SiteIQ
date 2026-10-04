@@ -238,6 +238,10 @@ export type AppendInput = {
   drawings?: DrawingInput[]
   /** Which sections to rebuild; both when omitted. */
   sections?: unknown
+  /** The document to build on, when the caller already holds it — saves
+   *  reading back a file it has only just produced. Read from storage when
+   *  omitted. */
+  docBuffer?: Buffer
 }
 
 export type AppendResult = {
@@ -260,12 +264,18 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
       : ALL_SECTIONS
     let requested: SectionName[] = asked.length > 0 ? asked : ALL_SECTIONS
 
-    console.log('[append] Loading:', inspectionId)
     let docBuffer: Buffer
-    try {
-      docBuffer = await loadDoc(inspectionId)
-    } catch {
-      throw new Error('Document not found. Generate the report first.')
+    // isBuffer, not a truthy check: /api/docs/append hands its JSON body
+    // straight in, and nothing from a request should stand in for the file.
+    if (Buffer.isBuffer(input.docBuffer)) {
+      docBuffer = input.docBuffer
+    } else {
+      console.log('[append] Loading:', inspectionId)
+      try {
+        docBuffer = await loadDoc(inspectionId)
+      } catch {
+        throw new Error('Document not found. Generate the report first.')
+      }
     }
 
     const validPhotos   = (photos   as PhotoInput[]).filter(p => p?.url)

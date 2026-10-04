@@ -93,8 +93,8 @@ async function loadDrawings(inspectionId: string, projectId: string): Promise<Re
 }
 
 /**
- * Stores a regenerated document, then rebuilds its photo and markup
- * sections. Returns what was rebuilt, for the
+ * Rebuilds a regenerated document's photo and markup sections, then stores
+ * it. Returns what was rebuilt, for the
  * caller to report back to the UI. Never throws: a report whose sections
  * can't be rebuilt keeps the document that was just written.
  */
@@ -118,16 +118,17 @@ export async function writeWithRebuiltAttachments(
     return carried.carried
   }
 
-  await saveDoc(inspectionId, buffer)
-
   try {
     // In-process rather than a call back into /api/docs/append: a function
     // calling its own deployment over HTTP answers to whatever protection
     // sits in front of it, and a failure there costs the report its photos.
-    const result = await appendAttachments({ inspectionId, photos, drawings })
+    // Handed the buffer so the document is stored once, with its sections,
+    // rather than stored bare, read straight back and stored again.
+    const result = await appendAttachments({ inspectionId, photos, drawings, docBuffer: buffer })
     console.log('[attachments] rebuilt —', result.photosAdded, 'photos,', result.drawingsAdded, 'markups')
   } catch (err) {
-    console.error('[attachments] rebuild failed, document written without them:', err)
+    console.error('[attachments] rebuild failed, writing the document without them:', err)
+    await saveDoc(inspectionId, buffer)
     return []
   }
 

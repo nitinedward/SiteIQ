@@ -67,6 +67,14 @@ export async function forceSaveAndWait(inspectionId: string, docKey: string): Pr
     console.log('[forceSaveAndWait] No open session — nothing to save, converting what is stored')
     return { saved: false, commandOk, commandResponse }
   }
+  // error 4 is "no changes since the last save": the Document Server answers
+  // that instead of saving, so no callback is coming either. Waiting for one
+  // cost a flat ten seconds on every rewrite of an unedited report — the
+  // editor is closed just before, and usually has nothing pending.
+  if (!commandOk && commandResponse?.error === 4) {
+    console.log('[forceSaveAndWait] No unsaved changes — nothing to wait for')
+    return { saved: false, commandOk, commandResponse }
+  }
 
   // Otherwise poll for the save callback to land a new version. Checked
   // often at first: a small report is written in well under a second, and a
