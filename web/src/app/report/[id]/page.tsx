@@ -6,6 +6,7 @@ import { captureDrawingWithMarkup } from '@/lib/captureDrawing'
 import { reportFileName, reportDisplayName } from '@/lib/reportFileName'
 import { buildMarkupPdf, type MarkupDrawing } from '@/lib/markupPdf'
 import dynamic from 'next/dynamic'
+import { loadDocsApi } from '@/lib/docsApi'
 
 const OnlyOfficeEditor = dynamic(() => import('@/components/OnlyOfficeEditor'), { ssr: false })
 
@@ -92,6 +93,13 @@ export default function ReportPage() {
 
   // ── LOAD DATA ────────────────────────────────────────────────────────────────
   useEffect(() => {
+    // Neither the editor's code nor the Document Server's api.js depends on
+    // anything fetched below, so start both now and let them download while
+    // the page loads its data — the editor awaits the same requests later.
+    // A failure here is left for the editor to surface (and retry).
+    import('@/components/OnlyOfficeEditor').catch(() => {})
+    loadDocsApi().catch(() => {})
+
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
