@@ -6,6 +6,7 @@ import { writeWithRebuiltAttachments } from '@/lib/rebuildAttachments'
 import { noteLabel, noteDictation, noteBulletLine } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
+import { quiesceDocument, NOT_SETTLED_MESSAGE, type QuiesceResult } from '@/lib/quiesceDocument'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,12 +35,25 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { inspectionId } = await request.json()
+    const { inspectionId, docKey } = await request.json()
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
     }
 
     console.log('[ai-generate] Starting for:', inspectionId)
+
+    // With docKey, the editor has just been closed and its parting save may
+    // still be on the way. Waiting for that used to happen in a separate call
+    // before this one; it only concerns the stored file, while everything up
+    // to the write below only reads the database and calls the AI, so the two
+    // now run side by side. The file is not touched until this has settled.
+    // drop:false — the page closed the editor itself (see runDocumentRewrite).
+    const quiescing: Promise<QuiesceResult | null> = docKey
+      ? quiesceDocument(inspectionId, docKey, false).catch(err => {
+          console.error('[ai-generate] quiesce failed:', err)
+          return { saved: false, dropped: false, settled: false, waitedMs: 0, keyStillKnown: false }
+        })
+      : Promise.resolve(null)
 
     const [inspRes, obsRes] = await Promise.all([
       supabase
@@ -202,6 +216,14 @@ Return:
     ].join('\n')
 
     console.log('AI text generated, length:', aiText.length)
+
+    // Nothing above writes the stored file; everything below does. A save
+    // that lands after the write would overwrite it, so stop here if the
+    // document never went quiet.
+    const quiesce = await quiescing
+    if (quiesce && !quiesce.settled) {
+      return NextResponse.json({ error: NOT_SETTLED_MESSAGE }, { status: 409 })
+    }
 
     // Regenerating rewrites the whole file, which used to take the inserted
     // photos and markups with it — they are lifted out and re-attached, so

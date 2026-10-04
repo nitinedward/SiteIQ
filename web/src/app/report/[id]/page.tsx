@@ -78,6 +78,13 @@ export default function ReportPage() {
   // Unmounts the editor while the document is rewritten underneath it.
   const [editorSuspended,    setEditorSuspended]     = useState(false)
   const [reloadingEditor,    setReloadingEditor]     = useState(false)
+  /** What the "updating" overlay says — each stage of a rewrite names
+   *  itself, so a long wait reads as progress rather than a stall. */
+  const [reloadingStep,      setReloadingStep]       = useState('Updating document')
+  /** Set when the editor is remounted after a rewrite; the overlay stays up
+   *  until that editor reports ready (or fails), not for a guessed time. */
+  const awaitingReopen = useRef(false)
+  const reopenCeiling  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [mobileTab,          setMobileTab]            = useState<'document' | 'attachments'>('document')
   const [showFinaliseConfirm, setShowFinaliseConfirm] = useState(false)
   const [frozenPdfUrl,       setFrozenPdfUrl]         = useState<string | null>(null)
@@ -216,6 +223,35 @@ export default function ReportPage() {
     }
   }, [inspectionId])
 
+  /** The remounted editor has opened (or given up): lift the overlay. */
+  const editorBack = useCallback(() => {
+    if (reopenCeiling.current) clearTimeout(reopenCeiling.current)
+    reopenCeiling.current = null
+    if (!awaitingReopen.current) return
+    awaitingReopen.current = false
+    setReloadingEditor(false)
+    setReloadingStep('Updating document')
+  }, [])
+
+  /** Brings the editor back after the stored file was rewritten, on the
+   *  rewritten file's own key (see refreshDocKey). The "updating" overlay
+   *  is left up and handed to the new editor: it comes down at that editor's
+   *  onReady — or onError, or the editor's own fallback timeout — which is
+   *  when the report is actually back on screen. A fixed delay here used to
+   *  either drop the overlay onto a blank pane or hold it over a ready one. */
+  const reopenEditor = useCallback(async () => {
+    setReloadingStep('Reopening report')
+    await refreshDocKey()
+    awaitingReopen.current = true
+    setEditorSuspended(false)
+    setEditorKey(prev => prev + 1)
+    // The editor has its own 45s fallback to onReady; this only covers it
+    // never mounting at all (e.g. its code failing to load), so the overlay
+    // can't be left over the page for good.
+    if (reopenCeiling.current) clearTimeout(reopenCeiling.current)
+    reopenCeiling.current = setTimeout(editorBack, 60_000)
+  }, [refreshDocKey, editorBack])
+
   // ── GENERATE DOC ─────────────────────────────────────────────────────────────
   const generateDoc = useCallback(async () => {
     setGenerating(true)
@@ -230,23 +266,22 @@ export default function ReportPage() {
       // The key comes from the stored file, so it is correct either way:
       // unchanged for a document that already existed (the editor rejoins
       // the same session), new for one that was just written.
-      await refreshDocKey()
-      setDocReady(true)
       if (data.skipped) {
+        await refreshDocKey()
         console.log('[generateDoc] Doc exists, opening at its current version')
       } else {
         console.log('[generateDoc] New doc generated, remounting editor')
         setReloadingEditor(true)
-        setEditorKey(prev => prev + 1)
-        setTimeout(() => setReloadingEditor(false), 4000)
+        await reopenEditor()
       }
+      setDocReady(true)
     } catch (err) {
       console.error('[generateDoc] error:', err)
       alert('Could not generate document. Please refresh.')
     } finally {
       setGenerating(false)
     }
-  }, [inspectionId, refreshDocKey])
+  }, [inspectionId, refreshDocKey, reopenEditor])
 
   // ── TEXT VERSIONS ────────────────────────────────────────────────────────────
   // Both actions rewrite the written sections of the report and leave the
@@ -264,11 +299,13 @@ export default function ReportPage() {
     )) return
     setGeneratingAI(true)
     try {
-      await runDocumentRewrite(async () => {
+      // The server waits out the closed editor's parting save itself, side by
+      // side with the AI call — see quiescing in api/docs/ai-generate.
+      await runDocumentRewrite(async (closedKey) => {
         const res = await fetch('/api/docs/ai-generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ inspectionId }),
+          body:    JSON.stringify({ inspectionId, docKey: closedKey }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'AI generation failed')
@@ -278,7 +315,7 @@ export default function ReportPage() {
           (data.carried?.length ? ' — inserted photos and markups kept.' : '.')
         )
         setTimeout(() => setTextVersionResult(''), 8000)
-      })
+      }, { step: 'Writing the report with AI', serverQuiesces: true })
     } catch (err: any) {
       console.error('[generateAIReport] error:', err)
       alert('AI generation failed: ' + err.message)
@@ -312,7 +349,7 @@ export default function ReportPage() {
           (data.carried?.length ? ' — inserted photos and markups kept.' : '.')
         )
         setTimeout(() => setTextVersionResult(''), 8000)
-      })
+      }, { step: 'Rebuilding the text from your site notes' })
     } catch (err: any) {
       console.error('[usePlainNotesText] error:', err)
       alert('Could not use the notes text: ' + err.message)
@@ -459,6 +496,7 @@ export default function ReportPage() {
       // editor is closed from this side first and its parting save allowed
       // to land, or it overwrites the attachments. (This used to force-save
       // *after* the append, which guaranteed exactly that.)
+      setReloadingStep('Saving your edits')
       setReloadingEditor(true)
       setEditorSuspended(true)
       await new Promise(r => setTimeout(r, 1200))
@@ -485,6 +523,7 @@ export default function ReportPage() {
     if (hasAttachments) {
       // Uploaded and passed by URL rather than inlined as base64, which
       // overflowed the request body.
+      setReloadingStep('Adding photos and markups')
       const validDrawings = await uploadCapturedDrawings()
 
       const appendRes = await fetch('/api/docs/append', {
@@ -505,10 +544,7 @@ export default function ReportPage() {
       // The editor was closed to make the rewrite safe, so bring it back on
       // the rewritten file's key — otherwise the pane stays empty, or worse,
       // reopens on the pre-attachment copy the Document Server still holds.
-      await refreshDocKey()
-      setEditorSuspended(false)
-      setEditorKey(prev => prev + 1)
-      setTimeout(() => setReloadingEditor(false), 2500)
+      await reopenEditor()
     }
   }
 
@@ -870,40 +906,48 @@ export default function ReportPage() {
    *     parting save must land BEFORE the file is rewritten, or it lands
    *     after and overwrites it.
    *   - Reopening must use the rewritten file's own key (see refreshDocKey),
-   *     or the Document Server serves the copy it cached beforehand. */
-  const runDocumentRewrite = async (rewrite: () => Promise<void>) => {
+   *     or the Document Server serves the copy it cached beforehand.
+   *
+   *  `step` is what the overlay says while the rewrite runs. With
+   *  `serverQuiesces`, the waiting is left to the rewrite's own request,
+   *  which is handed the closed session's key and must not write the file
+   *  until that session has settled (api/docs/ai-generate does this, so its
+   *  AI call overlaps the wait instead of following it). */
+  const runDocumentRewrite = async (
+    rewrite: (closedKey: string | null) => Promise<void>,
+    { step, serverQuiesces = false }: { step: string; serverQuiesces?: boolean },
+  ) => {
+    setReloadingStep('Saving your edits')
     setReloadingEditor(true)
     setEditorSuspended(true)
     await new Promise(r => setTimeout(r, 1200))
     try {
       // docKey is null only if the editor never opened, in which case there
       // is no session to save and nothing can overwrite the rewrite.
-      const quiesce = docKey
-        ? await fetch('/api/docs/quiesce', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ inspectionId, docKey, drop: false }),
-          }).then(r => r.json()).catch(() => ({}))
-        : {}
-      console.log('[rewrite] quiesce:', quiesce)
-      // `settled` means the stored file has stopped changing, which is the
-      // condition that matters. The key often stays known while the document
-      // sits in the server's cache, so that is not treated as a failure.
-      if (quiesce?.settled === false) {
-        throw new Error(
-          'The document is still being saved, so this was stopped to avoid losing your changes. Wait a moment and try again.'
-        )
+      if (docKey && !serverQuiesces) {
+        const quiesce = await fetch('/api/docs/quiesce', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inspectionId, docKey, drop: false }),
+        }).then(r => r.json()).catch(() => ({}))
+        console.log('[rewrite] quiesce:', quiesce)
+        // `settled` means the stored file has stopped changing, which is the
+        // condition that matters. The key often stays known while the
+        // document sits in the server's cache, so that is not a failure.
+        if (quiesce?.settled === false) {
+          throw new Error(
+            'The document is still being saved, so this was stopped to avoid losing your changes. Wait a moment and try again.'
+          )
+        }
       }
 
-      await rewrite()
+      setReloadingStep(step)
+      await rewrite(docKey)
     } finally {
       // Always reopen, including after a failure — otherwise the document
       // pane is left empty — and always on a freshly-read key, because the
       // file may have been rewritten before the failure.
-      await refreshDocKey()
-      setEditorSuspended(false)
-      setEditorKey(prev => prev + 1)
-      setTimeout(() => setReloadingEditor(false), 2500)
+      await reopenEditor()
     }
   }
 
@@ -970,7 +1014,7 @@ export default function ReportPage() {
         )
         setTimeout(() => setInsertResult(''), 8000)
         setMobileTab('document')
-      })
+      }, { step: selectedCount === 0 ? `Removing ${label}` : `Adding ${label}` })
     } catch (err: any) {
       alert('Insert failed: ' + err.message)
     } finally {
@@ -2149,8 +2193,8 @@ export default function ReportPage() {
                       fileName={`${baseFileName()}.docx`}
                       onRename={renameFromEditor}
                       editable={reportStatus !== 'finalised'}
-                      onReady={() => { console.log('[OnlyOffice] editor ready'); setEditorError(false) }}
-                      onError={() => setEditorError(true)}
+                      onReady={() => { console.log('[OnlyOffice] editor ready'); setEditorError(false); editorBack() }}
+                      onError={() => { setEditorError(true); editorBack() }}
                       onLoadingChange={(isLoading, message) => {
                         setEditorLoading(isLoading)
                         if (message) setEditorMessage(message)
@@ -2211,7 +2255,7 @@ export default function ReportPage() {
                   textTransform: 'uppercase',
                   letterSpacing: '1px',
                 }}>
-                  Updating document...
+                  {reloadingStep}…
                 </div>
               </div>
             )}
