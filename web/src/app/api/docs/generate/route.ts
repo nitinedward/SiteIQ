@@ -9,6 +9,7 @@ import { parseSelected } from '@/lib/attachmentSelection'
 import { noteBulletLine, noteDictation } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
+import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +34,10 @@ export async function POST(request: NextRequest) {
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
     }
+    const access = await requireInspectionAccess(request, inspectionId)
+    if (!access.ok) return access.response
+    const keyCheck = docKeyMismatch(docKey, inspectionId)
+    if (keyCheck) return keyCheck.response
 
     // A forced rewrite replaces a document the editor had open, so its
     // parting save must land first. Started now so the wait overlaps the

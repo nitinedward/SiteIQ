@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireCallerOrLegacyMobile } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -23,6 +24,11 @@ export async function OPTIONS() {
  *  and disabled, over and over. Rotating it is now a server change with no
  *  app release. */
 export async function POST(request: NextRequest) {
+  // A paid AI call: signed-in firm members, plus — until phones update —
+  // the shipped app, which sends no token (lib/apiAuth legacyMobileAllowed).
+  const access = await requireCallerOrLegacyMobile(request)
+  if (!access.ok) return access.response
+
   // Strip a leading BOM (U+FEFF) — see extract-info/route.ts for why.
   const openaiKey = (process.env.OPENAI_KEY ?? process.env.OPENAI_API_KEY ?? '').replace(/^﻿/, '').trim()
   if (!openaiKey) {

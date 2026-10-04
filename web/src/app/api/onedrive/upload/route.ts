@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getValidToken } from '@/lib/microsoftToken'
 import { createClient } from '@supabase/supabase-js'
+import { requireFirmAccess } from '@/lib/apiAuth'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -157,6 +158,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+    // Into the caller's own firm's Microsoft 365 only.
+    const access = await requireFirmAccess(request, firmId)
+    if (!access.ok) return access.response
 
     const accessToken = await getValidToken(firmId)
     if (!accessToken) {

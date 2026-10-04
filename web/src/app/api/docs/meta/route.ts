@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { setDocumentMeta } from '@/lib/onlyofficeConvert'
+import { requireInspectionAccess, inspectionIdFromDocKey } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,10 @@ export async function POST(request: NextRequest) {
     if (!docKey || !title) {
       return NextResponse.json({ error: 'Missing docKey or title' }, { status: 400, headers: cors })
     }
+    // The key names its report (doc-<inspection id>-…), which is what the
+    // caller has to be allowed to touch.
+    const access = await requireInspectionAccess(request, inspectionIdFromDocKey(docKey))
+    if (!access.ok) return access.response
 
     const result = await setDocumentMeta(docKey, title)
     console.log('[meta] result:', JSON.stringify(result.response))

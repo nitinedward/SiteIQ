@@ -10,6 +10,7 @@
  *  With the key held on the server, rotating it is a server change and never
  *  needs an app release. */
 
+import { supabase } from './supabase'
 const DEFAULT_APP_URL = 'https://www.site-iq.co.nz'
 
 function apiBase(): string {
@@ -33,8 +34,11 @@ export async function transcribeAudio(uri: string): Promise<string> {
 
   let response: Response
   try {
+    // The route only serves a signed-in user, so the session goes along.
+    const { data: { session } } = await supabase.auth.getSession()
     response = await fetch(`${apiBase()}/api/transcribe`, {
       method: 'POST',
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
       body: formData,
     })
   } catch (err: any) {

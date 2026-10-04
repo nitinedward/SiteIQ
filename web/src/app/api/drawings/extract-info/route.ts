@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireCaller } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // An AI call on SiteIQ's key: signed-in firm members only.
+    const access = await requireCaller(request)
+    if (!access.ok) return access.response
+
     const { imageBase64, mediaType } = await request.json()
     if (!imageBase64 || typeof imageBase64 !== 'string') {
       return NextResponse.json({ error: 'Missing imageBase64' }, { status: 400 })

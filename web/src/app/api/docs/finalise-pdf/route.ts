@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 import { PDFDocument } from 'pdf-lib'
 import { readAttachmentSelection } from '@/lib/attachmentSelection'
 import { drawingAssetStem } from '@/lib/drawingAssetName'
+import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
 
 // Drawing page sizes rarely change, so a warm instance keeps them: a finalise
 // otherwise re-downloads a 17MB sheet just to read its dimensions.
@@ -158,6 +159,11 @@ export async function POST(request: NextRequest) {
     if (!inspectionId || !docKey) {
       return NextResponse.json({ error: 'Missing inspectionId or docKey' }, { status: 400, headers: cors })
     }
+
+    const access = await requireInspectionAccess(request, inspectionId)
+    if (!access.ok) return access.response
+    const keyCheck = docKeyMismatch(docKey, inspectionId)
+    if (keyCheck) return keyCheck.response
 
     console.log('[finalise-pdf] Force-saving before freeze:', inspectionId)
     const saveResult = await forceSaveAndWait(inspectionId, docKey)

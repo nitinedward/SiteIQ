@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { verifyOAuthState } from '@/lib/oauthState'
 
 function getSupabase() {
   return createClient(
@@ -15,7 +16,9 @@ function getSupabase() {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code  = searchParams.get('code')
-  const state = searchParams.get('state') // firm_id
+  // Issued by /api/auth/microsoft to an admin of the firm, signed — see
+  // lib/oauthState. A bare or altered firm id is refused.
+  const state = verifyOAuthState(searchParams.get('state'))?.firmId ?? null
   const error = searchParams.get('error')
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL
@@ -32,7 +35,7 @@ export async function GET(request: NextRequest) {
 
   if (!code || !state) {
     return NextResponse.redirect(
-      `${appUrl}/settings?ms=error&reason=missing_params`
+      `${appUrl}/settings?ms=error&reason=${code ? 'expired_or_invalid' : 'missing_params'}`
     )
   }
 
@@ -98,8 +101,7 @@ export async function GET(request: NextRequest) {
       Date.now() + (expires_in * 1000)
     ).toISOString()
 
-    // Save to microsoft_tokens table
-    // state = firm_id passed from settings page
+    // Save to microsoft_tokens table, for the firm the signed state names
     const { error: dbError } = await getSupabase()
       .from('microsoft_tokens')
       .upsert({

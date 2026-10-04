@@ -14,6 +14,24 @@
  * the SiteIQ origin, so /api/docs/rewrite is same-origin.
  */
 (function (window, undefined) {
+
+  // /api/docs/rewrite only answers a signed-in firm member. This page is
+  // served from the SiteIQ origin, so the editor's own Supabase session —
+  // kept in localStorage by the web app — is readable here and is sent
+  // along as the caller's token.
+  function apiHeaders() {
+    var headers = { 'Content-Type': 'application/json' }
+    try {
+      for (var i = 0; i < window.localStorage.length; i++) {
+        var name = window.localStorage.key(i)
+        if (!name || !/^sb-.*-auth-token$/.test(name)) continue
+        var stored = JSON.parse(window.localStorage.getItem(name) || 'null')
+        var token = stored && (stored.access_token || (stored.currentSession && stored.currentSession.access_token))
+        if (token) { headers.Authorization = 'Bearer ' + token; break }
+      }
+    } catch (e) { /* no session readable: the route will say so */ }
+    return headers
+  }
   var PRESETS = [
     { label: 'More formal',   tone: 'more formal and professional' },
     { label: 'More casual',   tone: 'more casual and conversational, while staying professional' },
@@ -87,7 +105,7 @@
 
     fetch('/api/docs/rewrite', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiHeaders(),
       body: JSON.stringify({ selectedText: state.original, tone: instruction }),
     })
       .then(function (res) {

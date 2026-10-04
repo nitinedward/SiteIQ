@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { appendAttachments } from '@/lib/appendAttachments'
 import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
+import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
 
 // Drawings and photos each own a bookmarked section (see
 // src/lib/attachmentSections.ts), so one can be rebuilt without disturbing
@@ -31,6 +32,11 @@ export async function POST(request: NextRequest) {
     if (!body?.inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400, headers: corsHeaders })
     }
+
+    const access = await requireInspectionAccess(request, body.inspectionId)
+    if (!access.ok) return access.response
+    const keyCheck = docKeyMismatch(body.docKey, body.inspectionId)
+    if (keyCheck) return keyCheck.response
 
     // With docKey, the page has just closed the editor: its parting save is
     // waited for alongside fetching and shrinking the photos, and the stored

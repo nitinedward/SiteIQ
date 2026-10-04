@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 import AdmZip from 'adm-zip'
+import { fetchFromOurStorage } from '@/lib/storageFetch'
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
@@ -236,11 +237,9 @@ async function fetchTemplateBuffer(template: ResolvedTemplate): Promise<Buffer> 
   }
 
   console.log('[template] Fetching from URL:', template.url)
-  const res = await fetch(template.url, {
-    headers: {
-      Authorization: `Bearer ${(process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()}`,
-    },
-  })
+  // Only ever with the service key to our own storage — the address comes
+  // from a row the firm's users can edit (lib/storageFetch).
+  const res = await fetchFromOurStorage(template.url)
   console.log('[template] Fetch status:', res.status, res.statusText)
 
   if (!res.ok) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireNoteAccess } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -33,6 +34,9 @@ export async function POST(request: NextRequest) {
     if (!observationId) {
       return NextResponse.json({ error: 'Missing observationId' }, { status: 400, headers: cors })
     }
+    // Only onto a note of the caller's own firm.
+    const access = await requireNoteAccess(request, observationId)
+    if (!access.ok) return access.response
 
     const contentType = request.headers.get('content-type') || 'application/octet-stream'
     const bytes = Buffer.from(await request.arrayBuffer())

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireCaller } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
 export async function OPTIONS() {
@@ -20,6 +21,11 @@ export async function OPTIONS() {
  *  never touches the document itself. */
 export async function POST(request: NextRequest) {
   try {
+    // An AI call on SiteIQ's key: signed-in firm members only. The reword
+    // plugins send the editor's own session token (see their scripts).
+    const access = await requireCaller(request)
+    if (!access.ok) return access.response
+
     const { selectedText, tone, instruction, context } = await request.json()
     if (!selectedText || typeof selectedText !== 'string' || !selectedText.trim()) {
       return NextResponse.json({ error: 'Missing selectedText' }, { status: 400, headers: cors })

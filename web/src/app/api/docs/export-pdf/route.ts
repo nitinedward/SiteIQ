@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { forceSaveAndWait, convertDocxToPdf } from '@/lib/onlyofficeConvert'
 import { reportFileNameFor } from '@/lib/reportFileNameServer'
 import { ensurePdfTitle } from '@/lib/pdfTitle'
+import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 // Force-save (~10s) plus conversion polling (~90s worst case for a large,
@@ -36,6 +37,11 @@ export async function POST(request: NextRequest) {
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400, headers: cors })
     }
+
+    const access = await requireInspectionAccess(request, inspectionId)
+    if (!access.ok) return access.response
+    const keyCheck = docKeyMismatch(docKey, inspectionId)
+    if (keyCheck) return keyCheck.response
 
     if (docKey) {
       const saveResult = await forceSaveAndWait(inspectionId, docKey)

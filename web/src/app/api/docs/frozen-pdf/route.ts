@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { loadPdf, savePdf } from '@/lib/docStorage'
 import { ensurePdfTitle } from '@/lib/pdfTitle'
 import { reportFileNameFor } from '@/lib/reportFileNameServer'
+import { requireInspectionAccess } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,6 +53,8 @@ export async function GET(request: NextRequest) {
   if (!inspectionId) {
     return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400, headers: cors })
   }
+  const access = await requireInspectionAccess(request, inspectionId)
+  if (!access.ok) return access.response
 
   try {
     const fileName = await reportFileNameFor(inspectionId)

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { rewordPanelConfigUrl, rewordMenuConfigUrl } from '@/lib/rewordPlugin'
 import { loadDocsApi } from '@/lib/docsApi'
+import { apiFetch } from '@/lib/apiFetch'
 
 /** How long to wait for the editor's onDocumentReady before uncovering it
  *  regardless. Long enough for a large report on a cold Document Server. */
@@ -172,7 +173,7 @@ export default function OnlyOfficeEditor({
 
         console.log('[editor] config built, requesting token...')
 
-        const tokenRes = await fetch('/api/docs/token', {
+        const tokenRes = await apiFetch('/api/docs/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(config),

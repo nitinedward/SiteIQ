@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revokeToken } from '@/lib/microsoftToken'
+import { requireFirmAccess } from '@/lib/apiAuth'
 
+/** Unlinks a firm's Microsoft 365 account — an admin of that firm only. */
 export async function POST(request: NextRequest) {
   try {
     const { firmId } = await request.json()
@@ -11,6 +13,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+    const access = await requireFirmAccess(request, firmId, { admin: true })
+    if (!access.ok) return access.response
 
     await revokeToken(firmId)
 

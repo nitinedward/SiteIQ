@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { forceSaveAndWait } from '@/lib/onlyofficeConvert'
+import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,11 @@ export async function POST(request: NextRequest) {
     if (!key || !inspectionId) {
       return NextResponse.json({ error: 'Missing key or inspectionId' }, { status: 400, headers: cors })
     }
+
+    const access = await requireInspectionAccess(request, inspectionId)
+    if (!access.ok) return access.response
+    const keyCheck = docKeyMismatch(key, inspectionId)
+    if (keyCheck) return keyCheck.response
 
     // Was previously unsigned — OnlyOffice's local.json has
     // token.enable.request.inbox: true, meaning the Document Server

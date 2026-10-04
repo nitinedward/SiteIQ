@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { quiesceDocument } from '@/lib/quiesceDocument'
+import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -22,6 +23,11 @@ export async function POST(request: NextRequest) {
     if (!inspectionId || !docKey) {
       return NextResponse.json({ error: 'Missing inspectionId or docKey' }, { status: 400, headers: cors })
     }
+
+    const access = await requireInspectionAccess(request, inspectionId)
+    if (!access.ok) return access.response
+    const keyCheck = docKeyMismatch(docKey, inspectionId)
+    if (keyCheck) return keyCheck.response
 
     const result = await quiesceDocument(inspectionId, docKey, drop)
     return NextResponse.json({ success: true, ...result }, { headers: cors })

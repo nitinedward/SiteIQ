@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDocVersion, getDocKey, getDocSourceUrl } from '@/lib/docStorage'
+import { requireInspectionAccess } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,8 @@ export async function GET(request: NextRequest) {
   if (!inspectionId) {
     return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400, headers: cors })
   }
+  const access = await requireInspectionAccess(request, inspectionId)
+  if (!access.ok) return access.response
 
   try {
     const [version, key, sourceUrl] = await Promise.all([

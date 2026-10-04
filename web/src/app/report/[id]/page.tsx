@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/apiFetch'
 import { useRouter, useParams } from 'next/navigation'
 import { captureDrawingWithMarkup } from '@/lib/captureDrawing'
 import { reportFileName, reportDisplayName } from '@/lib/reportFileName'
@@ -56,7 +57,7 @@ type RecordedSelection = {
 async function fetchRecordedSelection(inspectionId: string): Promise<RecordedSelection> {
   const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null)
   try {
-    const res = await fetch(`/api/docs/attachment-selection?inspectionId=${inspectionId}`, { cache: 'no-store' })
+    const res = await apiFetch(`/api/docs/attachment-selection?inspectionId=${inspectionId}`, { cache: 'no-store' })
     const d = res.ok ? await res.json() : null
     return {
       photos: ids(d?.photos),
@@ -212,13 +213,22 @@ export default function ReportPage() {
   const loadFrozenPdf = useCallback(async (inspId: string) => {
     setLoadingFrozenPdf(true)
     try {
-      // pdf-url only tells us whether a frozen PDF exists; the viewer is
-      // pointed at our own route rather than the signed storage URL, whose
-      // object is named after the inspection UUID and would show that as
-      // the file name in the PDF viewer.
-      const res = await fetch(`/api/docs/pdf-url?inspectionId=${inspId}`, { cache: 'no-store' })
-      if (res.ok) {
-        setFrozenPdfUrl(`/api/docs/frozen-pdf?inspectionId=${inspId}&t=${Date.now()}`)
+      // pdf-url only tells us whether a frozen PDF exists. The PDF itself
+      // comes from our own route (not the signed storage URL, whose object
+      // is named after the inspection UUID), fetched with the user's token —
+      // the route checks the firm — and shown from a local copy, since an
+      // iframe can't send the token itself. The PDF carries its report
+      // title, which the viewer shows.
+      const res = await apiFetch(`/api/docs/pdf-url?inspectionId=${inspId}`, { cache: 'no-store' })
+      const pdf = res.ok
+        ? await apiFetch(`/api/docs/frozen-pdf?inspectionId=${inspId}&t=${Date.now()}`, { cache: 'no-store' })
+        : null
+      if (pdf?.ok) {
+        const blobUrl = URL.createObjectURL(await pdf.blob())
+        setFrozenPdfUrl(prev => {
+          if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev)
+          return blobUrl
+        })
       } else {
         setFrozenPdfUrl(null)
       }
@@ -251,7 +261,7 @@ export default function ReportPage() {
   const refreshDocKey = useCallback(async (): Promise<string> => {
     const fallback = `doc-${inspectionId}-t${Date.now()}`
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/docs/version?inspectionId=${inspectionId}&t=${Date.now()}`,
         { cache: 'no-store' }
       )
@@ -304,7 +314,7 @@ export default function ReportPage() {
   const generateDoc = useCallback(async () => {
     setGenerating(true)
     try {
-      const res = await fetch('/api/docs/generate', {
+      const res = await apiFetch('/api/docs/generate', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ inspectionId }),
@@ -390,7 +400,7 @@ export default function ReportPage() {
       const selectedMarkups = await tickedMarkupStems()
       const selectedSketches = tickedSketchIds()
       await runDocumentRewrite(async (closedKey) => {
-        const res = await fetch('/api/docs/ai-generate', {
+        const res = await apiFetch('/api/docs/ai-generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ inspectionId, docKey: closedKey, selectedPhotoUrls, selectedMarkups, selectedSketches }),
@@ -429,7 +439,7 @@ export default function ReportPage() {
       const selectedMarkups = await tickedMarkupStems()
       const selectedSketches = tickedSketchIds()
       await runDocumentRewrite(async (closedKey) => {
-        const res = await fetch('/api/docs/generate', {
+        const res = await apiFetch('/api/docs/generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ inspectionId, force: true, docKey: closedKey, selectedPhotoUrls, selectedMarkups, selectedSketches }),
@@ -481,7 +491,7 @@ export default function ReportPage() {
   const pushTitleToEditor = useCallback(async (name: string) => {
     if (!docKey) return
     try {
-      await fetch('/api/docs/meta', {
+      await apiFetch('/api/docs/meta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -598,7 +608,7 @@ export default function ReportPage() {
       setEditorSuspended(true)
       await new Promise(r => setTimeout(r, 1200))
       if (docKey) {
-        await fetch('/api/docs/quiesce', {
+        await apiFetch('/api/docs/quiesce', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ inspectionId, docKey, drop: false }),
@@ -607,7 +617,7 @@ export default function ReportPage() {
     } else if (docKey) {
       // Nothing to attach, so just capture what's on screen.
       try {
-        await fetch('/api/docs/forcesave', {
+        await apiFetch('/api/docs/forcesave', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ inspectionId, key: docKey }),
@@ -624,7 +634,7 @@ export default function ReportPage() {
       const validDrawings = await uploadCapturedDrawings()
       const downloadSketches = tickedSketchIds()
 
-      const appendRes = await fetch('/api/docs/append', {
+      const appendRes = await apiFetch('/api/docs/append', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
@@ -753,7 +763,7 @@ export default function ReportPage() {
     try {
       const blob = await buildMarkup()
       if (!blob) { console.log('[markup] no pins — nothing to generate'); return }
-      await fetch(`/api/docs/markup-pdf?inspectionId=${inspectionId}`, {
+      await apiFetch(`/api/docs/markup-pdf?inspectionId=${inspectionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/pdf' },
         body: blob,
@@ -769,7 +779,7 @@ export default function ReportPage() {
   const downloadMarkup = async () => {
     // Prefer the copy stored at finalise; otherwise build it now so the
     // option still works on a report that hasn't been finalised yet.
-    const stored = await fetch(`/api/docs/markup-pdf?inspectionId=${inspectionId}`, { cache: 'no-store' })
+    const stored = await apiFetch(`/api/docs/markup-pdf?inspectionId=${inspectionId}`, { cache: 'no-store' })
     if (stored.ok) {
       saveBlob(await stored.blob(), `${baseFileName()} - Markup.pdf`)
       return
@@ -785,13 +795,13 @@ export default function ReportPage() {
     }
     saveBlob(blob, `${baseFileName()} - Markup.pdf`)
     // Keep it for next time.
-    fetch(`/api/docs/markup-pdf?inspectionId=${inspectionId}`, {
+    apiFetch(`/api/docs/markup-pdf?inspectionId=${inspectionId}`, {
       method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: blob,
     }).catch(() => { /* caching only */ })
   }
 
   const downloadWord = async () => {
-    const res = await fetch(
+    const res = await apiFetch(
       `/api/docs/${inspectionId}?download=true&t=${Date.now()}`,
       { cache: 'no-store' }
     )
@@ -809,7 +819,7 @@ export default function ReportPage() {
       return
     }
 
-    const res = await fetch('/api/docs/export-pdf', {
+    const res = await apiFetch('/api/docs/export-pdf', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ inspectionId, docKey }),
@@ -982,7 +992,7 @@ export default function ReportPage() {
     const onStoredImage = captured.filter(d => !d.capturedBlob)
     if (onStoredImage.length > 0) {
       const markups = onStoredImage.map(d => drawingAssetStem(d.number || d.id)).join(',')
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/docs/attachment-selection?inspectionId=${inspectionId}&markups=${encodeURIComponent(markups)}`,
         { cache: 'no-store' }
       )
@@ -1000,7 +1010,7 @@ export default function ReportPage() {
         out.push({ title: d.title, number: d.number, revision: d.revision || 'A', url })
         continue
       }
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/docs/drawing-asset?inspectionId=${inspectionId}&name=${encodeURIComponent(d.number || d.id)}`,
         { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: d.capturedBlob! }
       )
@@ -1101,7 +1111,7 @@ export default function ReportPage() {
         // them. Costs nothing when none have been captured.
         const drawingsList = await uploadCapturedDrawings()
 
-        const res = await fetch('/api/docs/append', {
+        const res = await apiFetch('/api/docs/append', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1147,7 +1157,7 @@ export default function ReportPage() {
     setFinalisingReport(true)
     try {
       console.log('[finalise] Force-saving and converting to PDF, key:', docKey)
-      const res = await fetch('/api/docs/finalise-pdf', {
+      const res = await apiFetch('/api/docs/finalise-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inspectionId, docKey }),
@@ -1252,7 +1262,7 @@ export default function ReportPage() {
     setUpdatingSketches(true)
     try {
       await runDocumentRewrite(async (closedKey) => {
-        const res = await fetch('/api/docs/append', {
+        const res = await apiFetch('/api/docs/append', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ inspectionId, sections: ['sketches'], sketches: ids, docKey: closedKey }),

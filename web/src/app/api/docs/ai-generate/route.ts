@@ -8,6 +8,7 @@ import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
 import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
 import { parseSelected } from '@/lib/attachmentSelection'
+import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +47,13 @@ export async function POST(request: NextRequest) {
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
     }
+    // The phone app in the stores calls this without a token — see
+    // legacyMobileAllowed in lib/apiAuth. With a token, it must be the
+    // report's firm.
+    const access = await requireInspectionAccess(request, inspectionId, { legacyMobile: true })
+    if (!access.ok) return access.response
+    const keyCheck = docKeyMismatch(docKey, inspectionId)
+    if (keyCheck) return keyCheck.response
 
     console.log('[ai-generate] Starting for:', inspectionId)
 
@@ -263,7 +271,7 @@ Return:
       carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups, sketches: selectedSketches })
     }
 
-    return NextResponse.json({ success: true, preview: aiText.slice(0, 200), carried })
+    return NextResponse.json({ success: true, carried })
   } catch (err) {
     if (err instanceof NotSettledError) {
       return NextResponse.json({ error: err.message }, { status: 409 })

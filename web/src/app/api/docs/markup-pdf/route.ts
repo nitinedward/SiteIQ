@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { saveMarkupPdf, loadMarkupPdf } from '@/lib/docStorage'
 import { reportFileNameFor } from '@/lib/reportFileNameServer'
+import { requireInspectionAccess } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -24,6 +25,8 @@ export async function POST(request: NextRequest) {
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400, headers: cors })
     }
+    const access = await requireInspectionAccess(request, inspectionId)
+    if (!access.ok) return access.response
 
     const bytes = Buffer.from(await request.arrayBuffer())
     if (bytes.length === 0) {
@@ -45,6 +48,8 @@ export async function GET(request: NextRequest) {
   if (!inspectionId) {
     return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400, headers: cors })
   }
+  const access = await requireInspectionAccess(request, inspectionId)
+  if (!access.ok) return access.response
 
   try {
     const pdf = await loadMarkupPdf(inspectionId)

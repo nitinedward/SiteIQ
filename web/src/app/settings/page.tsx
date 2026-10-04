@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/apiFetch'
 import { useRouter } from 'next/navigation'
 import { Shell, Btn, Card, Spinner } from '@/components/Shell'
 import { loadReportTemplates, type ReportTemplate } from '@/lib/reportTemplates'
@@ -189,7 +190,7 @@ export default function SettingsPage() {
   const checkTemplateFile = async (t: ReportTemplate, quiet = false) => {
     if (!quiet) setCheckingId(t.id)
     try {
-      const res = await fetch('/api/templates/check', {
+      const res = await apiFetch('/api/templates/check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ templateId: t.id }),
@@ -222,7 +223,7 @@ export default function SettingsPage() {
   const mirrorDefault = async (fileUrl: string | null) => {
     await supabase.from('firms').update({ report_template_url: fileUrl }).eq('id', firm!.id)
     setFirm(prev => prev ? { ...prev, report_template_url: fileUrl } : prev)
-    await fetch('/api/docs/cache-template', {
+    await apiFetch('/api/docs/cache-template', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ firmId: firm!.id }),
@@ -335,9 +336,22 @@ export default function SettingsPage() {
   }
 
   // ── MICROSOFT 365 ──────────────────────────────────────
-  const connectMicrosoft = () => {
-    const connectUrl = `/api/auth/microsoft?state=${firmId}`
-    window.location.href = connectUrl
+  /** The server hands out the Microsoft sign-in address — only to a firm
+   *  admin, with a signed state — so it can't be forged to link an account
+   *  to another firm. */
+  const connectMicrosoft = async () => {
+    try {
+      const res = await apiFetch('/api/auth/microsoft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firmId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.url) throw new Error(data.error || `could not start (${res.status})`)
+      window.location.href = data.url
+    } catch (err: any) {
+      alert('Could not connect Microsoft 365: ' + err.message)
+    }
   }
 
   const disconnectMicrosoft = async () => {
@@ -350,7 +364,7 @@ export default function SettingsPage() {
 
     setDisconnecting(true)
     try {
-      await fetch('/api/auth/microsoft/disconnect', {
+      await apiFetch('/api/auth/microsoft/disconnect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ firmId }),

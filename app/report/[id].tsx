@@ -838,10 +838,17 @@ export default function ReportScreen() {
     setIsGenerating(true);
 
     try {
+      // The web backend only answers a signed-in member of the report's
+      // firm, so the session token goes with both requests below.
+      const { data: { session } } = await supabase.auth.getSession();
+      const auth: Record<string, string> = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {};
+
       // 1. Generate the AI report via the web backend (handles Anthropic + template processing)
       const genRes = await fetch('https://www.site-iq.co.nz/api/docs/ai-generate', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...auth },
         body:    JSON.stringify({ inspectionId }),
       });
 
@@ -856,7 +863,8 @@ export default function ReportScreen() {
 
       const dl = await FileSystem.downloadAsync(
         `https://www.site-iq.co.nz/api/docs/${inspectionId}?download=true`,
-        fileUri
+        fileUri,
+        { headers: auth }
       );
 
       if (dl.status !== 200) throw new Error('Could not download the generated report');

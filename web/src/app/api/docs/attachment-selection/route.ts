@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { readAttachmentSelection } from '@/lib/attachmentSelection'
 import { drawingAssetStem } from '@/lib/drawingAssetName'
+import { requireInspectionAccess } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,8 @@ export async function GET(request: NextRequest) {
   if (!inspectionId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inspectionId)) {
     return NextResponse.json({ error: 'Missing or invalid inspectionId' }, { status: 400 })
   }
+  const access = await requireInspectionAccess(request, inspectionId)
+  if (!access.ok) return access.response
 
   const selection = await readAttachmentSelection(inspectionId)
   const asked = request.nextUrl.searchParams.get('markups')

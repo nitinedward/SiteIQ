@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/apiFetch'
 
 /** A site note is an observation recorded on site: what the engineer
  *  dictated, the photos they took, anything they measured, and the pin they
@@ -293,7 +294,7 @@ async function uploadResponseFile(observationId: string, file: File): Promise<No
   if (file.size > MAX_RESPONSE_FILE_BYTES) {
     throw new Error(`${file.name} is ${(file.size / 1e6).toFixed(1)} MB — the limit is ${MAX_RESPONSE_FILE_BYTES / 1e6} MB.`)
   }
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/notes/response-file?observationId=${encodeURIComponent(observationId)}&name=${encodeURIComponent(file.name)}`,
     {
       method: 'POST',

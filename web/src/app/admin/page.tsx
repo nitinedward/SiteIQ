@@ -7,6 +7,7 @@ import { reportDisplayName } from '@/lib/reportFileName'
 import { loadReportTemplates, defaultTemplateLabel, type ReportTemplate } from '@/lib/reportTemplates'
 import { parseRecipients, type Recipient } from '@/lib/reportRecipients'
 import { SiteNoteModal } from '@/components/SiteNoteModal'
+import { apiFetch } from '@/lib/apiFetch'
 import {
   SiteNote, NoteStatus, loadProjectSiteNotes, setSiteNoteStatus, formatNoteDate, noteReportRef,
   loadResponseCounts,
@@ -703,7 +704,7 @@ function AdminPageInner() {
     try {
       const imageBase64 = await blobToBase64(aiJpegBlob)
       const extractRes = await Promise.race<Response>([
-        fetch('/api/drawings/extract-info', {
+        apiFetch('/api/drawings/extract-info', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64, mediaType: 'image/jpeg' }),

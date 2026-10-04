@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { saveDoc, loadDoc } from '@/lib/docStorage'
+import { requireInspectionAccess, inspectionIdFromDocKey, verifyOnlyOfficeRequest } from '@/lib/apiAuth'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -12,7 +13,12 @@ export async function OPTIONS() {
 }
 
 // GET /api/docs/[inspectionId]
-// OnlyOffice calls this to fetch the document for editing
+// The report's .docx. Fetched by:
+//  - the Document Server, when the editor isn't given a storage link —
+//    it signs the request with the shared secret
+//  - the web app's "Download Word", with the user's token
+//  - the phone app in the stores (?download=true), with no token — let
+//    through only while legacyMobileAllowed() (lib/apiAuth)
 export async function GET(
   request: NextRequest,
   { params }: { params: { path: string[] } }
@@ -24,7 +30,10 @@ export async function GET(
 
   const isDownload = request.nextUrl.searchParams.get('download') === 'true'
 
-  console.log('Doc GET request:', { inspectionId, isDownload })
+  if (!verifyOnlyOfficeRequest(request)) {
+    const access = await requireInspectionAccess(request, inspectionId, { legacyMobile: isDownload })
+    if (!access.ok) return access.response
+  }
 
   try {
     console.log('[download] Request for:', inspectionId, '| isDownload:', isDownload)
@@ -71,6 +80,13 @@ async function saveDocumentInBackground(inspectionId: string, url: string) {
   }
 }
 
+/**
+ * The Document Server's save callback. Only a callback it signed is acted
+ * on — and only what it signed: the body's own status and url are ignored,
+ * since without a signature anyone could post "status 2, url: <any file>"
+ * and replace the report. The signed key must also be this report's, so a
+ * genuine callback for one report can't be replayed against another.
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: { path: string[] } }
@@ -81,18 +97,28 @@ export async function POST(
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json({ error: 0 }, { headers: CORS_HEADERS })
+    return NextResponse.json({ error: 1 }, { status: 400, headers: CORS_HEADERS })
+  }
+
+  const signed = verifyOnlyOfficeRequest(request, body)
+  if (!signed) {
+    console.warn('[callback] Refused: not signed by the Document Server, inspectionId:', inspectionId)
+    return NextResponse.json({ error: 1 }, { status: 401, headers: CORS_HEADERS })
+  }
+  if (inspectionIdFromDocKey(signed.key) !== inspectionId) {
+    console.warn('[callback] Refused: key', signed.key, 'is not for', inspectionId)
+    return NextResponse.json({ error: 1 }, { status: 400, headers: CORS_HEADERS })
   }
 
   console.log('[callback] POST received, inspectionId:', inspectionId)
-  console.log('[callback] status:', body.status)
-  console.log('[callback] url:', body.url)
+  console.log('[callback] status:', signed.status)
+  console.log('[callback] url:', signed.url)
 
   // Await the Supabase save before responding so OO knows the file is safe.
   // OO allows up to ~60 s for the callback response; a Supabase upload
   // for a typical report takes well under 10 s.
-  if ((body.status === 2 || body.status === 6) && body.url) {
-    await saveDocumentInBackground(inspectionId, body.url)
+  if ((signed.status === 2 || signed.status === 6) && signed.url) {
+    await saveDocumentInBackground(inspectionId, signed.url)
   }
 
   return NextResponse.json({ error: 0 }, { headers: CORS_HEADERS })
