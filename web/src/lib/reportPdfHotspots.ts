@@ -18,7 +18,9 @@ import { zoneHotspots, type MarkupZone } from './zoneHotspots'
  * drawings are placed at 425x301pt and photos at 213x159pt, the extents
  * appendAttachments writes. So the pattern fills are read out of each page's
  * content stream, sorted by size, and matched in document order against what
- * was inserted.
+ * was inserted. Sketches are placed at sizes that can never match either
+ * (full text width, or capped at 22cm tall — see sketchExtent), so they are
+ * passed over rather than mistaken for a drawing or a photo.
  *
  * Internal jumps rather than links to the hosted photos: they work offline,
  * in every viewer, and in a copy that was emailed or archived.

@@ -2,8 +2,10 @@ import AdmZip from 'adm-zip'
 import sharp from 'sharp'
 import { xmlEscape } from '@/lib/templateProcessor'
 import { saveDoc, loadDoc } from '@/lib/docStorage'
-import { writeAttachmentSelection } from '@/lib/attachmentSelection'
+import { readAttachmentSelection, writeAttachmentSelection } from '@/lib/attachmentSelection'
 import { drawingAssetStem } from '@/lib/drawingAssetName'
+import { loadReportSketches, sketchCaption, isSketchFileUrl, type ReportSketch } from '@/lib/reportSketches'
+import { sketchesHeldByDefault } from '@/lib/sketchSelection'
 import {
   ALL_SECTIONS,
   LEGACY_SECTION,
@@ -48,6 +50,49 @@ async function shrinkPhoto(buffer: Buffer): Promise<{ buffer: Buffer; ext: strin
     console.warn('[append] could not shrink a photo, using it as it is:', err)
     return { buffer, ext: 'jpg' }
   }
+}
+
+/** Sketches are line work too, so they keep detail: a PNG (a Bluebeam page,
+ *  or a PNG upload) stays PNG; a scan or phone photo of a paper sketch
+ *  arrives as JPEG and stays JPEG. Returned with its size, which decides
+ *  the size the page is placed at. */
+const SKETCH_MAX_DIM = 2400
+async function shrinkSketch(buffer: Buffer): Promise<{ buffer: Buffer; ext: 'png' | 'jpg'; width: number; height: number }> {
+  const base = sharp(buffer)
+    .rotate()
+    .resize(SKETCH_MAX_DIM, SKETCH_MAX_DIM, { fit: 'inside', withoutEnlargement: true })
+  const isJpeg = (await sharp(buffer).metadata()).format === 'jpeg'
+  const { data, info } = isJpeg
+    ? await base.jpeg({ quality: 85, mozjpeg: true }).toBuffer({ resolveWithObject: true })
+    : await base.png({ compressionLevel: 9 }).toBuffer({ resolveWithObject: true })
+  return { buffer: data, ext: isJpeg ? 'jpg' : 'png', width: info.width, height: info.height }
+}
+
+/** Placed at the full text width (16cm), and no taller than a page leaves
+ *  room for (22cm). Finalising finds markups and photos in the PDF by the
+ *  exact sizes they are placed at (lib/reportPdfHotspots), so a sketch must
+ *  never land on either: at full width it is wider than a markup (15cm), and
+ *  when capped by height it is taller than both. */
+const SKETCH_W = 5760000
+const SKETCH_MAX_H = 7920000
+function sketchExtent(width: number, height: number): { cx: number; cy: number } {
+  const ratio = width > 0 && height > 0 ? height / width : 0.707
+  const cy = Math.round(SKETCH_W * ratio)
+  return cy <= SKETCH_MAX_H
+    ? { cx: SKETCH_W, cy }
+    : { cx: Math.round(SKETCH_MAX_H / ratio), cy: SKETCH_MAX_H }
+}
+
+/** Small underlined link under a sketch to the file exactly as uploaded —
+ *  a text hyperlink, which survives the conversion to PDF. */
+function sketchOriginalLink(linkRId: string, fileName: string | null): string {
+  return (
+    `<w:p><w:pPr><w:spacing w:before="20" w:after="160"/></w:pPr>` +
+    `<w:hyperlink r:id="${linkRId}">` +
+    `<w:r><w:rPr><w:color w:val="2C5282"/><w:u w:val="single"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>` +
+    `<w:t xml:space="preserve">${xmlEscape(fileName ? `View original (${fileName})` : 'View original')}</w:t></w:r>` +
+    `</w:hyperlink></w:p>`
+  )
 }
 
 async function shrinkDrawing(buffer: Buffer): Promise<Buffer> {
@@ -238,7 +283,12 @@ export type AppendInput = {
   inspectionId: string
   photos?: PhotoInput[]
   drawings?: DrawingInput[]
-  /** Which sections to rebuild; both when omitted. */
+  /** Ids of the sketches to put in (web/sql/sketches.sql) — looked up here,
+   *  never taken as addresses. Omitted: the report's default (see
+   *  sketchesHeldByDefault), so a caller that doesn't know about sketches
+   *  rebuilds that section as it stands. */
+  sketches?: unknown
+  /** Which sections to rebuild; all of them when omitted. */
   sections?: unknown
   /** The document to build on, when the caller already holds it — saves
    *  reading back a file it has only just produced. Read from storage when
@@ -253,14 +303,15 @@ export type AppendInput = {
 export type AppendResult = {
   photosAdded: number
   drawingsAdded: number
+  sketchesAdded: number
   sections: SectionName[]
   legacyMigrated: boolean
 }
 
-/** Rebuilds a report's photo and markup sections and stores the document.
- *  Shared by /api/docs/append and by a regeneration, which rebuilds both
- *  sections from what is recorded rather than lifting them out of the old
- *  document. */
+/** Rebuilds a report's photo, sketch and markup sections and stores the
+ *  document. Shared by /api/docs/append and by a regeneration, which
+ *  rebuilds them from what is recorded rather than lifting them out of the
+ *  old document. */
 export async function appendAttachments(input: AppendInput): Promise<AppendResult> {
   const { inspectionId, photos = [], drawings = [] } = input
     if (!inspectionId) throw new Error('Missing inspectionId')
@@ -318,6 +369,33 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
 
     // Markups shrink too — a captured A3 sheet came in at ~2.8MB.
     const shrunkDrawings = await Promise.all(drawingBuffers.map(b => (b ? shrinkDrawing(b) : Promise.resolve(null))))
+
+    // Sketches: looked up by id among the report's own (never fetched from
+    // an address the caller supplied), each page downloaded and shrunk.
+    // Decided here, before the document is read: a legacy document widening
+    // `requested` below has no sketch section to rebuild, so sketches are
+    // only touched when they were asked for.
+    const doSketches = requested.includes('sketches')
+    let sketchCandidates: ReportSketch[] = []
+    let chosenSketches: ReportSketch[] = []
+    const sketchPages = new Map<string, Awaited<ReturnType<typeof shrinkSketch>>>()
+    if (doSketches) {
+      sketchCandidates = await loadReportSketches(inspectionId)
+      const chosenIds = Array.isArray(input.sketches)
+        ? input.sketches.filter((id): id is string => typeof id === 'string')
+        : sketchesHeldByDefault(sketchCandidates.map(s => s.id), await readAttachmentSelection(inspectionId))
+      const wanted = new Set(chosenIds)
+      chosenSketches = sketchCandidates.filter(s => wanted.has(s.id) && s.pages.length > 0)
+      await Promise.all(chosenSketches.flatMap(s => s.pages).map(async page => {
+        try {
+          const res = await fetch(page.url)
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          sketchPages.set(page.url, await shrinkSketch(Buffer.from(await res.arrayBuffer())))
+        } catch (err) {
+          console.warn('[append] Sketch page could not be fetched — skipping:', page.url, err)
+        }
+      }))
+    }
 
     // Everything above works without the document. From here it is read and
     // then replaced, so a closed editor's parting save has to have landed
@@ -400,6 +478,7 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
     const newRels: { id: string; type: string; target: string; external?: boolean }[] = []
     // Built separately so each can be placed in its own bookmark.
     let drawingsXml = ''
+    let sketchesXml = ''
     let photosXml   = ''
 
     // docPr IDs must be unique across the document; start high to avoid collisions
@@ -424,6 +503,43 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
         drawingsXml += refLine(safeRef)
         drawingsXml += `<w:p><w:r>${buildDrawingImageXml(rId, docPrId++)}</w:r></w:p>`
       })
+    }
+
+    // ── SKETCHES section ─────────────────────────────────────────────────────
+    // In site-note order (loadReportSketches), numbered S1, S2… and captioned
+    // with the note each explains, so the report and the site notes point at
+    // each other. A multi-page PDF puts in every page.
+    let sketchesAdded = 0
+    if (doSketches && chosenSketches.length > 0) {
+      sketchesXml += PAGE_BREAK + sectionHeading('SKETCHES')
+
+      chosenSketches.forEach(sketch => {
+        const pages = sketch.pages.filter(p => sketchPages.has(p.url))
+        if (pages.length === 0) return
+        sketchesAdded++
+        const caption = sketchCaption(sketch, sketchesAdded)
+        sketchesXml += subHeading(caption.heading)
+        sketchesXml += refLine(caption.ref)
+
+        pages.forEach((page, k) => {
+          const file = sketchPages.get(page.url)!
+          const mediaName = `sketch_${nextRId}.${file.ext}`
+          zip.addFile(`word/media/${mediaName}`, file.buffer)
+          const rId = `rId${nextRId++}`
+          newRels.push({ id: rId, type: REL_IMAGE, target: `media/${mediaName}` })
+          if (pages.length > 1) sketchesXml += refLine(`Page ${k + 1} of ${pages.length}`)
+          const { cx, cy } = sketchExtent(file.width, file.height)
+          sketchesXml += `<w:p><w:r>${buildInlineImage(rId, docPrId++, cx, cy)}</w:r></w:p>`
+        })
+
+        if (isSketchFileUrl(sketch.fileUrl)) {
+          const linkRId = `rId${nextRId++}`
+          newRels.push({ id: linkRId, type: REL_HYPERLINK, target: sketch.fileUrl, external: true })
+          sketchesXml += sketchOriginalLink(linkRId, sketch.fileName)
+        }
+      })
+      // Every sketch failed to download: leave no empty heading behind.
+      if (sketchesAdded === 0) sketchesXml = ''
     }
 
     // ── SITE PHOTOGRAPHS section ─────────────────────────────────────────────
@@ -500,6 +616,9 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
     if (drawingsXml) {
       docXml = placeSection(docXml, 'drawings', wrapSection('drawings', drawingsXml))
     }
+    if (sketchesXml) {
+      docXml = placeSection(docXml, 'sketches', wrapSection('sketches', sketchesXml))
+    }
     if (photosXml) {
       docXml = placeSection(docXml, 'photos', wrapSection('photos', photosXml))
     }
@@ -514,13 +633,17 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
       drawings: requested.includes('drawings')
         ? validDrawings.map(d => drawingAssetStem(String(d.number ?? '')))
         : undefined,
+      // Every sketch the report could hold is now "seen", so one attached to
+      // a site note later shows up as new — see lib/sketchSelection.
+      sketches: doSketches ? chosenSketches.map(s => s.id) : undefined,
+      sketchesSeen: doSketches ? sketchCandidates.map(s => s.id) : undefined,
     })
 
     const photosAdded   = requested.includes('photos')   ? validPhotos.length   : 0
     const drawingsAdded = requested.includes('drawings') ? validDrawings.length : 0
-    console.log(`[append] Saved ${requested.join('+')} — photos: ${photosAdded}, drawings: ${drawingsAdded}`)
+    console.log(`[append] Saved ${requested.join('+')} — photos: ${photosAdded}, drawings: ${drawingsAdded}, sketches: ${sketchesAdded}`)
 
     // legacyMigrated is true when this call had to fold a pre-split
     // document's combined section back into the two separate ones.
-    return { photosAdded, drawingsAdded, sections: requested, legacyMigrated: legacy }
+    return { photosAdded, drawingsAdded, sketchesAdded, sections: requested, legacyMigrated: legacy }
 }

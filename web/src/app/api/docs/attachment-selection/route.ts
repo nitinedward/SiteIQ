@@ -47,7 +47,9 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(
-    { photos: selection.photos, drawings },
+    // sketches/sketchesSeen: ids, for what the page ticks and marks as new
+    // (lib/sketchSelection); null when nothing is recorded yet.
+    { photos: selection.photos, drawings, sketches: selection.sketches, sketchesSeen: selection.sketchesSeen },
     { headers: { 'Cache-Control': 'no-store' } }
   )
 }

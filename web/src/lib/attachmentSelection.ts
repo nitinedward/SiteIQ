@@ -16,6 +16,12 @@ import { createClient } from '@supabase/supabase-js'
  *  - photos:   photo URLs, as on the observations
  *  - drawings: markup stems (lib/drawingAssetName), naming files under
  *              drawing-assets/<inspection>/
+ *  - sketches: ids of the sketches in the report (web/sql/sketches.sql)
+ *  - sketchesSeen: ids of every sketch the report could hold when its
+ *              sketch section was last written. A sketch not in it is new —
+ *              attached to a site note since — and goes in by default,
+ *              whereas one that was seen but isn't in `sketches` was left
+ *              out on purpose.
  *
  * A file rather than a column so no migration is needed. Either list is
  * null when it has never been recorded — a report from before this existed
@@ -30,6 +36,8 @@ const getSupabase = () => createClient(
 export type AttachmentSelection = {
   photos: string[] | null
   drawings: string[] | null
+  sketches: string[] | null
+  sketchesSeen: string[] | null
 }
 
 export const attachmentSelectionPath = (inspectionId: string) =>
@@ -43,7 +51,7 @@ const strings = (raw: unknown): string[] | null =>
 export const parseSelected = strings
 
 export async function readAttachmentSelection(inspectionId: string): Promise<AttachmentSelection> {
-  const none: AttachmentSelection = { photos: null, drawings: null }
+  const none: AttachmentSelection = { photos: null, drawings: null, sketches: null, sketchesSeen: null }
   const supabase = getSupabase()
   // Signed and cache-busted like loadDoc, so a CDN can't hand back the
   // selection from before the last write.
@@ -55,7 +63,12 @@ export async function readAttachmentSelection(inspectionId: string): Promise<Att
     const res = await fetch(`${data.signedUrl}&t=${Date.now()}`, { cache: 'no-store' })
     if (!res.ok) return none
     const parsed = await res.json()
-    return { photos: strings(parsed?.photos), drawings: strings(parsed?.drawings) }
+    return {
+      photos: strings(parsed?.photos),
+      drawings: strings(parsed?.drawings),
+      sketches: strings(parsed?.sketches),
+      sketchesSeen: strings(parsed?.sketchesSeen),
+    }
   } catch {
     return none
   }
@@ -67,13 +80,15 @@ export async function readAttachmentSelection(inspectionId: string): Promise<Att
  *  means the next rebuild without a selection falls back to everything. */
 export async function writeAttachmentSelection(
   inspectionId: string,
-  update: { photos?: string[]; drawings?: string[] },
+  update: { photos?: string[]; drawings?: string[]; sketches?: string[]; sketchesSeen?: string[] },
 ): Promise<void> {
   try {
     const current = await readAttachmentSelection(inspectionId)
     const next = {
       photos: update.photos ? [...new Set(update.photos)] : current.photos,
       drawings: update.drawings ? [...new Set(update.drawings)] : current.drawings,
+      sketches: update.sketches ? [...new Set(update.sketches)] : current.sketches,
+      sketchesSeen: update.sketchesSeen ? [...new Set(update.sketchesSeen)] : current.sketchesSeen,
     }
     const { error } = await getSupabase().storage
       .from('reports')

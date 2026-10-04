@@ -8,12 +8,16 @@ import { buildMarkupPdf, type MarkupDrawing } from '@/lib/markupPdf'
 import dynamic from 'next/dynamic'
 import { loadDocsApi } from '@/lib/docsApi'
 import { drawingAssetStem } from '@/lib/drawingAssetName'
+import ReportSketchesPanel, { type ReportSketchItem, type ReportNote } from '@/components/ReportSketchesPanel'
+import type { StagedSketch } from '@/components/SketchDropZone'
+import { addSketch, deleteSketch, loadReportSketchRows, moveSketch, renameSketch } from '@/lib/sketches'
+import { isNewSketch, sketchesHeldByDefault } from '@/lib/sketchSelection'
 
 const OnlyOfficeEditor = dynamic(() => import('@/components/OnlyOfficeEditor'), { ssr: false })
 
 // ── TYPES ──────────────────────────────────────────────────────────────────────
 type Inspection = {
-  id: string; date: string; report_no: string; weather: string
+  id: string; project_id: string; date: string; report_no: string; weather: string
   site_contact: string; contact_phone: string; purpose: string
   // Optional: only present once the report_file_name column exists.
   report_file_name?: string | null
@@ -37,6 +41,32 @@ type DrawingInfo = {
    *  back in without being captured again. Superseded by capturedBlob once
    *  the markup is re-captured. */
   assetUrl: string | null
+}
+
+/** What the report holds, as recorded beside it (lib/attachmentSelection).
+ *  Each list is null when nothing is recorded yet. Markups come with signed
+ *  links to their stored images. */
+type RecordedSelection = {
+  photos: string[] | null
+  drawings: { stem: string; url: string }[] | null
+  sketches: string[] | null
+  sketchesSeen: string[] | null
+}
+
+async function fetchRecordedSelection(inspectionId: string): Promise<RecordedSelection> {
+  const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null)
+  try {
+    const res = await fetch(`/api/docs/attachment-selection?inspectionId=${inspectionId}`, { cache: 'no-store' })
+    const d = res.ok ? await res.json() : null
+    return {
+      photos: ids(d?.photos),
+      drawings: Array.isArray(d?.drawings) ? d.drawings : null,
+      sketches: ids(d?.sketches),
+      sketchesSeen: ids(d?.sketchesSeen),
+    }
+  } catch {
+    return { photos: null, drawings: null, sketches: null, sketchesSeen: null }
+  }
 }
 
 // ── MAIN PAGE ──────────────────────────────────────────────────────────────────
@@ -90,6 +120,19 @@ export default function ReportPage() {
    *  until that editor reports ready (or fails), not for a guessed time. */
   const awaitingReopen = useRef(false)
   const reopenCeiling  = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Sketches — see components/ReportSketchesPanel and web/sql/sketches.sql.
+  const [reportSketches,       setReportSketches]       = useState<ReportSketchItem[]>([])
+  /** The report's site notes, numbered the way the report lists them. */
+  const [reportNotes,          setReportNotes]          = useState<ReportNote[]>([])
+  const [sketchesTableMissing, setSketchesTableMissing] = useState(false)
+  /** The sketches the document holds, as last recorded; null before its
+   *  sketch section has ever been written. */
+  const [sketchesInReport,     setSketchesInReport]     = useState<string[] | null>(null)
+  /** A sketch in the report was moved, renamed or deleted since the document
+   *  was last written, so its sketch section needs rebuilding. */
+  const [sketchLayoutChanged,  setSketchLayoutChanged]  = useState(false)
+  const [updatingSketches,     setUpdatingSketches]     = useState(false)
   const [mobileTab,          setMobileTab]            = useState<'document' | 'attachments'>('document')
   const [showFinaliseConfirm, setShowFinaliseConfirm] = useState(false)
   const [frozenPdfUrl,       setFrozenPdfUrl]         = useState<string | null>(null)
@@ -327,7 +370,12 @@ export default function ReportPage() {
     else if (selectedPhotos.length > 0) parts.push('no photos (none are ticked)')
     if (m > 0) parts.push(`the ${m} ticked markup${m === 1 ? '' : 's'}`)
     else if (drawings.length > 0) parts.push('no markups (none are ticked)')
-    return parts.length ? `The report will include ${parts.join(' and ')}.` : ''
+    const k = tickedSketchIds().length
+    if (k > 0) parts.push(`the ${k} ticked sketch${k === 1 ? '' : 'es'}`)
+    else if (reportSketches.length > 0) parts.push('no sketches (none are ticked)')
+    if (parts.length === 0) return ''
+    const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]
+    return `The report will include ${list}.`
   }
 
   const generateAIReport = async () => {
@@ -340,15 +388,17 @@ export default function ReportPage() {
     setGeneratingAI(true)
     try {
       const selectedMarkups = await tickedMarkupStems()
+      const selectedSketches = tickedSketchIds()
       await runDocumentRewrite(async (closedKey) => {
         const res = await fetch('/api/docs/ai-generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ inspectionId, docKey: closedKey, selectedPhotoUrls, selectedMarkups }),
+          body:    JSON.stringify({ inspectionId, docKey: closedKey, selectedPhotoUrls, selectedMarkups, selectedSketches }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'AI generation failed')
         console.log('[ai-generate] Success:', data)
+        sketchesWritten(selectedSketches)
         setTextVersionResult(
           'Report text rewritten by AI' +
           (data.carried?.length ? ' — photos and markups put back after it.' : '.')
@@ -377,15 +427,17 @@ export default function ReportPage() {
     setGeneratingPlain(true)
     try {
       const selectedMarkups = await tickedMarkupStems()
+      const selectedSketches = tickedSketchIds()
       await runDocumentRewrite(async (closedKey) => {
         const res = await fetch('/api/docs/generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ inspectionId, force: true, docKey: closedKey, selectedPhotoUrls, selectedMarkups }),
+          body:    JSON.stringify({ inspectionId, force: true, docKey: closedKey, selectedPhotoUrls, selectedMarkups, selectedSketches }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'Could not rebuild the text from your notes')
         console.log('[plain-generate] Success:', data)
+        sketchesWritten(selectedSketches)
         setTextVersionResult(
           'Report text rebuilt from your site notes' +
           (data.carried?.length ? ' — photos and markups put back after it.' : '.')
@@ -529,9 +581,12 @@ export default function ReportPage() {
     const selectedDrawingsList = drawings
       .filter(d => d.selected && d.captured && (d.capturedBlob || d.assetUrl))
 
+    // Sketches only force a rebuild when their ticks differ from the
+    // document; otherwise its sketch section is already what is ticked.
     const hasAttachments =
       selectedPhotosList.length > 0 ||
-      selectedDrawingsList.length > 0
+      selectedDrawingsList.length > 0 ||
+      sketchesDirty
 
     if (hasAttachments) {
       // Same hazard as inserting: the file is about to be rewritten, so the
@@ -567,6 +622,7 @@ export default function ReportPage() {
       // overflowed the request body.
       setReloadingStep('Adding photos and markups')
       const validDrawings = await uploadCapturedDrawings()
+      const downloadSketches = tickedSketchIds()
 
       const appendRes = await fetch('/api/docs/append', {
         method:  'POST',
@@ -575,6 +631,7 @@ export default function ReportPage() {
           inspectionId,
           photos:   selectedPhotosList,
           drawings: validDrawings,
+          sketches: downloadSketches,
         }),
       })
 
@@ -582,6 +639,7 @@ export default function ReportPage() {
         const err = await appendRes.json()
         throw new Error('Could not attach photos: ' + (err.error || 'Unknown error'))
       }
+      sketchesWritten(downloadSketches)
 
       // The editor was closed to make the rewrite safe, so bring it back on
       // the rewritten file's key — otherwise the pane stays empty, or worse,
@@ -1148,30 +1206,165 @@ export default function ReportPage() {
     setReportStatus('pending')
   }
 
+  // ── SKETCHES ──────────────────────────────────────────────────────────────────
+  /** Loads the report's sketches and decides their ticks: `keep` holds ticks
+   *  already made on this page (kept across a reload of the list), `tick`
+   *  names sketches to tick regardless (ones just added), and anything else
+   *  takes the report's default — in the report, or new since it was last
+   *  written (lib/sketchSelection). Returns the list it set. */
+  const loadSketchState = async (
+    inspId: string,
+    notes: ReportNote[],
+    recorded: RecordedSelection,
+    { keep, tick = [] }: { keep?: Map<string, boolean>; tick?: string[] } = {},
+  ): Promise<ReportSketchItem[]> => {
+    let rows: Awaited<ReturnType<typeof loadReportSketchRows>>
+    try {
+      rows = await loadReportSketchRows(inspId, notes.map(n => n.id))
+    } catch (err) {
+      console.error('[sketches] could not load:', err)
+      rows = { sketches: [], tableMissing: false }
+    }
+    setSketchesTableMissing(rows.tableMissing)
+    const byDefault = new Set(sketchesHeldByDefault(rows.sketches.map(s => s.id), recorded))
+    const items: ReportSketchItem[] = rows.sketches.map(s => ({
+      ...s,
+      selected: tick.includes(s.id) || (keep?.has(s.id) ? keep.get(s.id)! : byDefault.has(s.id)),
+      isNew: isNewSketch(s.id, recorded),
+    }))
+    setReportSketches(items)
+    setSketchesInReport(recorded.sketches)
+    return items
+  }
+
+  const tickedSketchIds = () => reportSketches.filter(s => s.selected).map(s => s.id)
+
+  /** After the document's sketch section is written with `ids`: that is
+   *  what it holds now, and nothing is new any more. */
+  const sketchesWritten = (ids: string[]) => {
+    setSketchesInReport(ids)
+    setSketchLayoutChanged(false)
+    setReportSketches(prev => prev.map(s => ({ ...s, isNew: false })))
+  }
+
+  /** Rebuilds the report's sketch section from `ids` (the ticked ones). */
+  const updateSketchesInReport = async (ids: string[] = tickedSketchIds()) => {
+    setUpdatingSketches(true)
+    try {
+      await runDocumentRewrite(async (closedKey) => {
+        const res = await fetch('/api/docs/append', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inspectionId, sections: ['sketches'], sketches: ids, docKey: closedKey }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || `update failed (${res.status})`)
+        sketchesWritten(ids)
+        const n = data.sketchesAdded ?? 0
+        setInsertResult(n
+          ? `${n} sketch${n === 1 ? '' : 'es'} in the report — they sit after the markups, before the photos.`
+          : 'Sketches removed from the report.')
+        setTimeout(() => setInsertResult(''), 8000)
+        setMobileTab('document')
+      }, { step: ids.length ? 'Adding sketches' : 'Removing sketches' })
+    } catch (err: any) {
+      alert('Could not update the sketches: ' + err.message)
+    } finally {
+      setUpdatingSketches(false)
+    }
+  }
+
+  /** Dropped files: uploaded and linked to their notes, then put straight
+   *  into the report along with whatever else is ticked. */
+  const addSketchFiles = async (staged: StagedSketch[]) => {
+    const projectId = pageData?.inspection.project_id
+    if (!projectId) throw new Error('The report is still loading — try again in a moment.')
+    const added: string[] = []
+    for (const s of staged) {
+      const sketch = await addSketch(s.file, {
+        projectId,
+        // Kept on the report even when linked to a note, so it stays here as
+        // General if that note is ever deleted.
+        inspectionId,
+        observationId: s.observationId,
+        title: s.title,
+      })
+      added.push(sketch.id)
+    }
+    const keep = new Map(reportSketches.map(s => [s.id, s.selected]))
+    const items = await loadSketchState(inspectionId, reportNotes, await fetchRecordedSelection(inspectionId), { keep, tick: added })
+    await updateSketchesInReport(items.filter(s => s.selected).map(s => s.id))
+  }
+
+  const toggleSketch = (id: string) =>
+    setReportSketches(prev => prev.map(s => (s.id === id ? { ...s, selected: !s.selected } : s)))
+
+  const moveSketchToNote = async (id: string, observationId: string | null) => {
+    try {
+      await moveSketch(id, observationId, inspectionId)
+      const moved = reportSketches.find(s => s.id === id)
+      setReportSketches(prev => prev.map(s => (s.id === id ? { ...s, observationId } : s)))
+      // Its caption and its place in the report follow the note.
+      if (moved?.selected) setSketchLayoutChanged(true)
+    } catch (err: any) {
+      alert('Could not move the sketch: ' + err.message)
+    }
+  }
+
+  const renameSketchTo = async (id: string, title: string) => {
+    try {
+      await renameSketch(id, title)
+      const renamed = reportSketches.find(s => s.id === id)
+      setReportSketches(prev => prev.map(s => (s.id === id ? { ...s, title: title.trim() } : s)))
+      if (renamed?.selected) setSketchLayoutChanged(true)
+    } catch (err: any) {
+      alert('Could not rename the sketch: ' + err.message)
+    }
+  }
+
+  const removeSketch = async (id: string) => {
+    try {
+      await deleteSketch(id)
+      setReportSketches(prev => prev.filter(s => s.id !== id))
+      // Still pictured in the document until its sketch section is rebuilt.
+      if (sketchesInReport?.includes(id)) setSketchLayoutChanged(true)
+    } catch (err: any) {
+      alert('Could not delete the sketch: ' + err.message)
+    }
+  }
+
+  /** Ticks differ from what the document holds, or a sketch in it changed. */
+  const sketchesDirty = (() => {
+    if (sketchLayoutChanged) return true
+    const ticked = new Set(tickedSketchIds())
+    const held = new Set(sketchesInReport ?? [])
+    return ticked.size !== held.size || [...ticked].some(id => !held.has(id))
+  })()
+
   // ── LOAD ATTACHMENTS ──────────────────────────────────────────────────────────
   const loadAttachments = useCallback(async (inspId: string) => {
     setLoadingAttachments(true)
     console.log('[loadAttachments] Loading for inspection:', inspId)
-    // Which photos and markups the report holds, read alongside the notes.
-    // Each list is null when nothing is recorded yet — see
-    // lib/attachmentSelection.
-    const recordedSelection: Promise<{
-      photos: string[] | null
-      drawings: { stem: string; url: string }[] | null
-    }> = fetch(`/api/docs/attachment-selection?inspectionId=${inspId}`, { cache: 'no-store' })
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => ({
-        photos: Array.isArray(d?.photos) ? d.photos : null,
-        drawings: Array.isArray(d?.drawings) ? d.drawings : null,
-      }))
-      .catch(() => ({ photos: null, drawings: null }))
+    // Which photos, markups and sketches the report holds, read alongside
+    // the notes.
+    const recordedSelection = fetchRecordedSelection(inspId)
     try {
+      // By id: the order the report lists its notes in (the written sections
+      // and the photos use it too), so "site note 2" means the same note on
+      // this page as in the document.
       const { data: obsData, error: obsError } = await supabase
         .from('observations')
         .select('id, zone_label, photos, transcript, severity, zone_id')
         .eq('inspection_id', inspId)
+        .order('id', { ascending: true })
 
       if (obsError) console.error('[loadAttachments] observations error:', obsError)
+
+      const notes: ReportNote[] = (obsData ?? []).map((ob: any, i: number) => ({
+        id: ob.id, label: ob.zone_label || 'General Observation', number: i + 1,
+      }))
+      setReportNotes(notes)
+      await loadSketchState(inspId, notes, await recordedSelection)
       console.log('[loadAttachments] Observations loaded:', obsData?.length ?? 0)
 
       console.log('=== PHOTO DEBUG ===')
@@ -1967,6 +2160,27 @@ export default function ReportPage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* ── DIVIDER ───────────────────────────────────────── */}
+                  <div style={{ height: 1, background: 'var(--border-line)', margin: '4px 0 16px' }} />
+
+                  {/* ── SKETCHES ──────────────────────────────────────── */}
+                  {/* Between markups and photos, the order the report
+                      prints them in. */}
+                  <ReportSketchesPanel
+                    items={reportSketches}
+                    notes={reportNotes}
+                    tableMissing={sketchesTableMissing}
+                    readOnly={reportStatus === 'finalised'}
+                    busy={updatingSketches || inserting || generatingAI || generatingPlain || !docReady}
+                    dirty={sketchesDirty}
+                    onToggle={toggleSketch}
+                    onUpdateReport={() => updateSketchesInReport()}
+                    onAddFiles={addSketchFiles}
+                    onMove={moveSketchToNote}
+                    onRename={renameSketchTo}
+                    onDelete={removeSketch}
+                  />
 
                   {/* ── DIVIDER ───────────────────────────────────────── */}
                   <div style={{ height: 1, background: 'var(--border-line)', margin: '4px 0 16px' }} />

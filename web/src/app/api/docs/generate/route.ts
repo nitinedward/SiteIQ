@@ -22,12 +22,13 @@ export async function POST(request: NextRequest) {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { inspectionId, photos: photoList, drawingIds: _drawingIds, force, docKey, selectedPhotoUrls, selectedMarkups: markupStems } = await request.json()
-    // The photos and markups (stems) ticked on the report page, which a
-    // forced rewrite's sections hold; absent means the selection last
-    // recorded — see lib/attachmentSelection.
+    const { inspectionId, photos: photoList, drawingIds: _drawingIds, force, docKey, selectedPhotoUrls, selectedMarkups: markupStems, selectedSketches: sketchIds } = await request.json()
+    // The photos, markups (stems) and sketches (ids) ticked on the report
+    // page, which a forced rewrite's sections hold; absent means the
+    // selection last recorded — see lib/attachmentSelection.
     const selectedUrls = parseSelected(selectedPhotoUrls)
     const selectedMarkups = parseSelected(markupStems)
+    const selectedSketches = parseSelected(sketchIds)
 
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
@@ -149,7 +150,7 @@ export async function POST(request: NextRequest) {
       // A forced rewrite replaces a document that may already hold inserted
       // photos and markups; a first generation has nothing to carry.
       carried = force
-        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups })
+        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups, sketches: selectedSketches })
         : (await saveDoc(inspectionId, buffer), [])
       console.log('Document generated from firm template')
     } else {
@@ -176,7 +177,7 @@ export async function POST(request: NextRequest) {
 
       const buffer = await generateServerReport(inspection, observations, undefined, photoAttachments)
       carried = force
-        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups })
+        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups, sketches: selectedSketches })
         : (await saveDoc(inspectionId, buffer), [])
     }
 

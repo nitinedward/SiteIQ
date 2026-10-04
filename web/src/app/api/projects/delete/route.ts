@@ -106,11 +106,19 @@ export async function POST(request: NextRequest) {
       const { data: files } = await supabase.storage.from('observation-photos').list(`note-responses/${noteId}`, { limit: 200 })
       for (const f of files ?? []) photoPaths.push(`note-responses/${noteId}/${f.name}`)
     }
+    // Sketches keep each one's files in its own folder under the project.
+    const { data: sketches } = await supabase.from('sketches').select('id').eq('project_id', projectId)   // no table yet: none
+    for (const s of sketches ?? []) {
+      const folder = `sketches/${projectId}/${(s as any).id}`
+      const { data: files } = await supabase.storage.from('observation-photos').list(folder, { limit: 200 })
+      for (const f of files ?? []) photoPaths.push(`${folder}/${f.name}`)
+    }
 
     // ── Rows first: a file with no row left is invisible, a row whose file
     //    is gone shows as a broken report. ──────────────────────────────────
     const steps: { what: string; run: () => Promise<{ error: any }> }[] = [
       ...(noteIds.length > 0 ? [{ what: 'note responses', run: async () => await supabase.from('note_responses').delete().in('observation_id', noteIds) }] : []),
+      ...((sketches ?? []).length > 0 ? [{ what: 'sketches', run: async () => await supabase.from('sketches').delete().eq('project_id', projectId) }] : []),
       { what: 'site notes', run: async () => await supabase.from('observations').delete().eq('project_id', projectId) },
       ...(inspectionIds.length > 0 ? [
         { what: 'site notes on its reports', run: async () => await supabase.from('observations').delete().in('inspection_id', inspectionIds) },

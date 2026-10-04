@@ -89,6 +89,20 @@ export async function POST(request: NextRequest) {
       for (const f of files ?? []) photoPaths.push(`note-responses/${noteId}/${f.name}`)
     }
 
+    // Sketches on its notes or added to it as General, and their folders.
+    // Read before the notes go — afterwards nothing links a sketch to them.
+    let sketchQuery = supabase.from('sketches').select('id, project_id')
+    sketchQuery = noteIds.length > 0
+      ? sketchQuery.or(`inspection_id.eq.${inspectionId},observation_id.in.(${noteIds.join(',')})`)
+      : sketchQuery.eq('inspection_id', inspectionId)
+    const { data: sketches } = await sketchQuery   // no table yet: none
+    const sketchIds = (sketches ?? []).map((s: any) => s.id as string)
+    for (const s of sketches ?? []) {
+      const folder = `sketches/${(s as any).project_id}/${(s as any).id}`
+      const { data: files } = await supabase.storage.from('observation-photos').list(folder, { limit: 200 })
+      for (const f of files ?? []) photoPaths.push(`${folder}/${f.name}`)
+    }
+
     const reportPaths = [
       `${inspectionId}.docx`, `${inspectionId}.pdf`, `${inspectionId}-markup.pdf`,
       attachmentSelectionPath(inspectionId),
@@ -105,6 +119,7 @@ export async function POST(request: NextRequest) {
     // ── Rows first, in dependency order ───────────────────────────────────
     const steps: { what: string; run: () => Promise<{ error: any }> }[] = [
       ...(noteIds.length > 0 ? [{ what: 'note responses', run: async () => await supabase.from('note_responses').delete().in('observation_id', noteIds) }] : []),
+      ...(sketchIds.length > 0 ? [{ what: 'sketches', run: async () => await supabase.from('sketches').delete().in('id', sketchIds) }] : []),
       { what: 'site notes', run: async () => await supabase.from('observations').delete().eq('inspection_id', inspectionId) },
       { what: 'markups', run: async () => await supabase.from('zones').delete().eq('inspection_id', inspectionId) },
       // Report content from before reports became Word documents; its rows

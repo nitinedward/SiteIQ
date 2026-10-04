@@ -38,6 +38,8 @@ export type SiteNote = {
   measurements: NoteMeasurement[]
   observedAt: string | null
   inspectionId: string | null
+  /** The project the note was loaded for. */
+  projectId: string
   reportNo: string | null
   visitDate: string | null
   zone: NoteZone | null
@@ -128,6 +130,7 @@ export async function loadProjectSiteNotes(projectId: string): Promise<SiteNote[
       measurements: asArray<NoteMeasurement>(row.measurements),
       observedAt: row.observed_at ?? row.created_at ?? null,
       inspectionId: row.inspection_id ?? null,
+      projectId,
       reportNo: inspection?.report_no ?? null,
       visitDate: inspection?.date ?? null,
       zone: zone

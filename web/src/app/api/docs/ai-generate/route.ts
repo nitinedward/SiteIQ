@@ -36,12 +36,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { inspectionId, docKey, selectedPhotoUrls, selectedMarkups: markupStems } = await request.json()
-    // The photos and markups (stems) ticked on the report page, which the
-    // rebuilt sections hold; absent (the mobile app) means the selection last
-    // recorded — see lib/attachmentSelection.
+    const { inspectionId, docKey, selectedPhotoUrls, selectedMarkups: markupStems, selectedSketches: sketchIds } = await request.json()
+    // The photos, markups (stems) and sketches (ids) ticked on the report
+    // page, which the rebuilt sections hold; absent (the mobile app) means
+    // the selection last recorded — see lib/attachmentSelection.
     const selectedUrls = parseSelected(selectedPhotoUrls)
     const selectedMarkups = parseSelected(markupStems)
+    const selectedSketches = parseSelected(sketchIds)
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
     }
@@ -254,12 +255,12 @@ Return:
         projectId: inspection.project_id,
       })
       await pinReportTemplate(inspectionId, pinnedTemplateId, templateId)
-      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups })
+      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups, sketches: selectedSketches })
       console.log('AI document generated using firm template')
     } else {
       console.log('No firm_id — generating AI doc from scratch')
       const buffer = await generateServerReport(inspection, observations, aiText)
-      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups })
+      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups, sketches: selectedSketches })
     }
 
     return NextResponse.json({ success: true, preview: aiText.slice(0, 200), carried })

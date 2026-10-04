@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { Spinner } from '@/components/Shell'
+import NoteSketches from '@/components/NoteSketches'
 import {
   SiteNote, NoteStatus, NoteResponse, formatNoteDate, noteReportRef, measurementLabel,
   loadNoteResponses, addNoteResponse, deleteNoteResponse, isImageFile, isViewableFile,
@@ -467,6 +468,16 @@ export function SiteNoteModal({
               </div>
             )}
           </div>
+
+          {/* Hand or Bluebeam sketches explaining this note. Attached here,
+              they show up in the note's report ready to add. */}
+          <NoteSketches
+            noteId={note.id}
+            inspectionId={note.inspectionId}
+            projectId={note.projectId}
+            reportRef={noteReportRef(note)}
+            sectionTitleStyle={sectionTitle}
+          />
 
           {/* What came back from site — the contractor's reply, a photo of
               the remedial work, an email or a PDF. Saving one can close the

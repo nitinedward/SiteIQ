@@ -16,12 +16,16 @@ import { loadDoc, saveDoc } from '@/lib/docStorage'
 
 const REL_IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
 
-export type SectionName = 'drawings' | 'photos'
+export type SectionName = 'drawings' | 'sketches' | 'photos'
 
 export const SECTION_DEFS: Record<SectionName, { id: string; bookmark: string }> = {
   drawings: { id: '999001', bookmark: 'siteiq_drawings' },
   photos:   { id: '999002', bookmark: 'siteiq_photos' },
+  sketches: { id: '999003', bookmark: 'siteiq_sketches' },
 }
+
+/** The order the sections read in, whatever order they were inserted in. */
+const SECTION_ORDER: SectionName[] = ['drawings', 'sketches', 'photos']
 
 /** Documents written before the split carry one combined bookmark holding
  *  both blocks. It can't be divided after the fact, so the first insert into
@@ -29,10 +33,10 @@ export const SECTION_DEFS: Record<SectionName, { id: string; bookmark: string }>
  *  all-or-nothing behaviour those documents already had. */
 export const LEGACY_SECTION = { id: '999000', bookmark: 'siteiq_attachments' }
 
-export const ALL_SECTIONS: SectionName[] = ['drawings', 'photos']
+export const ALL_SECTIONS: SectionName[] = ['drawings', 'sketches', 'photos']
 
 export function isSectionName(value: unknown): value is SectionName {
-  return value === 'drawings' || value === 'photos'
+  return value === 'drawings' || value === 'sketches' || value === 'photos'
 }
 
 type SectionSpan = {
@@ -328,13 +332,14 @@ function appendToBody(docXml: string, xml: string): string {
   return docXml.replace('</w:body>', `${xml}</w:body>`)
 }
 
-/** Inserts a built section, keeping drawings ahead of photos however the two
- *  were inserted — re-adding markups after photos must not leave the report
- *  reading photos-then-markups. */
+/** Inserts a built section in its place in SECTION_ORDER — ahead of the
+ *  first later section already in the document — however the sections were
+ *  inserted: re-adding markups after photos must not leave the report
+ *  reading photos-then-markups, and sketches sit between the two. */
 export function placeSection(docXml: string, section: SectionName, xml: string): string {
-  if (section === 'drawings') {
-    const photos = findSectionSpan(docXml, SECTION_DEFS.photos.bookmark)
-    if (photos) return docXml.slice(0, photos.start) + xml + docXml.slice(photos.start)
+  for (const later of SECTION_ORDER.slice(SECTION_ORDER.indexOf(section) + 1)) {
+    const span = findSectionSpan(docXml, SECTION_DEFS[later].bookmark)
+    if (span) return docXml.slice(0, span.start) + xml + docXml.slice(span.start)
   }
   return appendToBody(docXml, xml)
 }
@@ -366,9 +371,8 @@ export function extractSections(docBuffer: Buffer): CarriedSection[] {
   if (!docXml || !relsXml) return []
 
   const wanted = [
-    { bookmark: SECTION_DEFS.drawings.bookmark, id: SECTION_DEFS.drawings.id },
-    { bookmark: SECTION_DEFS.photos.bookmark,   id: SECTION_DEFS.photos.id },
-    { bookmark: LEGACY_SECTION.bookmark,        id: LEGACY_SECTION.id },
+    ...SECTION_ORDER.map(s => ({ bookmark: SECTION_DEFS[s].bookmark, id: SECTION_DEFS[s].id })),
+    { bookmark: LEGACY_SECTION.bookmark, id: LEGACY_SECTION.id },
   ]
 
   const carried: CarriedSection[] = []
@@ -414,8 +418,7 @@ export function graftSections(docBuffer: Buffer, sections: CarriedSection[]): Bu
   // A regenerated document should never already carry these, but a retry
   // could hand us one that does — clear them so nothing is duplicated.
   ;({ docXml, relsXml } = removeSections(docXml, relsXml, zip, [
-    SECTION_DEFS.drawings.bookmark,
-    SECTION_DEFS.photos.bookmark,
+    ...SECTION_ORDER.map(s => SECTION_DEFS[s].bookmark),
     LEGACY_SECTION.bookmark,
   ]))
 

@@ -3,7 +3,8 @@ import { saveDoc } from './docStorage'
 import { carryAttachmentsForward } from './attachmentSections'
 import { appendAttachments } from './appendAttachments'
 import { NotSettledError } from './quiesceDocument'
-import { readAttachmentSelection, writeAttachmentSelection } from './attachmentSelection'
+import { readAttachmentSelection } from './attachmentSelection'
+import { loadReportSketches } from './reportSketches'
 import { drawingAssetStem } from './drawingAssetName'
 
 /**
@@ -123,6 +124,10 @@ async function loadDrawings(
  * stored markup, as all rebuilds used to. Selected entries that aren't this
  * inspection's photos or stored markups are ignored, so a request can't
  * make the server fetch anything else.
+ *
+ * Sketches (`sketches`, ids) work the same way, except that without a fresh
+ * selection the report also takes any sketch attached to one of its site
+ * notes since — see lib/sketchSelection.
  */
 export async function writeWithRebuiltAttachments(
   inspectionId: string,
@@ -132,10 +137,12 @@ export async function writeWithRebuiltAttachments(
     gate = Promise.resolve(),
     photos: selectedPhotos = null,
     drawings: selectedDrawings = null,
+    sketches: selectedSketches = null,
   }: {
     gate?: Promise<void>
     photos?: string[] | null
     drawings?: string[] | null
+    sketches?: string[] | null
   } = {},
 ): Promise<string[]> {
   let photoSel = selectedPhotos
@@ -164,31 +171,34 @@ export async function writeWithRebuiltAttachments(
   }
   const photos = chosenPhotos ? allPhotos.filter(p => chosenPhotos.has(p.url)) : allPhotos
 
-  if (photos.length === 0 && drawings.length === 0) {
+  // Nothing recorded at all and nothing to put in — a report from before any
+  // of this was recorded: lift whatever the old document holds instead,
+  // which reads the stored file, so only once settled. With anything chosen
+  // (even an empty choice) the sections are rebuilt below, never carried —
+  // carrying would put back exactly what was left out.
+  if (
+    photos.length === 0 && drawings.length === 0 && !chosenPhotos && !chosenDrawings &&
+    !selectedSketches?.length && (await loadReportSketches(inspectionId)).length === 0
+  ) {
     await gate
-    if (chosenPhotos || chosenDrawings) {
-      // Nothing chosen: the report goes out without an attachments section.
-      // Not carried forward from the old document — that would put back
-      // exactly the photos and markups that were left out.
-      await saveDoc(inspectionId, buffer)
-      await writeAttachmentSelection(inspectionId, { photos: [], drawings: [] })
-      return []
-    }
-    // Nothing recorded at all — fall back to lifting whatever the old
-    // document holds, which reads the stored file, so only once settled.
     const carried = await carryAttachmentsForward(inspectionId, buffer)
     await saveDoc(inspectionId, carried.buffer)
     return carried.carried
   }
 
+  let result: Awaited<ReturnType<typeof appendAttachments>>
   try {
     // In-process rather than a call back into /api/docs/append: a function
     // calling its own deployment over HTTP answers to whatever protection
     // sits in front of it, and a failure there costs the report its photos.
     // Handed the buffer so the document is stored once, with its sections,
-    // rather than stored bare, read straight back and stored again.
-    const result = await appendAttachments({ inspectionId, photos, drawings, docBuffer: buffer, gate })
-    console.log('[attachments] rebuilt —', result.photosAdded, 'photos,', result.drawingsAdded, 'markups')
+    // rather than stored bare, read straight back and stored again. Empty
+    // lists write no section, and are recorded as chosen.
+    result = await appendAttachments({
+      inspectionId, photos, drawings, docBuffer: buffer, gate,
+      sketches: selectedSketches ?? undefined,
+    })
+    console.log('[attachments] rebuilt —', result.photosAdded, 'photos,', result.drawingsAdded, 'markups,', result.sketchesAdded, 'sketches')
   } catch (err) {
     if (err instanceof NotSettledError) throw err
     console.error('[attachments] rebuild failed, writing the document without them:', err)
@@ -201,6 +211,7 @@ export async function writeWithRebuiltAttachments(
 
   const rebuilt: string[] = []
   if (drawings.length > 0) rebuilt.push('siteiq_drawings')
+  if (result.sketchesAdded > 0) rebuilt.push('siteiq_sketches')
   if (photos.length > 0) rebuilt.push('siteiq_photos')
   return rebuilt
 }
