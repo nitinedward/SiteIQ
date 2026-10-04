@@ -91,3 +91,35 @@ export async function quiesceDocument(
 /** What a caller tells the user when a document would not settle. */
 export const NOT_SETTLED_MESSAGE =
   'The document is still being saved, so this was stopped to avoid losing your changes. Wait a moment and try again.'
+
+/** Thrown through a rewrite when the document never settled. Distinct from
+ *  other failures because fallbacks that would still store the document —
+ *  e.g. "write it without its photos" — must not run: storing anything is
+ *  exactly what is unsafe. */
+export class NotSettledError extends Error {
+  constructor() { super(NOT_SETTLED_MESSAGE) }
+}
+
+/** A gate for a server-side rewrite: resolves once the stored file is safe to
+ *  read and replace, rejects with NotSettledError if it never went quiet.
+ *
+ *  Started first and awaited only immediately before the file is read or
+ *  written, so the wait runs alongside whatever the rewrite can do without
+ *  the file — database reads, the AI call, fetching and shrinking photos.
+ *
+ *  No key means no editor session was open, so there is nothing to wait for.
+ *  A failure inside the wait counts as not settled. */
+export function quiesceGate(inspectionId: string, docKey: string | null | undefined): Promise<void> {
+  if (!docKey) return Promise.resolve()
+  const gate = quiesceDocument(inspectionId, docKey, false).then(
+    r => { if (!r.settled) throw new NotSettledError() },
+    err => {
+      console.error('[quiesce] failed:', err)
+      throw new NotSettledError()
+    },
+  )
+  // A caller that returns early (bad input, AI failure) never awaits the
+  // gate; without this its rejection would surface as an unhandled one.
+  gate.catch(() => {})
+  return gate
+}

@@ -4,6 +4,7 @@ import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildPar
 import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { saveDoc } from '@/lib/docStorage'
 import { writeWithRebuiltAttachments } from '@/lib/rebuildAttachments'
+import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
 import { noteBulletLine, noteDictation } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
@@ -20,11 +21,18 @@ export async function POST(request: NextRequest) {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { inspectionId, photos: photoList, drawingIds: _drawingIds, force } = await request.json()
+    const { inspectionId, photos: photoList, drawingIds: _drawingIds, force, docKey } = await request.json()
 
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
     }
+
+    // A forced rewrite replaces a document the editor had open, so its
+    // parting save must land first. Started now so the wait overlaps the
+    // reads, the template and fetching the photos; writeWithRebuiltAttachments
+    // awaits it before touching the stored file. A first generation has no
+    // session behind it and never waits.
+    const gate = quiesceGate(inspectionId, force ? docKey : null)
 
     // Normally this only runs when no document exists yet, so it can't wipe
     // edits made in OnlyOffice. `force` is the "use the plain notes text"
@@ -135,7 +143,7 @@ export async function POST(request: NextRequest) {
       // A forced rewrite replaces a document that may already hold inserted
       // photos and markups; a first generation has nothing to carry.
       carried = force
-        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer)
+        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, gate)
         : (await saveDoc(inspectionId, buffer), [])
       console.log('Document generated from firm template')
     } else {
@@ -162,12 +170,15 @@ export async function POST(request: NextRequest) {
 
       const buffer = await generateServerReport(inspection, observations, undefined, photoAttachments)
       carried = force
-        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer)
+        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, gate)
         : (await saveDoc(inspectionId, buffer), [])
     }
 
     return NextResponse.json({ success: true, inspectionId, carried })
   } catch (err) {
+    if (err instanceof NotSettledError) {
+      return NextResponse.json({ error: err.message }, { status: 409 })
+    }
     console.error('[docs/generate] error:', err)
     return NextResponse.json({ error: 'Failed to generate document' }, { status: 500 })
   }

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { saveDoc } from './docStorage'
 import { carryAttachmentsForward } from './attachmentSections'
 import { appendAttachments } from './appendAttachments'
+import { NotSettledError } from './quiesceDocument'
 
 /**
  * Rebuilding a regenerated report's photo and markup sections from the
@@ -95,13 +96,20 @@ async function loadDrawings(inspectionId: string, projectId: string): Promise<Re
 /**
  * Rebuilds a regenerated document's photo and markup sections, then stores
  * it. Returns what was rebuilt, for the
- * caller to report back to the UI. Never throws: a report whose sections
- * can't be rebuilt keeps the document that was just written.
+ * caller to report back to the UI. A report whose sections can't be rebuilt
+ * is still stored, without them.
+ *
+ * `gate` (see quiesceGate) is awaited before the stored file is read or
+ * written; the photos are fetched and shrunk while it is pending. The only
+ * thing this throws is the gate's NotSettledError, and then nothing has been
+ * stored — not even the fallback without photos, since storing anything is
+ * what would be overwritten.
  */
 export async function writeWithRebuiltAttachments(
   inspectionId: string,
   projectId: string,
   buffer: Buffer,
+  gate: Promise<void> = Promise.resolve(),
 ): Promise<string[]> {
   let photos: RebuiltPhoto[] = []
   let drawings: RebuiltDrawing[] = []
@@ -112,7 +120,9 @@ export async function writeWithRebuiltAttachments(
   }
 
   if (photos.length === 0 && drawings.length === 0) {
-    // Nothing recorded — fall back to lifting whatever the old document holds.
+    // Nothing recorded — fall back to lifting whatever the old document
+    // holds, which reads the stored file, so only once it is settled.
+    await gate
     const carried = await carryAttachmentsForward(inspectionId, buffer)
     await saveDoc(inspectionId, carried.buffer)
     return carried.carried
@@ -124,10 +134,14 @@ export async function writeWithRebuiltAttachments(
     // sits in front of it, and a failure there costs the report its photos.
     // Handed the buffer so the document is stored once, with its sections,
     // rather than stored bare, read straight back and stored again.
-    const result = await appendAttachments({ inspectionId, photos, drawings, docBuffer: buffer })
+    const result = await appendAttachments({ inspectionId, photos, drawings, docBuffer: buffer, gate })
     console.log('[attachments] rebuilt —', result.photosAdded, 'photos,', result.drawingsAdded, 'markups')
   } catch (err) {
+    if (err instanceof NotSettledError) throw err
     console.error('[attachments] rebuild failed, writing the document without them:', err)
+    // A rebuild can fail before reaching the gate (e.g. a bad markup), so
+    // the fallback waits on it too.
+    await gate
     await saveDoc(inspectionId, buffer)
     return []
   }

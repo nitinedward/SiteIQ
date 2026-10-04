@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { appendAttachments } from '@/lib/appendAttachments'
+import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
 
 // Drawings and photos each own a bookmarked section (see
 // src/lib/attachmentSections.ts), so one can be rebuilt without disturbing
@@ -31,9 +32,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400, headers: corsHeaders })
     }
 
-    const result = await appendAttachments(body)
+    // With docKey, the page has just closed the editor: its parting save is
+    // waited for alongside fetching and shrinking the photos, and the stored
+    // document is only read once it has landed (see quiesceGate).
+    const gate = quiesceGate(body.inspectionId, typeof body.docKey === 'string' ? body.docKey : null)
+    const result = await appendAttachments({ ...body, gate })
     return NextResponse.json({ success: true, ...result }, { headers: corsHeaders })
   } catch (err: any) {
+    if (err instanceof NotSettledError) {
+      return NextResponse.json({ error: err.message }, { status: 409, headers: corsHeaders })
+    }
     console.error('[append] error:', err)
     const notFound = /Document not found/.test(err?.message ?? '')
     return NextResponse.json(

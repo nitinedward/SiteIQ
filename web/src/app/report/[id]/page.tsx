@@ -299,8 +299,6 @@ export default function ReportPage() {
     )) return
     setGeneratingAI(true)
     try {
-      // The server waits out the closed editor's parting save itself, side by
-      // side with the AI call — see quiescing in api/docs/ai-generate.
       await runDocumentRewrite(async (closedKey) => {
         const res = await fetch('/api/docs/ai-generate', {
           method:  'POST',
@@ -315,7 +313,7 @@ export default function ReportPage() {
           (data.carried?.length ? ' — inserted photos and markups kept.' : '.')
         )
         setTimeout(() => setTextVersionResult(''), 8000)
-      }, { step: 'Writing the report with AI', serverQuiesces: true })
+      }, { step: 'Writing the report with AI' })
     } catch (err: any) {
       console.error('[generateAIReport] error:', err)
       alert('AI generation failed: ' + err.message)
@@ -335,11 +333,11 @@ export default function ReportPage() {
     )) return
     setGeneratingPlain(true)
     try {
-      await runDocumentRewrite(async () => {
+      await runDocumentRewrite(async (closedKey) => {
         const res = await fetch('/api/docs/generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ inspectionId, force: true }),
+          body:    JSON.stringify({ inspectionId, force: true, docKey: closedKey }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'Could not rebuild the text from your notes')
@@ -908,39 +906,29 @@ export default function ReportPage() {
    *   - Reopening must use the rewritten file's own key (see refreshDocKey),
    *     or the Document Server serves the copy it cached beforehand.
    *
-   *  `step` is what the overlay says while the rewrite runs. With
-   *  `serverQuiesces`, the waiting is left to the rewrite's own request,
-   *  which is handed the closed session's key and must not write the file
-   *  until that session has settled (api/docs/ai-generate does this, so its
-   *  AI call overlaps the wait instead of following it). */
+   *  Waiting for that parting save is left to the rewrite's own request:
+   *  `rewrite` is handed the closed session's key and passes it on, and the
+   *  route holds off reading or writing the file until the session has
+   *  settled (see quiesceGate in lib/quiesceDocument), doing everything
+   *  else — the AI call, the template, the photos — meanwhile. A route that
+   *  can't settle answers 409 with a "still being saved" message, which the
+   *  caller's alert shows. docKey is null only if the editor never opened,
+   *  in which case there is nothing to wait for.
+   *
+   *  `step` is what the overlay says while the rewrite runs. */
   const runDocumentRewrite = async (
     rewrite: (closedKey: string | null) => Promise<void>,
-    { step, serverQuiesces = false }: { step: string; serverQuiesces?: boolean },
+    { step }: { step: string },
   ) => {
     setReloadingStep('Saving your edits')
     setReloadingEditor(true)
     setEditorSuspended(true)
-    await new Promise(r => setTimeout(r, 1200))
+    // Just long enough for React to unmount the editor, so destroyEditor()
+    // has disconnected before the server's forcesave goes out. This used to
+    // be 1.2s to give the parting save a head start, but the server now
+    // watches for that save itself, however late it lands.
+    await new Promise(r => setTimeout(r, 150))
     try {
-      // docKey is null only if the editor never opened, in which case there
-      // is no session to save and nothing can overwrite the rewrite.
-      if (docKey && !serverQuiesces) {
-        const quiesce = await fetch('/api/docs/quiesce', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ inspectionId, docKey, drop: false }),
-        }).then(r => r.json()).catch(() => ({}))
-        console.log('[rewrite] quiesce:', quiesce)
-        // `settled` means the stored file has stopped changing, which is the
-        // condition that matters. The key often stays known while the
-        // document sits in the server's cache, so that is not a failure.
-        if (quiesce?.settled === false) {
-          throw new Error(
-            'The document is still being saved, so this was stopped to avoid losing your changes. Wait a moment and try again.'
-          )
-        }
-      }
-
       setReloadingStep(step)
       await rewrite(docKey)
     } finally {
@@ -980,7 +968,7 @@ export default function ReportPage() {
 
     setInserting(true)
     try {
-      await runDocumentRewrite(async () => {
+      await runDocumentRewrite(async (closedKey) => {
         // Captured markups are uploaded even for a photos-only insert: a
         // document from before the split carries one combined section that
         // can't be divided, so the server rebuilds both that once and needs
@@ -995,6 +983,7 @@ export default function ReportPage() {
             photos,
             drawings: drawingsList,
             sections,
+            docKey: closedKey,
           }),
         })
         const data = await res.json()

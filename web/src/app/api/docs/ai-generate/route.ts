@@ -6,7 +6,7 @@ import { writeWithRebuiltAttachments } from '@/lib/rebuildAttachments'
 import { noteLabel, noteDictation, noteBulletLine } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
-import { quiesceDocument, NOT_SETTLED_MESSAGE, type QuiesceResult } from '@/lib/quiesceDocument'
+import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,16 +44,11 @@ export async function POST(request: NextRequest) {
 
     // With docKey, the editor has just been closed and its parting save may
     // still be on the way. Waiting for that used to happen in a separate call
-    // before this one; it only concerns the stored file, while everything up
-    // to the write below only reads the database and calls the AI, so the two
-    // now run side by side. The file is not touched until this has settled.
-    // drop:false — the page closed the editor itself (see runDocumentRewrite).
-    const quiescing: Promise<QuiesceResult | null> = docKey
-      ? quiesceDocument(inspectionId, docKey, false).catch(err => {
-          console.error('[ai-generate] quiesce failed:', err)
-          return { saved: false, dropped: false, settled: false, waitedMs: 0, keyStillKnown: false }
-        })
-      : Promise.resolve(null)
+    // before this one; it only concerns the stored file, while the database
+    // reads, the AI call and fetching the photos don't touch it, so they all
+    // run alongside. writeWithRebuiltAttachments awaits the gate before it
+    // reads or stores the file.
+    const gate = quiesceGate(inspectionId, docKey)
 
     const [inspRes, obsRes] = await Promise.all([
       supabase
@@ -217,14 +212,6 @@ Return:
 
     console.log('AI text generated, length:', aiText.length)
 
-    // Nothing above writes the stored file; everything below does. A save
-    // that lands after the write would overwrite it, so stop here if the
-    // document never went quiet.
-    const quiesce = await quiescing
-    if (quiesce && !quiesce.settled) {
-      return NextResponse.json({ error: NOT_SETTLED_MESSAGE }, { status: 409 })
-    }
-
     // Regenerating rewrites the whole file, which used to take the inserted
     // photos and markups with it — they are lifted out and re-attached, so
     // the text can be regenerated at any point in the workflow.
@@ -261,16 +248,19 @@ Return:
         projectId: inspection.project_id,
       })
       await pinReportTemplate(inspectionId, pinnedTemplateId, templateId)
-      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer)
+      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, gate)
       console.log('AI document generated using firm template')
     } else {
       console.log('No firm_id — generating AI doc from scratch')
       const buffer = await generateServerReport(inspection, observations, aiText)
-      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer)
+      carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, gate)
     }
 
     return NextResponse.json({ success: true, preview: aiText.slice(0, 200), carried })
   } catch (err) {
+    if (err instanceof NotSettledError) {
+      return NextResponse.json({ error: err.message }, { status: 409 })
+    }
     console.error('[ai-generate] error:', err)
     return NextResponse.json({ error: 'AI generation failed' }, { status: 500 })
   }

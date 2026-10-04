@@ -242,6 +242,10 @@ export type AppendInput = {
    *  reading back a file it has only just produced. Read from storage when
    *  omitted. */
   docBuffer?: Buffer
+  /** Awaited before the stored document is read or written — see
+   *  quiesceGate in lib/quiesceDocument. Photos and markups are fetched and
+   *  shrunk before it, so that work overlaps the wait. */
+  gate?: Promise<void>
 }
 
 export type AppendResult = {
@@ -263,20 +267,6 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
       ? input.sections.filter(isSectionName)
       : ALL_SECTIONS
     let requested: SectionName[] = asked.length > 0 ? asked : ALL_SECTIONS
-
-    let docBuffer: Buffer
-    // isBuffer, not a truthy check: /api/docs/append hands its JSON body
-    // straight in, and nothing from a request should stand in for the file.
-    if (Buffer.isBuffer(input.docBuffer)) {
-      docBuffer = input.docBuffer
-    } else {
-      console.log('[append] Loading:', inspectionId)
-      try {
-        docBuffer = await loadDoc(inspectionId)
-      } catch {
-        throw new Error('Document not found. Generate the report first.')
-      }
-    }
 
     const validPhotos   = (photos   as PhotoInput[]).filter(p => p?.url)
     const validDrawings = (drawings as DrawingInput[]).filter(d => d?.url || d?.dataUrl || d?.pngBase64)
@@ -326,6 +316,25 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
 
     // Markups shrink too — a captured A3 sheet came in at ~2.8MB.
     const shrunkDrawings = await Promise.all(drawingBuffers.map(b => (b ? shrinkDrawing(b) : Promise.resolve(null))))
+
+    // Everything above works without the document. From here it is read and
+    // then replaced, so a closed editor's parting save has to have landed
+    // first — or the read misses it, or it lands later and overwrites this.
+    await input.gate
+
+    let docBuffer: Buffer
+    // isBuffer, not a truthy check: /api/docs/append hands its JSON body
+    // straight in, and nothing from a request should stand in for the file.
+    if (Buffer.isBuffer(input.docBuffer)) {
+      docBuffer = input.docBuffer
+    } else {
+      console.log('[append] Loading:', inspectionId)
+      try {
+        docBuffer = await loadDoc(inspectionId)
+      } catch {
+        throw new Error('Document not found. Generate the report first.')
+      }
+    }
 
     const zip = new AdmZip(docBuffer)
 
