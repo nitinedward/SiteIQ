@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { photoSelectionPath } from '@/lib/photoSelection'
+import { attachmentSelectionPath } from '@/lib/attachmentSelection'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     // ── The files those rows point at ─────────────────────────────────────
     const reportPaths: string[] = []
     for (const id of inspectionIds) {
-      reportPaths.push(`${id}.docx`, `${id}.pdf`, `${id}-markup.pdf`, photoSelectionPath(id))
+      reportPaths.push(`${id}.docx`, `${id}.pdf`, `${id}-markup.pdf`, attachmentSelectionPath(id))
       // Marked-up drawings captured for the report.
       const { data: assets } = await supabase.storage.from('reports').list(`drawing-assets/${id}`, { limit: 200 })
       for (const f of assets ?? []) reportPaths.push(`drawing-assets/${id}/${f.name}`)

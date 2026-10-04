@@ -7,6 +7,7 @@ import { reportFileName, reportDisplayName } from '@/lib/reportFileName'
 import { buildMarkupPdf, type MarkupDrawing } from '@/lib/markupPdf'
 import dynamic from 'next/dynamic'
 import { loadDocsApi } from '@/lib/docsApi'
+import { drawingAssetStem } from '@/lib/drawingAssetName'
 
 const OnlyOfficeEditor = dynamic(() => import('@/components/OnlyOfficeEditor'), { ssr: false })
 
@@ -32,6 +33,10 @@ type DrawingInfo = {
   file_url: string; zone_count: number
   selected: boolean; captured: boolean; capturing: boolean
   capturedBlob: Blob | null; previewUrl: string | null
+  /** The image already stored for a markup the report holds, so it can go
+   *  back in without being captured again. Superseded by capturedBlob once
+   *  the markup is re-captured. */
+  assetUrl: string | null
 }
 
 // ── MAIN PAGE ──────────────────────────────────────────────────────────────────
@@ -291,36 +296,55 @@ export default function ReportPage() {
   // the raw notes as often as needed. Hand-edits made in the editor are NOT
   // preserved, since both actions rebuild the text from the template.
   //
-  // The photo section is rebuilt with the photos ticked right now, the same
-  // as Insert would use — so what is ticked is always what the report holds,
-  // and a photo left unticked doesn't come back with the regenerated text.
+  // The photo and markup sections are rebuilt with what is ticked right now,
+  // the same as Insert would use — so what is ticked is always what the
+  // report holds, and anything left unticked doesn't come back with the
+  // regenerated text.
 
   /** The ticked photos, sent with a rewrite as `selectedPhotoUrls`. */
   const tickedPhotoUrls = () => selectedPhotos.filter(p => p.selected).map(p => p.url)
 
-  /** The part of a rewrite's confirmation about photos. Spelled out when
-   *  none are ticked, since that leaves the report without photos. */
-  const rewritePhotoNote = () => {
+  /** Ticked markups that can go in — captured this visit, or already in the
+   *  report on a stored image. */
+  const tickedMarkupCount = () =>
+    drawings.filter(d => d.selected && d.captured && (d.capturedBlob || d.assetUrl)).length
+
+  /** Uploads any markups captured this visit and returns the stems of every
+   *  ticked markup, sent with a rewrite as `selectedMarkups`. Uploading first
+   *  is what lets a markup that was captured but not yet inserted go in with
+   *  the regenerated text. */
+  const tickedMarkupStems = async () =>
+    (await uploadCapturedDrawings()).map(m => drawingAssetStem(m.number))
+
+  /** The part of a rewrite's confirmation about attachments. Spelled out
+   *  when something available is left unticked, since it then leaves the
+   *  report. */
+  const rewriteAttachmentNote = () => {
     const n = tickedPhotoUrls().length
-    if (n > 0) return `The photo section will hold the ${n} ticked photo${n === 1 ? '' : 's'}, and markups are kept.`
-    if (selectedPhotos.length > 0) return 'No photos are ticked, so the report will have no photos. Markups are kept.'
-    return 'Markups are kept.'
+    const m = tickedMarkupCount()
+    const parts: string[] = []
+    if (n > 0) parts.push(`the ${n} ticked photo${n === 1 ? '' : 's'}`)
+    else if (selectedPhotos.length > 0) parts.push('no photos (none are ticked)')
+    if (m > 0) parts.push(`the ${m} ticked markup${m === 1 ? '' : 's'}`)
+    else if (drawings.length > 0) parts.push('no markups (none are ticked)')
+    return parts.length ? `The report will include ${parts.join(' and ')}.` : ''
   }
 
   const generateAIReport = async () => {
     if (!confirm(
       'Rewrite the report text with AI?\n\n' +
-      'The written sections are replaced with the AI version. ' + rewritePhotoNote() + '\n\n' +
+      'The written sections are replaced with the AI version. ' + rewriteAttachmentNote() + '\n\n' +
       'Any edits you made by hand in the editor are not kept.'
     )) return
     const selectedPhotoUrls = tickedPhotoUrls()
     setGeneratingAI(true)
     try {
+      const selectedMarkups = await tickedMarkupStems()
       await runDocumentRewrite(async (closedKey) => {
         const res = await fetch('/api/docs/ai-generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ inspectionId, docKey: closedKey, selectedPhotoUrls }),
+          body:    JSON.stringify({ inspectionId, docKey: closedKey, selectedPhotoUrls, selectedMarkups }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'AI generation failed')
@@ -346,17 +370,18 @@ export default function ReportPage() {
     if (!confirm(
       'Rewrite the report text from your site notes?\n\n' +
       'The written sections go back to the raw observations, replacing any AI-written text. ' +
-      rewritePhotoNote() + '\n\n' +
+      rewriteAttachmentNote() + '\n\n' +
       'Any edits you made by hand in the editor are not kept.'
     )) return
     const selectedPhotoUrls = tickedPhotoUrls()
     setGeneratingPlain(true)
     try {
+      const selectedMarkups = await tickedMarkupStems()
       await runDocumentRewrite(async (closedKey) => {
         const res = await fetch('/api/docs/generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ inspectionId, force: true, docKey: closedKey, selectedPhotoUrls }),
+          body:    JSON.stringify({ inspectionId, force: true, docKey: closedKey, selectedPhotoUrls, selectedMarkups }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'Could not rebuild the text from your notes')
@@ -502,7 +527,7 @@ export default function ReportPage() {
       .map(p => ({ url: p.url, zoneLabel: p.zoneLabel }))
 
     const selectedDrawingsList = drawings
-      .filter(d => d.selected && d.captured && d.capturedBlob)
+      .filter(d => d.selected && d.captured && (d.capturedBlob || d.assetUrl))
 
     const hasAttachments =
       selectedPhotosList.length > 0 ||
@@ -890,9 +915,33 @@ export default function ReportPage() {
    *  "Unexpected token 'R' ... is not valid JSON". Uploading as raw binary
    *  keeps each request small and matches how photos have always worked. */
   const uploadCapturedDrawings = async (): Promise<any[]> => {
-    const captured = drawings.filter(d => d.selected && d.captured && d.capturedBlob)
+    const captured = drawings.filter(d => d.selected && d.captured && (d.capturedBlob || d.assetUrl))
+
+    // Ticked markups that weren't re-captured this visit go back in on the
+    // image already stored for them. Their links were signed when the page
+    // opened and last an hour, so fresh ones are fetched here.
+    let freshAssetUrls = new Map<string, string>()
+    const onStoredImage = captured.filter(d => !d.capturedBlob)
+    if (onStoredImage.length > 0) {
+      const markups = onStoredImage.map(d => drawingAssetStem(d.number || d.id)).join(',')
+      const res = await fetch(
+        `/api/docs/attachment-selection?inspectionId=${inspectionId}&markups=${encodeURIComponent(markups)}`,
+        { cache: 'no-store' }
+      )
+      const data = await res.json().catch(() => ({}))
+      freshAssetUrls = new Map(
+        (Array.isArray(data?.drawings) ? data.drawings : []).map((a: any) => [a.stem, a.url])
+      )
+    }
+
     const out: any[] = []
     for (const d of captured) {
+      if (!d.capturedBlob) {
+        const url = freshAssetUrls.get(drawingAssetStem(d.number || d.id))
+        if (!url) throw new Error(`Could not add drawing ${d.number}: its stored image is missing. Capture it again.`)
+        out.push({ title: d.title, number: d.number, revision: d.revision || 'A', url })
+        continue
+      }
       const res = await fetch(
         `/api/docs/drawing-asset?inspectionId=${inspectionId}&name=${encodeURIComponent(d.number || d.id)}`,
         { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: d.capturedBlob! }
@@ -974,7 +1023,7 @@ export default function ReportPage() {
 
     // Counted rather than uploaded first, so the confirm below happens
     // before any work starts.
-    const capturedCount = drawings.filter(d => d.selected && d.captured && d.capturedBlob).length
+    const capturedCount = drawings.filter(d => d.selected && d.captured && (d.capturedBlob || d.assetUrl)).length
 
     // Nothing selected — the call still runs (an empty selection means
     // "remove what I inserted before"), but confirm first so a stray click
@@ -1103,14 +1152,19 @@ export default function ReportPage() {
   const loadAttachments = useCallback(async (inspId: string) => {
     setLoadingAttachments(true)
     console.log('[loadAttachments] Loading for inspection:', inspId)
-    // Which photos the report holds, read alongside the notes. null when
-    // nothing is recorded yet — see lib/photoSelection.
-    const recordedSelection: Promise<string[] | null> = fetch(
-      `/api/docs/photo-selection?inspectionId=${inspId}`, { cache: 'no-store' }
-    )
+    // Which photos and markups the report holds, read alongside the notes.
+    // Each list is null when nothing is recorded yet — see
+    // lib/attachmentSelection.
+    const recordedSelection: Promise<{
+      photos: string[] | null
+      drawings: { stem: string; url: string }[] | null
+    }> = fetch(`/api/docs/attachment-selection?inspectionId=${inspId}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
-      .then(d => (Array.isArray(d?.photos) ? d.photos : null))
-      .catch(() => null)
+      .then(d => ({
+        photos: Array.isArray(d?.photos) ? d.photos : null,
+        drawings: Array.isArray(d?.drawings) ? d.drawings : null,
+      }))
+      .catch(() => ({ photos: null, drawings: null }))
     try {
       const { data: obsData, error: obsError } = await supabase
         .from('observations')
@@ -1143,7 +1197,8 @@ export default function ReportPage() {
       // Ticked only if the report already holds them, so the ticks always
       // describe the report. Nothing is ticked for a report with no recorded
       // selection: photos are chosen by hand, never all by default.
-      const inReport = new Set((await recordedSelection) ?? [])
+      const recorded = await recordedSelection
+      const inReport = new Set(recorded.photos ?? [])
       const allPhotos: SelectedPhoto[] = []
       ;(obsData ?? []).forEach((ob: any) => {
         let photos: string[] = []
@@ -1177,17 +1232,22 @@ export default function ReportPage() {
       if (zonesError) console.error('[loadAttachments] zones error:', zonesError)
       console.log('[loadAttachments] Zones loaded:', zonesData?.length ?? 0)
 
+      // A markup the report already holds comes back ticked and ready, on
+      // its stored image; any other starts unticked and uncaptured.
+      const storedMarkup = new Map((recorded.drawings ?? []).map(d => [d.stem, d.url]))
       const drawingMap = new Map<string, DrawingInfo>()
       const addDrawing = (d: any, zoneCount: number) => {
         if (!d?.id || !d.file_url) return
         const existing = drawingMap.get(d.id)
         if (existing) { existing.zone_count += zoneCount; return }
+        const number = d.number || '—'
+        const assetUrl = storedMarkup.get(drawingAssetStem(number)) ?? null
         drawingMap.set(d.id, {
           id: d.id, title: d.title || 'Untitled Drawing',
-          number: d.number || '—', revision: d.revision || 'A',
+          number, revision: d.revision || 'A',
           file_url: d.file_url, zone_count: zoneCount,
-          selected: false, captured: false, capturing: false,
-          capturedBlob: null, previewUrl: null,
+          selected: !!assetUrl, captured: !!assetUrl, capturing: false,
+          capturedBlob: null, previewUrl: assetUrl, assetUrl,
         })
       }
 

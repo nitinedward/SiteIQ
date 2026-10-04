@@ -5,7 +5,7 @@ import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { saveDoc } from '@/lib/docStorage'
 import { writeWithRebuiltAttachments } from '@/lib/rebuildAttachments'
 import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
-import { parseSelectedUrls } from '@/lib/photoSelection'
+import { parseSelected } from '@/lib/attachmentSelection'
 import { noteBulletLine, noteDictation } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
@@ -22,10 +22,12 @@ export async function POST(request: NextRequest) {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { inspectionId, photos: photoList, drawingIds: _drawingIds, force, docKey, selectedPhotoUrls } = await request.json()
-    // The photos ticked on the report page, which a forced rewrite's photo
-    // section holds; absent means the selection last recorded.
-    const selectedUrls = parseSelectedUrls(selectedPhotoUrls)
+    const { inspectionId, photos: photoList, drawingIds: _drawingIds, force, docKey, selectedPhotoUrls, selectedMarkups: markupStems } = await request.json()
+    // The photos and markups (stems) ticked on the report page, which a
+    // forced rewrite's sections hold; absent means the selection last
+    // recorded — see lib/attachmentSelection.
+    const selectedUrls = parseSelected(selectedPhotoUrls)
+    const selectedMarkups = parseSelected(markupStems)
 
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
@@ -147,7 +149,7 @@ export async function POST(request: NextRequest) {
       // A forced rewrite replaces a document that may already hold inserted
       // photos and markups; a first generation has nothing to carry.
       carried = force
-        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, gate, selectedUrls)
+        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups })
         : (await saveDoc(inspectionId, buffer), [])
       console.log('Document generated from firm template')
     } else {
@@ -174,7 +176,7 @@ export async function POST(request: NextRequest) {
 
       const buffer = await generateServerReport(inspection, observations, undefined, photoAttachments)
       carried = force
-        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, gate, selectedUrls)
+        ? await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups })
         : (await saveDoc(inspectionId, buffer), [])
     }
 

@@ -2,7 +2,8 @@ import AdmZip from 'adm-zip'
 import sharp from 'sharp'
 import { xmlEscape } from '@/lib/templateProcessor'
 import { saveDoc, loadDoc } from '@/lib/docStorage'
-import { writePhotoSelection } from '@/lib/photoSelection'
+import { writeAttachmentSelection } from '@/lib/attachmentSelection'
+import { drawingAssetStem } from '@/lib/drawingAssetName'
 import {
   ALL_SECTIONS,
   LEGACY_SECTION,
@@ -505,11 +506,15 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
     zip.updateFile('word/document.xml', Buffer.from(docXml, 'utf-8'))
 
     await saveDoc(inspectionId, zip.toBuffer())
-    // Remembered so a later rebuild (regenerating the text) and the report
-    // page both know which photos the report holds — see lib/photoSelection.
-    if (requested.includes('photos')) {
-      await writePhotoSelection(inspectionId, validPhotos.map(p => p.url))
-    }
+    // Remembered so a later rebuild (regenerating the text), the report page
+    // and finalising all know which photos and markups the report holds —
+    // see lib/attachmentSelection. Only the sections written are updated.
+    await writeAttachmentSelection(inspectionId, {
+      photos: requested.includes('photos') ? validPhotos.map(p => p.url) : undefined,
+      drawings: requested.includes('drawings')
+        ? validDrawings.map(d => drawingAssetStem(String(d.number ?? '')))
+        : undefined,
+    })
 
     const photosAdded   = requested.includes('photos')   ? validPhotos.length   : 0
     const drawingsAdded = requested.includes('drawings') ? validDrawings.length : 0

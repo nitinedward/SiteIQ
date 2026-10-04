@@ -3,7 +3,8 @@ import { saveDoc } from './docStorage'
 import { carryAttachmentsForward } from './attachmentSections'
 import { appendAttachments } from './appendAttachments'
 import { NotSettledError } from './quiesceDocument'
-import { readPhotoSelection, writePhotoSelection } from './photoSelection'
+import { readAttachmentSelection, writeAttachmentSelection } from './attachmentSelection'
+import { drawingAssetStem } from './drawingAssetName'
 
 /**
  * Rebuilding a regenerated report's photo and markup sections from the
@@ -55,11 +56,19 @@ async function loadPhotos(inspectionId: string): Promise<RebuiltPhoto[]> {
 
 /**
  * The marked-up drawings captured for this report. They're rendered in the
- * browser and stashed under drawing-assets/<inspection>/<number>.png by
- * /api/docs/drawing-asset, so the stored files are the record of which
- * markups were inserted; the drawing row supplies the caption.
+ * browser and stashed under drawing-assets/<inspection>/<stem>.png by
+ * /api/docs/drawing-asset; the drawing row supplies the caption.
+ *
+ * A stored image only means the markup was captured at some point, not that
+ * the report holds it — unticking a markup leaves its file behind. So
+ * `chosen` (stems) limits which are used; null means every stored one, for
+ * a report with no recorded selection.
  */
-async function loadDrawings(inspectionId: string, projectId: string): Promise<RebuiltDrawing[]> {
+async function loadDrawings(
+  inspectionId: string,
+  projectId: string,
+  chosen: Set<string> | null,
+): Promise<RebuiltDrawing[]> {
   const supabase = getSupabase()
   const folder = `drawing-assets/${inspectionId}`
   const { data: files, error } = await supabase.storage.from('reports').list(folder, { limit: 100 })
@@ -72,16 +81,16 @@ async function loadDrawings(inspectionId: string, projectId: string): Promise<Re
 
   const out: RebuiltDrawing[] = []
   for (const file of files.filter(f => f.name.endsWith('.png'))) {
+    const stem = file.name.replace(/\.png$/i, '')
+    if (chosen && !chosen.has(stem)) continue
+
     const { data: signed } = await supabase.storage
       .from('reports')
       .createSignedUrl(`${folder}/${file.name}`, 3600)
     if (!signed?.signedUrl) continue
 
-    // The file is named after the drawing number, with anything awkward
-    // replaced by a dash when it was uploaded.
-    const stem = file.name.replace(/\.png$/i, '')
     const match = (drawings ?? []).find(
-      (d: any) => (d.number ?? '').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 60) === stem
+      (d: any) => drawingAssetStem(d.number ?? '') === stem
     )
     out.push({
       title: match?.title || stem,
@@ -106,44 +115,63 @@ async function loadDrawings(inspectionId: string, projectId: string): Promise<Re
  * stored — not even the fallback without photos, since storing anything is
  * what would be overwritten.
  *
- * Which photos go back in: `selectedUrls` when the caller sends the user's
- * current selection, otherwise the selection recorded when the photo
- * section was last written (lib/photoSelection). Only a report with neither
- * — one from before selections were recorded — gets every photo on the
- * inspection, as all rebuilds used to. Selected URLs that aren't photos of
- * this inspection are ignored, so a request can't make the server fetch
- * anything else.
+ * Which photos and markups go back in: the user's current ticks when the
+ * caller sends them (`photos` as URLs, `drawings` as stems), otherwise the
+ * selection recorded when each section was last written
+ * (lib/attachmentSelection). Only a report with neither — one from before
+ * selections were recorded — gets every photo on the inspection and every
+ * stored markup, as all rebuilds used to. Selected entries that aren't this
+ * inspection's photos or stored markups are ignored, so a request can't
+ * make the server fetch anything else.
  */
 export async function writeWithRebuiltAttachments(
   inspectionId: string,
   projectId: string,
   buffer: Buffer,
-  gate: Promise<void> = Promise.resolve(),
-  selectedUrls: string[] | null = null,
+  {
+    gate = Promise.resolve(),
+    photos: selectedPhotos = null,
+    drawings: selectedDrawings = null,
+  }: {
+    gate?: Promise<void>
+    photos?: string[] | null
+    drawings?: string[] | null
+  } = {},
 ): Promise<string[]> {
+  let photoSel = selectedPhotos
+  let drawingSel = selectedDrawings
+  if (!photoSel || !drawingSel) {
+    try {
+      const recorded = await readAttachmentSelection(inspectionId)
+      photoSel ??= recorded.photos
+      drawingSel ??= recorded.drawings
+    } catch (err) {
+      console.warn('[attachments] could not read the recorded selection:', err)
+    }
+  }
+  const chosenPhotos = photoSel ? new Set(photoSel) : null
+  const chosenDrawings = drawingSel ? new Set(drawingSel) : null
+
   let allPhotos: RebuiltPhoto[] = []
   let drawings: RebuiltDrawing[] = []
-  let selection: string[] | null = selectedUrls
   try {
-    ;[allPhotos, drawings, selection] = await Promise.all([
+    ;[allPhotos, drawings] = await Promise.all([
       loadPhotos(inspectionId),
-      loadDrawings(inspectionId, projectId),
-      selectedUrls ? Promise.resolve(selectedUrls) : readPhotoSelection(inspectionId),
+      loadDrawings(inspectionId, projectId, chosenDrawings),
     ])
   } catch (err) {
     console.warn('[attachments] could not read what to rebuild:', err)
   }
-  const chosen = selection ? new Set(selection) : null
-  const photos = chosen ? allPhotos.filter(p => chosen.has(p.url)) : allPhotos
+  const photos = chosenPhotos ? allPhotos.filter(p => chosenPhotos.has(p.url)) : allPhotos
 
   if (photos.length === 0 && drawings.length === 0) {
     await gate
-    if (chosen) {
-      // No photos chosen and no markups: the report goes out without an
-      // attachments section. Not carried forward from the old document —
-      // that would put back exactly the photos that were left out.
+    if (chosenPhotos || chosenDrawings) {
+      // Nothing chosen: the report goes out without an attachments section.
+      // Not carried forward from the old document — that would put back
+      // exactly the photos and markups that were left out.
       await saveDoc(inspectionId, buffer)
-      await writePhotoSelection(inspectionId, [])
+      await writeAttachmentSelection(inspectionId, { photos: [], drawings: [] })
       return []
     }
     // Nothing recorded at all — fall back to lifting whatever the old

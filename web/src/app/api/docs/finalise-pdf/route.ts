@@ -6,6 +6,8 @@ import { syncReportWordingToNotes, type WordingSyncResult } from '@/lib/reportWo
 import { addDrawingHotspots, type HotspotSpec } from '@/lib/reportPdfHotspots'
 import { createClient } from '@supabase/supabase-js'
 import { PDFDocument } from 'pdf-lib'
+import { readAttachmentSelection } from '@/lib/attachmentSelection'
+import { drawingAssetStem } from '@/lib/drawingAssetName'
 
 // Drawing page sizes rarely change, so a warm instance keeps them: a finalise
 // otherwise re-downloads a 17MB sheet just to read its dimensions.
@@ -37,6 +39,15 @@ async function loadHotspotSpec(inspectionId: string): Promise<HotspotSpec> {
       supabase.from('inspections').select('project_id').eq('id', inspectionId).single(),
     ])
 
+    // The pictures are identified by position, so only the photos and
+    // markups the report actually holds may be counted — a stored markup
+    // image or a photo on a note isn't necessarily in it. The recorded
+    // selection says which are; a report without one holds everything, as
+    // every rebuild used to put in. See lib/attachmentSelection.
+    const selection = await readAttachmentSelection(inspectionId)
+    const inReportPhotos = selection.photos ? new Set(selection.photos) : null
+    const inReportDrawings = selection.drawings ? new Set(selection.drawings) : null
+
     // Drawings are listed in the order the markup images were captured,
     // which the rebuild sorts by drawing number.
     const { data: assets } = await supabase.storage
@@ -48,9 +59,10 @@ async function loadHotspotSpec(inspectionId: string): Promise<HotspotSpec> {
 
     const drawingOrder = (assets ?? [])
       .filter(f => f.name.endsWith('.png'))
-      .map(f => {
-        const stem = f.name.replace(/\.png$/i, '')
-        const match = (drawings ?? []).find((d: any) => (d.number ?? '').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 60) === stem)
+      .map(f => f.name.replace(/\.png$/i, ''))
+      .filter(stem => !inReportDrawings || inReportDrawings.has(stem))
+      .map(stem => {
+        const match = (drawings ?? []).find((d: any) => drawingAssetStem(d.number ?? '') === stem)
         return (match?.number ?? stem) as string
       })
       .sort((a, b) => a.localeCompare(b))
@@ -60,7 +72,9 @@ async function loadHotspotSpec(inspectionId: string): Promise<HotspotSpec> {
     for (const note of noteRows ?? []) {
       const raw = (note as any).photos
       const list = Array.isArray(raw) ? raw : (() => { try { return JSON.parse(raw || '[]') } catch { return [] } })()
-      const count = list.filter((u: unknown) => typeof u === 'string' && (u as string).startsWith('http')).length
+      const count = list.filter((u: unknown) =>
+        typeof u === 'string' && (u as string).startsWith('http') && (!inReportPhotos || inReportPhotos.has(u as string))
+      ).length
       if (count === 0) continue
       const zoneLabel = (note as any).zone_label || 'General Observation'
       const existing = photoGroups.find(g => g.zoneLabel === zoneLabel)

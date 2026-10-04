@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { photoSelectionPath } from '@/lib/photoSelection'
+import { attachmentSelectionPath } from '@/lib/attachmentSelection'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
 
     const reportPaths = [
       `${inspectionId}.docx`, `${inspectionId}.pdf`, `${inspectionId}-markup.pdf`,
-      photoSelectionPath(inspectionId),
+      attachmentSelectionPath(inspectionId),
     ]
     const { data: assets } = await supabase.storage
       .from('reports')

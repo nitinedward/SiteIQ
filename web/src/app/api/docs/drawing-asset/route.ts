@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { drawingAssetStem } from '@/lib/drawingAssetName'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
       (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()
     )
 
-    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 60)
+    const safeName = drawingAssetStem(name)
     const path = `drawing-assets/${inspectionId}/${safeName}.png`
 
     const { error } = await supabase.storage
