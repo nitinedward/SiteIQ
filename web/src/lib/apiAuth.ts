@@ -128,6 +128,19 @@ export async function requireInspectionAccess(
   return { ok: true, caller }
 }
 
+/** A signed-in member of the firm that owns the project. */
+export async function requireProjectAccess(
+  request: NextRequest,
+  projectId: string | null | undefined,
+): Promise<Authorised<{ caller: Caller }>> {
+  if (!projectId || !UUID.test(projectId)) return deny(400, 'Missing or invalid projectId')
+  const caller = await getCaller(request)
+  if (!caller) return deny(401, 'Not signed in')
+  const { data: project } = await admin().from('projects').select('firm_id').eq('id', projectId).maybeSingle()
+  if (!project || project.firm_id !== caller.firmId) return deny(404, 'Project not found')
+  return { ok: true, caller }
+}
+
 /** A signed-in member of the firm that owns a site note. A note reaches its
  *  firm through its project or, for an older row with no project, its
  *  report — the same two routes access_rules.sql takes. */

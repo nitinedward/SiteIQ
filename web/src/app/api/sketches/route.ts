@@ -112,6 +112,23 @@ export async function DELETE(request: NextRequest) {
     const auth = await authorise(request, sketch.project_id)
     if ('error' in auth) return auth.error
 
+    // A sketch from a CAN has a hidden drawing companion so it can be marked
+    // up on site (web/sql/cans.sql). Markups already made on it belong to an
+    // inspection record, so the sketch stays; otherwise the companion goes
+    // with it. (No such column before cans.sql runs — then there is none.)
+    const { data: companions } = await supabase.from('drawings').select('id').eq('sketch_id', sketch.id)
+    const companionIds = (companions ?? []).map((d: any) => d.id as string)
+    if (companionIds.length > 0) {
+      const { count } = await supabase.from('zones').select('id', { count: 'exact', head: true }).in('drawing_id', companionIds)
+      if ((count ?? 0) > 0) {
+        return NextResponse.json({
+          error: `This sketch has ${count} markup${count === 1 ? '' : 's'} made on site, so it can't be deleted.`,
+        }, { status: 409 })
+      }
+      const { error } = await supabase.from('drawings').delete().in('id', companionIds)
+      if (error) throw new Error('Could not remove the on-site copy: ' + error.message)
+    }
+
     // The folder is the record of the files, so nothing is left behind even
     // if the row's own list of pages was incomplete.
     const folder = `sketches/${sketch.project_id}/${sketch.id}`

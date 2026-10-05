@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@azure/msal-node": "^5.2.2",
     "@supabase/ssr": "^0.1.0",
     "@supabase/supabase-js": "^2.39.0",

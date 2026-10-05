@@ -106,6 +106,14 @@ export async function POST(request: NextRequest) {
       const { data: files } = await supabase.storage.from('observation-photos').list(`note-responses/${noteId}`, { limit: 200 })
       for (const f of files ?? []) photoPaths.push(`note-responses/${noteId}/${f.name}`)
     }
+    // CANs keep each one's PDF in its own folder under the project; the rows
+    // go with the project (on delete cascade).
+    const { data: cans } = await supabase.from('cans').select('id').eq('project_id', projectId)   // no table yet: none
+    for (const c of cans ?? []) {
+      const folder = `cans/${projectId}/${(c as any).id}`
+      const { data: files } = await supabase.storage.from('observation-photos').list(folder, { limit: 200 })
+      for (const f of files ?? []) photoPaths.push(`${folder}/${f.name}`)
+    }
     // Sketches keep each one's files in its own folder under the project.
     const { data: sketches } = await supabase.from('sketches').select('id').eq('project_id', projectId)   // no table yet: none
     for (const s of sketches ?? []) {

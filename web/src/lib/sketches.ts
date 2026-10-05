@@ -25,6 +25,9 @@ export type Sketch = {
   fileType: string | null
   pages: SketchPage[]
   createdAt: string
+  /** The CAN it was taken from, and the page — web/sql/cans.sql. */
+  canId: string | null
+  canPage: number | null
 }
 
 /** What a sketch can be made from. */
@@ -53,6 +56,8 @@ function toSketch(row: any): Sketch {
     fileType: row.file_type ?? null,
     pages: Array.isArray(row.pages) ? row.pages.filter((p: any) => p?.url) : [],
     createdAt: row.created_at,
+    canId: row.can_id ?? null,
+    canPage: row.can_page ?? null,
   }
 }
 
@@ -77,6 +82,23 @@ export async function loadReportSketchRows(
     sketches: (data ?? []).map(toSketch).filter(s => !s.observationId || ours.has(s.observationId)),
     tableMissing: false,
   }
+}
+
+/** Every sketch on a project — from CANs, site notes and reports — newest
+ *  first, for the project's Sketches tab. */
+export async function loadProjectSketches(
+  projectId: string,
+): Promise<{ sketches: Sketch[]; tableMissing: boolean }> {
+  const { data, error } = await supabase
+    .from(SKETCHES_TABLE)
+    .select('*')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+  if (error) {
+    if (isMissingTable(error)) return { sketches: [], tableMissing: true }
+    throw new Error(error.message)
+  }
+  return { sketches: (data ?? []).map(toSketch), tableMissing: false }
 }
 
 /** Sketches on these site notes, grouped by note. */
@@ -158,11 +180,14 @@ const extOf = (name: string) => (name.split('.').pop() ?? '').toLowerCase()
  *  single page. Returns the new sketch. */
 export async function addSketch(
   file: File,
-  { projectId, inspectionId, observationId, title }: {
+  { projectId, inspectionId, observationId, title, canId = null, canPage = null }: {
     projectId: string
     inspectionId: string | null
     observationId: string | null
     title: string
+    /** Set when the sketch is a page of a CAN (lib/cans). */
+    canId?: string | null
+    canPage?: number | null
   },
 ): Promise<Sketch> {
   const ext = extOf(file.name)
@@ -209,6 +234,9 @@ export async function addSketch(
       file_type: file.type || null,
       pages,
       created_by: user?.id ?? null,
+      // Only sent for a CAN's sketch, so adding one keeps working on a
+      // database where cans.sql hasn't been run.
+      ...(canId ? { can_id: canId, can_page: canPage } : {}),
     })
     .select()
     .single()

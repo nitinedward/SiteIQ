@@ -8,6 +8,8 @@ import { loadReportTemplates, defaultTemplateLabel, type ReportTemplate } from '
 import { parseRecipients, type Recipient } from '@/lib/reportRecipients'
 import { SiteNoteModal } from '@/components/SiteNoteModal'
 import { apiFetch } from '@/lib/apiFetch'
+import ProjectCans from '@/components/ProjectCans'
+import ProjectSketches from '@/components/ProjectSketches'
 import {
   SiteNote, NoteStatus, loadProjectSiteNotes, setSiteNoteStatus, formatNoteDate, noteReportRef,
   loadResponseCounts,
@@ -22,7 +24,12 @@ const supabase = createClient(
 )
 
 type Project = { id: string; name: string; project_number: string; address: string; client_name: string; client_email?: string | null; report_recipients?: Recipient[] | string | null; status: string; report_template_id?: string | null }
-type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; file_name: string; preview_url?: string | null; created_at: string; sort_order?: number | null }
+type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; file_name: string; preview_url?: string | null; created_at: string; sort_order?: number | null; kind?: string | null }
+
+/** Uploaded drawings only. A CAN's sketch has a hidden companion row in
+ *  drawings so the phone app can open and mark it up on site
+ *  (web/sql/cans.sql); it belongs to the Sketches tab, not this list. */
+const onlyDrawings = (rows: Drawing[]) => rows.filter(d => (d.kind ?? 'drawing') !== 'sketch')
 type Member  = { id: string; user_id: string; full_name: string; email: string; role: string }
 
 const STATUS_OPTIONS = ['ACTIVE', 'ON_HOLD', 'COMPLETED'] as const
@@ -171,7 +178,9 @@ function AdminPageInner() {
   const [tab, setTab]                 = useState<'projects' | 'team'>('projects')
 
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
-  const [projTab, setProjTab]                 = useState<'reports' | 'notes' | 'drawings' | 'engineers'>('reports')
+  const [projTab, setProjTab]                 = useState<'reports' | 'notes' | 'drawings' | 'cans' | 'sketches' | 'engineers'>('reports')
+  // Bumped when a CAN adds or removes sketches, so the Sketches tab reloads.
+  const [sketchRefresh, setSketchRefresh]     = useState(0)
   const [siteNotes, setSiteNotes]             = useState<SiteNote[]>([])
   const [loadingNotes, setLoadingNotes]       = useState(false)
   const [noteFilter, setNoteFilter]           = useState<'all' | 'open' | 'closed'>('all')
@@ -301,7 +310,7 @@ function AdminPageInner() {
       supabase.from('drawings').select('*').eq('project_id', project.id).order('created_at', { ascending: false }),
       supabase.from('project_members').select('user_id').eq('project_id', project.id),
     ])
-    setDrawings(sortDrawingsForDisplay(d ?? []))
+    setDrawings(sortDrawingsForDisplay(onlyDrawings(d ?? [])))
     setAssignedUserIds((pm ?? []).map((p: any) => p.user_id))
     loadProjectInspections(project.id)
   }
@@ -395,7 +404,7 @@ function AdminPageInner() {
       .select('*')
       .eq('project_id', selectedProject.id)
       .order('created_at', { ascending: false })
-    setDrawings(sortDrawingsForDisplay(data ?? []))
+    setDrawings(sortDrawingsForDisplay(onlyDrawings(data ?? [])))
   }
 
   const startEditDrawingField = (d: Drawing, field: 'title' | 'number' | 'revision') => {
@@ -1385,6 +1394,8 @@ function AdminPageInner() {
                       )}
                     </button>
                     <button style={subTabBtn(projTab === 'drawings')}  onClick={() => setProjTab('drawings')}>Drawings ({drawings.length})</button>
+                    <button style={subTabBtn(projTab === 'cans')}      onClick={() => setProjTab('cans')}>CANs</button>
+                    <button style={subTabBtn(projTab === 'sketches')}  onClick={() => setProjTab('sketches')}>Sketches</button>
                     <button style={subTabBtn(projTab === 'engineers')} onClick={() => setProjTab('engineers')}>Engineers</button>
                   </div>
                 )}
@@ -1849,6 +1860,24 @@ function AdminPageInner() {
                         </div>
                       </>
                     )}
+                  </div>
+                )}
+
+                {/* ── CANs TAB ── */}
+                {!editingProject && projTab === 'cans' && (
+                  <div style={{ padding: '24px 28px' }}>
+                    <ProjectCans
+                      projectId={selectedProject.id}
+                      siteNotes={siteNotes}
+                      onChanged={() => setSketchRefresh(n => n + 1)}
+                    />
+                  </div>
+                )}
+
+                {/* ── SKETCHES TAB ── */}
+                {!editingProject && projTab === 'sketches' && (
+                  <div style={{ padding: '24px 28px' }}>
+                    <ProjectSketches projectId={selectedProject.id} siteNotes={siteNotes} refreshKey={sketchRefresh} />
                   </div>
                 )}
 
