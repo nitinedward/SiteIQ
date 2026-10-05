@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { Shell, Spinner, Card, NewProjectModal, AssignMembersModal } from '@/components/Shell'
-import { reportDisplayName } from '@/lib/reportFileName'
+import { reportDisplayName, reportNoLabel } from '@/lib/reportFileName'
 import Link from 'next/link'
 
 // ── TYPES ─────────────────────────────────────────────────────────────────────
@@ -532,7 +532,7 @@ export default function DashboardPage() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
                   <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600, background: 'var(--indigo-soft)', color: 'var(--indigo)', padding: '3px 8px', borderRadius: 8, flexShrink: 0 }}>
-                    #{ins.report_no}
+                    {reportNoLabel(ins.report_no)}
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
@@ -625,7 +625,7 @@ export default function DashboardPage() {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
                       <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, fontWeight: 600, background: 'var(--sage-soft)', color: 'var(--sage-ink)', padding: '3px 8px', borderRadius: 8, flexShrink: 0 }}>
-                        #{ins.report_no}
+                        {reportNoLabel(ins.report_no)}
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

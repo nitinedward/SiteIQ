@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { Shell, Badge, Btn, Spinner, Card, NewProjectModal } from '@/components/Shell'
-import { reportDisplayName } from '@/lib/reportFileName'
+import { reportDisplayName, reportNoLabel } from '@/lib/reportFileName'
 import { loadReportTemplates, defaultTemplateLabel, type ReportTemplate } from '@/lib/reportTemplates'
 import { parseRecipients, type Recipient } from '@/lib/reportRecipients'
 import { SiteNoteModal } from '@/components/SiteNoteModal'
@@ -1429,7 +1429,7 @@ function AdminPageInner() {
                                     borderBottom: i < allReports.length - 1 ? '1px solid var(--border-line)' : 'none',
                                   }}>
                                     <span style={{ background: 'var(--paper)', color: 'var(--text-mid)', fontFamily: 'var(--f-mono)', fontSize: 12, padding: '6px 12px', borderRadius: 'var(--radius-pill)', flexShrink: 0 }}>
-                                      #{ins.report_no ?? '—'}
+                                      {reportNoLabel(ins.report_no)}
                                     </span>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>

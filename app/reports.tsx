@@ -59,7 +59,7 @@ export default function ReportsListScreen() {
             <TouchableOpacity key={ins.id} style={S.row} activeOpacity={0.7}
               onPress={() => router.push({ pathname: '/report/[id]', params: { id: ins.id, project_name: String(project_name ?? '') } })}>
               <View style={S.rowBadge}>
-                <Text style={S.rowBadgeText}>#{ins.report_no}</Text>
+                <Text style={S.rowBadgeText}>SR {ins.report_no}</Text>
               </View>
               <View style={S.rowInfo}>
                 <Text style={S.rowTitle} numberOfLines={1}>{ins.date}</Text>

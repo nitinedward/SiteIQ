@@ -398,7 +398,7 @@ export default function SessionScreen() {
           <Text style={S.bannerDate}>{todayShort} - {weather}</Text>
           <View style={S.activeBadge}>
             <View style={S.activeDot} />
-            <Text style={S.activeBadgeText}>Active Session - Report #{reportNo}</Text>
+            <Text style={S.activeBadgeText}>Active Session - SR {reportNo}</Text>
           </View>
         </View>
 

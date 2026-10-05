@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/apiFetch'
 import { useRouter, useParams } from 'next/navigation'
 import { captureDrawingWithMarkup } from '@/lib/captureDrawing'
-import { reportFileName, reportDisplayName } from '@/lib/reportFileName'
+import { reportFileName, reportDisplayName, reportNoLabel } from '@/lib/reportFileName'
 import { buildMarkupPdf, type MarkupDrawing } from '@/lib/markupPdf'
 import dynamic from 'next/dynamic'
 import { loadDocsApi } from '@/lib/docsApi'
@@ -1650,7 +1650,7 @@ export default function ReportPage() {
                   cursor: reportStatus === 'finalised' ? 'default' : 'pointer',
                 }}
               >
-                #{reportNoValue || '—'}
+                {reportNoLabel(reportNoValue)}
               </button>
             )}
 
@@ -2590,7 +2590,7 @@ export default function ReportPage() {
             }}
           >
             <div style={{ fontFamily: 'var(--f-heading)', fontSize: 18, fontWeight: 800, color: 'var(--indigo-deep)' }}>
-              Finalise report #{reportNo}?
+              Finalise {reportNoLabel(reportNo)}?
             </div>
             <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.5, marginTop: 10 }}>
               Finalising locks this report as a PDF — you won't be able to edit it after. The report moves to Completed and becomes the client copy. You can still reopen it later if you need to make changes.

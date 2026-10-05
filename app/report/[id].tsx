@@ -697,7 +697,7 @@ body { font-family:-apple-system,Helvetica,Arial,sans-serif; color:#1e293b; back
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Site Inspection Report</div>
         <div style="font-size:24px;font-weight:800;color:#3A4A63">${projectName}</div>
       </div>
-      <div style="background:#3A4A63;color:#fff;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700">Report #${inspection.report_no}</div>
+      <div style="background:#3A4A63;color:#fff;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700">SR ${inspection.report_no}</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0;background:#f8fafc;border-radius:8px;padding:16px">
       <div><div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:3px">Date</div><div style="font-size:13px;font-weight:600">${inspection.date}</div></div>
@@ -718,7 +718,7 @@ body { font-family:-apple-system,Helvetica,Arial,sans-serif; color:#1e293b; back
 
   <div style="margin-top:40px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:11px;color:#94a3b8">
     <span>SiteIQ · Generated ${new Date().toLocaleDateString()}</span>
-    <span>Report #${inspection.report_no} · ${projectName}</span>
+    <span>SR ${inspection.report_no} · ${projectName}</span>
   </div>
 </div></body></html>`;
 }
@@ -872,7 +872,7 @@ export default function ReportScreen() {
       // 3. Share
       await Sharing.shareAsync(dl.uri, {
         mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        dialogTitle: `${projectName} - Report #${inspection.report_no}`,
+        dialogTitle: `${projectName} - SR ${inspection.report_no}`,
         UTI: 'org.openxmlformats.wordprocessingml.document',
       });
 
@@ -915,7 +915,7 @@ export default function ReportScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Text style={S.headerTitle} numberOfLines={1}>{projectName}</Text>
-          <Text style={S.headerSub}>Report #{inspection?.report_no} - {inspection?.date}</Text>
+          <Text style={S.headerSub}>SR {inspection?.report_no} - {inspection?.date}</Text>
         </View>
         <TouchableOpacity style={S.exportBtn} onPress={generateWordReport} disabled={isGenerating || isExporting}>
           {isGenerating
@@ -981,7 +981,7 @@ export default function ReportScreen() {
             <Text style={S.reportSectionTitle}>Inspection Details</Text>
             <View style={S.detailsCard}>
               <DetailRow label="Date"         value={inspection?.date ?? '—'} />
-              <DetailRow label="Report No"    value={`#${inspection?.report_no ?? '—'}`} />
+              <DetailRow label="Report No"    value={`SR ${inspection?.report_no ?? '—'}`} />
               <DetailRow label="Weather"      value={inspection?.weather ?? '—'} />
               <DetailRow label="Site Contact" value={inspection?.site_contact || '—'} />
               <DetailRow label="Phone"        value={inspection?.contact_phone || '—'} />

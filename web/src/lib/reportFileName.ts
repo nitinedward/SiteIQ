@@ -25,6 +25,12 @@ export function reportDisplayName(
   return customName?.trim() || projectName?.trim() || fallback
 }
 
+/** How a report's number is shown in lists and headers: "SR 001". */
+export function reportNoLabel(reportNo: string | null | undefined, fallback = '—'): string {
+  const n = (reportNo ?? '').toString().trim()
+  return `SR ${n || fallback}`
+}
+
 export function reportFileName(
   projectName: string | null | undefined,
   reportNo: string | null | undefined,
