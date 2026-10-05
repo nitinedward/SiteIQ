@@ -50,12 +50,14 @@ async function authorise(request: NextRequest, projectId: string): Promise<{ use
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** body: { projectId, originalExt, pageCount }
- *  → { sketchId, original: Upload, pages: Upload[] }
- *  where Upload = { path, token, publicUrl }. The page images are PNG. */
+/** body: { projectId, originalExt, pageCount, sitePdfCount? }
+ *  → { sketchId, original: Upload, pages: Upload[], sitePdfs: Upload[] }
+ *  where Upload = { path, token, publicUrl }. The page images are PNG.
+ *  sitePdfs are one-page PDFs, one per page, that the phone app opens to
+ *  mark the sketch up on site (lib/sketches, onSite). */
 export async function POST(request: NextRequest) {
   try {
-    const { projectId, originalExt, pageCount } = await request.json()
+    const { projectId, originalExt, pageCount, sitePdfCount = 0 } = await request.json()
     if (typeof projectId !== 'string' || !UUID.test(projectId)) {
       return NextResponse.json({ error: 'Missing or invalid projectId' }, { status: 400 })
     }
@@ -64,7 +66,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Sketches must be a PDF, PNG or JPG' }, { status: 400 })
     }
     const pages = Number(pageCount)
-    if (!Number.isInteger(pages) || pages < 0 || pages > MAX_PAGES) {
+    const sitePdfs = Number(sitePdfCount)
+    if (!Number.isInteger(pages) || pages < 0 || pages > MAX_PAGES ||
+        !Number.isInteger(sitePdfs) || sitePdfs < 0 || sitePdfs > MAX_PAGES) {
       return NextResponse.json({ error: `A sketch can have up to ${MAX_PAGES} pages` }, { status: 400 })
     }
 
@@ -85,12 +89,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const [original, ...pageUploads] = await Promise.all([
+    const [original, ...rest] = await Promise.all([
       sign(`${folder}/original.${ext}`),
       ...Array.from({ length: pages }, (_, i) => sign(`${folder}/page-${i + 1}.png`)),
+      ...Array.from({ length: sitePdfs }, (_, i) => sign(`${folder}/site-${i + 1}.pdf`)),
     ])
+    const pageUploads = rest.slice(0, pages)
+    const siteUploads = rest.slice(pages)
 
-    return NextResponse.json({ sketchId, original, pages: pageUploads })
+    return NextResponse.json({ sketchId, original, pages: pageUploads, sitePdfs: siteUploads })
   } catch (err: any) {
     console.error('[sketches] upload links failed:', err)
     return NextResponse.json({ error: err?.message ?? 'Could not prepare the upload' }, { status: 500 })

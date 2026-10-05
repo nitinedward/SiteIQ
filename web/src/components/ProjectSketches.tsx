@@ -5,6 +5,7 @@ import { addSketch, deleteSketch, loadProjectSketches, moveSketch, sketchSummary
 import SketchDropZone, { type StagedSketch } from '@/components/SketchDropZone'
 import { canLabel, loadProjectCans, type Can } from '@/lib/cans'
 import { noteReportRef, type SiteNote } from '@/lib/siteNotes'
+import { supabase } from '@/lib/supabase'
 
 /**
  * Every sketch on the project in one place: the ones taken from CANs, and
@@ -23,6 +24,8 @@ export default function ProjectSketches({
 }) {
   const [sketches, setSketches] = useState<Sketch[]>([])
   const [cans, setCans] = useState<Map<string, Can>>(new Map())
+  /** Sketches with an on-site copy (a hidden drawing companion). */
+  const [onSiteIds, setOnSiteIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [tableMissing, setTableMissing] = useState(false)
   const [message, setMessage] = useState('')
@@ -30,10 +33,13 @@ export default function ProjectSketches({
   const load = async () => {
     setLoading(true)
     try {
-      const [{ sketches, tableMissing }, canList] = await Promise.all([
+      const [{ sketches, tableMissing }, canList, companions] = await Promise.all([
         loadProjectSketches(projectId),
         loadProjectCans(projectId).catch(() => ({ cans: [] as Can[], tableMissing: true })),
+        // No sketch_id column before cans.sql runs — then nothing is on site.
+        supabase.from('drawings').select('sketch_id').eq('project_id', projectId).not('sketch_id', 'is', null),
       ])
+      setOnSiteIds(new Set((companions.data ?? []).map((d: any) => d.sketch_id as string)))
       setSketches(sketches)
       setTableMissing(tableMissing)
       setCans(new Map(canList.cans.map(c => [c.id, c])))
@@ -74,6 +80,7 @@ export default function ProjectSketches({
         inspectionId: note?.inspectionId ?? null,
         observationId: note?.id ?? null,
         title: st.title,
+        onSite: true,
       }))
     }
     setSketches(prev => [...added, ...prev])
@@ -101,7 +108,7 @@ export default function ProjectSketches({
   return (
     <div>
       <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', marginBottom: 14, lineHeight: 1.5 }}>
-        Sketches from CANs, site notes and reports. Sketches from a CAN can be opened and marked up on site like a drawing.
+        Sketches from CANs, site notes and reports. Each one can be opened and marked up on site like a drawing.
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -155,7 +162,7 @@ export default function ProjectSketches({
                   <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--text-mid)', marginTop: 2 }}>
                     {source}
                   </div>
-                  {can && can.status === 'current' && (
+                  {onSiteIds.has(s.id) && can?.status !== 'superseded' && (
                     <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--sage-ink)', marginTop: 2 }}>
                       Available on site
                     </div>

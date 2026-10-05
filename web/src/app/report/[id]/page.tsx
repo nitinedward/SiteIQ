@@ -1298,6 +1298,8 @@ export default function ReportPage() {
         inspectionId,
         observationId: s.observationId,
         title: s.title,
+        // Markable on site too, like any sketch.
+        onSite: true,
       })
       added.push(sketch.id)
     }

@@ -1,3 +1,4 @@
+import { PDFDocument } from 'pdf-lib'
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -175,12 +176,40 @@ async function imageSize(file: File): Promise<{ width: number; height: number }>
 
 const extOf = (name: string) => (name.split('.').pop() ?? '').toLowerCase()
 
+/** An uploaded image as a PNG, whatever it came as (JPG, WebP…). */
+async function imageAsPng(file: File): Promise<{ blob: Blob; width: number; height: number }> {
+  const bitmap = await createImageBitmap(file)
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(bitmap, 0, 0)
+  bitmap.close()
+  const blob = await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob(b => (b ? resolve(b) : reject(new Error('Could not read ' + file.name))), 'image/png'))
+  return { blob, width: canvas.width, height: canvas.height }
+}
+
+/** A page image as a one-page PDF — what the phone app's drawing viewer
+ *  opens and marks up. Sized as an A3 sheet on its long side. */
+async function pageImageAsPdf(png: Blob, width: number, height: number): Promise<Blob> {
+  const doc = await PDFDocument.create()
+  const image = await doc.embedPng(await png.arrayBuffer())
+  const scale = 1190 / Math.max(width || 1, height || 1)
+  const w = (width || 1190) * scale
+  const h = (height || 842) * scale
+  doc.addPage([w, h]).drawImage(image, { x: 0, y: 0, width: w, height: h })
+  return new Blob([await doc.save() as unknown as BlobPart], { type: 'application/pdf' })
+}
+
 /** Uploads a sketch file and records it against its site note (or as
  *  General for the report). A PDF goes in page by page; an image is its own
  *  single page. Returns the new sketch. */
 export async function addSketch(
   file: File,
-  { projectId, inspectionId, observationId, title, canId = null, canPage = null }: {
+  { projectId, inspectionId, observationId, title, canId = null, canPage = null, onSite = false }: {
     projectId: string
     inspectionId: string | null
     observationId: string | null
@@ -188,6 +217,10 @@ export async function addSketch(
     /** Set when the sketch is a page of a CAN (lib/cans). */
     canId?: string | null
     canPage?: number | null
+    /** Also make it available on site: each page as a one-page PDF with a
+     *  hidden drawing companion, so the phone app opens and marks it up like
+     *  a drawing (web/sql/cans.sql). A CAN's sketches do this themselves. */
+    onSite?: boolean
   },
 ): Promise<Sketch> {
   const ext = extOf(file.name)
@@ -199,10 +232,14 @@ export async function addSketch(
   const rendered = isPdf ? await renderPdfPages(file) : []
   if (isPdf && rendered.length === 0) throw new Error(`${file.name} has no pages.`)
 
+  // The pages the site copies are made from: the rendered PDF pages, or the
+  // image itself.
+  const sitePages = onSite ? (isPdf ? rendered : [await imageAsPng(file)]) : []
+
   const res = await fetch('/api/sketches', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
-    body: JSON.stringify({ projectId, originalExt: isPdf ? 'pdf' : ext, pageCount: rendered.length }),
+    body: JSON.stringify({ projectId, originalExt: isPdf ? 'pdf' : ext, pageCount: rendered.length, sitePdfCount: sitePages.length }),
   })
   const links = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(`${file.name}: ${links?.error ?? `upload failed (${res.status})`}`)
@@ -215,6 +252,8 @@ export async function addSketch(
 
   await put(links.original, file, file.type || (isPdf ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`))
   await Promise.all(rendered.map((p, i) => put(links.pages[i], p.blob, 'image/png')))
+  await Promise.all(sitePages.map(async (p, i) =>
+    put(links.sitePdfs[i], await pageImageAsPdf(p.blob, p.width, p.height), 'application/pdf')))
 
   const pages: SketchPage[] = isPdf
     ? rendered.map((p, i) => ({ url: links.pages[i].publicUrl, width: p.width, height: p.height }))
@@ -246,7 +285,26 @@ export async function addSketch(
     }
     throw new Error(error.message)
   }
-  return toSketch(data)
+  const sketch = toSketch(data)
+
+  if (sitePages.length > 0) {
+    const name = sketch.title || file.name.replace(/\.[^.]+$/, '')
+    const { error: siteErr } = await supabase.from('drawings').insert(sitePages.map((_, i) => ({
+      project_id: projectId,
+      title: `${name}${sitePages.length > 1 ? ` (page ${i + 1} of ${sitePages.length})` : ''} — sketch`,
+      number: `SKETCH${sitePages.length > 1 ? ` p${i + 1}` : ''}`,
+      revision: '',
+      file_url: links.sitePdfs[i].publicUrl,
+      file_name: `site-${i + 1}.pdf`,
+      preview_url: sketch.pages[i]?.url ?? null,
+      kind: 'sketch',
+      sketch_id: sketch.id,
+    })))
+    // The sketch itself is saved either way; only the site copy is missing
+    // (most likely cans.sql, which adds drawings.kind, hasn't been run).
+    if (siteErr) console.warn('[sketches] saved, but not made available on site:', siteErr.message)
+  }
+  return sketch
 }
 
 /** Links a sketch to a different site note, or to none (General). */

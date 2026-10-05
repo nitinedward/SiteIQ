@@ -43,7 +43,7 @@ export default function NoteSketches({
   const attach = async (staged: StagedSketch[]) => {
     const added: Sketch[] = []
     for (const s of staged) {
-      added.push(await addSketch(s.file, { projectId, inspectionId, observationId: noteId, title: s.title }))
+      added.push(await addSketch(s.file, { projectId, inspectionId, observationId: noteId, title: s.title, onSite: true }))
     }
     setSketches(prev => [...prev, ...added])
   }
