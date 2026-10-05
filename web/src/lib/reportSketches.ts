@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { supabaseUrl } from '@/lib/storageFetch'
 
 /**
  * The sketches that belong to a report, server-side (service role).
@@ -34,7 +35,7 @@ export type ReportSketch = {
 /** Where sketch files may live. Anything else in a row is ignored, so a
  *  tampered row can't make the server fetch another address. */
 export function isSketchFileUrl(url: string): boolean {
-  const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co').replace(/\/$/, '')
+  const base = supabaseUrl()
   return url.startsWith(`${base}/storage/v1/object/public/observation-photos/sketches/`)
 }
 

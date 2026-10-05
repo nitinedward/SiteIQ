@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import { createHash } from 'crypto'
 import { requireInspectionAccess, inspectionIdFromDocKey } from '@/lib/apiAuth'
+import { supabaseUrl } from '@/lib/storageFetch'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -20,12 +21,29 @@ export async function OPTIONS() {
 function allowedHost(url: unknown, request: NextRequest): boolean {
   if (typeof url !== 'string') return false
   try {
-    const host = new URL(url).host
-    const supabaseHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co').host
-    return host === request.headers.get('host') || host === supabaseHost
+    const host = new URL(url).host.toLowerCase()
+    // This app as the browser reached it — however the platform reports
+    // that — plus the configured app address and the storage host.
+    const ours = new Set(
+      [
+        request.headers.get('host'),
+        request.headers.get('x-forwarded-host'),
+        request.nextUrl.host,
+        safeHost(process.env.NEXT_PUBLIC_APP_URL),
+        safeHost(supabaseUrl()),
+      ]
+        .filter((h): h is string => !!h)
+        .flatMap(h => h.split(',').map(x => x.trim().toLowerCase()))
+    )
+    return ours.has(host)
   } catch {
     return false
   }
+}
+
+function safeHost(url: string | undefined): string | null {
+  if (!url) return null
+  try { return new URL(url.replace(/^﻿/, '').trim()).host } catch { return null }
 }
 
 /**
@@ -42,6 +60,9 @@ export async function POST(req: NextRequest) {
     const payload = await req.json()
 
     const inspectionId = inspectionIdFromDocKey(payload?.document?.key)
+    if (!inspectionId) {
+      console.warn('[token] Refused: key names no report:', String(payload?.document?.key ?? '').slice(0, 48))
+    }
     const access = await requireInspectionAccess(req, inspectionId)
     if (!access.ok) return access.response
 
@@ -50,6 +71,14 @@ export async function POST(req: NextRequest) {
     const callbackOk = allowedHost(callbackUrl, req) &&
       new URL(callbackUrl).pathname === `/api/docs/${inspectionId}`
     if (!callbackOk || !allowedHost(documentUrl, req)) {
+      // Hosts only (no query strings, which carry signed tokens), so a
+      // wrongly refused editor can be diagnosed from the logs.
+      const hostOf = (u: unknown) => { try { return new URL(String(u)).host } catch { return String(u).slice(0, 40) } }
+      console.warn('[token] Refused config:', JSON.stringify({
+        callbackHost: hostOf(callbackUrl), callbackOk,
+        documentHost: hostOf(documentUrl),
+        host: req.headers.get('host'), forwardedHost: req.headers.get('x-forwarded-host'),
+      }))
       return NextResponse.json({ error: 'That editor config points somewhere this app does not serve' }, { status: 400, headers: cors })
     }
 

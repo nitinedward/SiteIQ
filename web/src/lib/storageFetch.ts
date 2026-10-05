@@ -9,7 +9,14 @@
  * template pointed at another server would otherwise be sent the key.
  */
 
-const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co').replace(/\/$/, '')
+/** The project's Supabase address, cleaned: a Vercel setting pasted from
+ *  some editors carries a leading BOM or stray whitespace, and new URL()
+ *  then throws — which would make every address look foreign. */
+export function supabaseUrl(): string {
+  return (process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co')
+    .replace(/^﻿/, '').trim().replace(/\/+$/, '')
+}
+const SUPABASE_URL = supabaseUrl()
 
 /** True for an address inside this project's Supabase storage. */
 export function isOurStorageUrl(url: unknown): url is string {
