@@ -10,6 +10,7 @@ import { SiteNoteModal } from '@/components/SiteNoteModal'
 import { apiFetch } from '@/lib/apiFetch'
 import ProjectCans from '@/components/ProjectCans'
 import ProjectSketches from '@/components/ProjectSketches'
+import Link from 'next/link'
 import {
   SiteNote, NoteStatus, loadProjectSiteNotes, setSiteNoteStatus, formatNoteDate, noteReportRef,
   loadResponseCounts,
@@ -1432,7 +1433,15 @@ function AdminPageInner() {
                                     </span>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 700, color: 'var(--text-ink)' }}>
-                                        {reportDisplayName((ins as any).report_file_name, null, 'Site inspection report')}
+                                        {/* Opens the report, like Open — and as a link, Ctrl/middle-click opens it in a new tab. */}
+                                        <Link
+                                          href={`/report/${ins.id}?project_name=${encodeURIComponent(selectedProject?.name ?? '')}`}
+                                          style={{ color: 'inherit', textDecoration: 'none' }}
+                                          onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                                          onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                                        >
+                                          {reportDisplayName((ins as any).report_file_name, null, 'Site inspection report')}
+                                        </Link>
                                       </div>
                                       <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 2 }}>{ins.date ?? '—'}</div>
                                     </div>

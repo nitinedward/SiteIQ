@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { Shell, Spinner, Card, NewProjectModal, AssignMembersModal } from '@/components/Shell'
 import { reportDisplayName } from '@/lib/reportFileName'
+import Link from 'next/link'
 
 // ── TYPES ─────────────────────────────────────────────────────────────────────
 type Project = {
@@ -535,7 +536,14 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
-                      {reportDisplayName((ins as any).report_file_name, (ins.projects as any)?.name)}
+                      <Link
+                        href={`/report/${ins.id}?project_name=${encodeURIComponent((ins.projects as any)?.name ?? '')}`}
+                        style={{ color: 'inherit', textDecoration: 'none' }}
+                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                      >
+                        {reportDisplayName((ins as any).report_file_name, (ins.projects as any)?.name)}
+                      </Link>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
                       <span style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)' }}>{ins.date}</span>
@@ -621,7 +629,14 @@ export default function DashboardPage() {
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontFamily: 'var(--f-text)', fontSize: 14, fontWeight: 500, color: 'var(--text-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {reportDisplayName((ins as any).report_file_name, (ins.projects as any)?.name)}
+                          <Link
+                            href={`/report/${ins.id}`}
+                            style={{ color: 'inherit', textDecoration: 'none' }}
+                            onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                            onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                          >
+                            {reportDisplayName((ins as any).report_file_name, (ins.projects as any)?.name)}
+                          </Link>
                         </div>
                         <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 1 }}>{ins.date}</div>
                       </div>
