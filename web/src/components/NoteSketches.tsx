@@ -115,9 +115,14 @@ export default function NoteSketches({
 
           <SketchDropZone fixedNoteId={noteId} submitLabel="Attach to note" onSubmit={attach} />
           <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 6, lineHeight: 1.5 }}>
-            {reportRef
-              ? `Attached sketches show up in ${reportRef}'s Sketches, ready to add to the report.`
-              : 'This note isn’t in a site report yet; its sketches go into the report it is added to.'}
+            {reportRef && inspectionId ? (
+              <>
+                Attached sketches show up in{' '}
+                <a href={`/report/${inspectionId}`} target="_blank" rel="noreferrer"
+                  style={{ color: 'var(--indigo)', textDecoration: 'underline' }}>{reportRef}</a>
+                's Sketches, ready to add to the report.
+              </>
+            ) : 'This note isn’t in a site report yet; its sketches go into the report it is added to.'}
           </div>
         </>
       )}

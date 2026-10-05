@@ -1,7 +1,12 @@
 'use client'
 import { useState } from 'react'
 
-export type NoteLinkOption = { id: string | null; label: string }
+export type NoteLinkOption = {
+  id: string | null
+  label: string
+  /** The note's report, shown after the label as a link that opens it. */
+  report?: { label: string; href: string } | null
+}
 
 /**
  * The site note a sketch is linked to, shown fixed once set — a sketch's
@@ -52,6 +57,18 @@ export default function SketchNoteLink({
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }} title={current?.label}>
           {linked ? <>🔗 {current!.label}</> : (current?.label ?? 'Not linked to a site note')}
+          {linked && current!.report && (
+            <>
+              {' — '}
+              <a
+                href={current!.report.href}
+                target="_blank"
+                rel="noreferrer"
+                title={`Open ${current!.report.label}`}
+                style={{ color: 'var(--indigo)', textDecoration: 'underline' }}
+              >{current!.report.label}</a>
+            </>
+          )}
         </div>
         {!disabled && button(() => { setDraft(value ?? ''); setEditing(true) }, linked ? 'Change' : 'Link to a site note')}
       </div>
@@ -82,7 +99,9 @@ export default function SketchNoteLink({
           border: '1px solid var(--indigo)', borderRadius: 6, background: 'var(--paper)', color: 'var(--text-ink)',
         }}
       >
-        {options.map(o => <option key={o.id ?? '__none'} value={o.id ?? ''}>{o.label}</option>)}
+        {options.map(o => (
+          <option key={o.id ?? '__none'} value={o.id ?? ''}>{o.report ? `${o.label} — ${o.report.label}` : o.label}</option>
+        ))}
       </select>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         {button(() => setEditing(false), 'Cancel', false, saving)}

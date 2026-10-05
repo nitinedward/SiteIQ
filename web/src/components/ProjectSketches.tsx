@@ -177,7 +177,11 @@ export default function ProjectSketches({
                     value={s.observationId}
                     options={[
                       { id: null, label: 'Not linked to a site note' },
-                      ...siteNotes.map(n => ({ id: n.id as string | null, label: noteLabel(n) })),
+                      ...siteNotes.map(n => ({
+                        id: n.id as string | null,
+                        label: n.zoneLabel,
+                        report: n.inspectionId ? { label: noteReportRef(n)!, href: `/report/${n.inspectionId}` } : null,
+                      })),
                     ]}
                     onChange={noteId => relink(s, noteId ?? '')}
                   />
