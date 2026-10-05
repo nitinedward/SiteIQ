@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { Btn, Card, Spinner } from '@/components/Shell'
-import { deleteSketch, loadProjectSketches, moveSketch, sketchSummary, SKETCHES_SQL_FILE, type Sketch } from '@/lib/sketches'
+import { addSketch, deleteSketch, loadProjectSketches, moveSketch, sketchSummary, SKETCHES_SQL_FILE, type Sketch } from '@/lib/sketches'
+import SketchDropZone, { type StagedSketch } from '@/components/SketchDropZone'
 import { canLabel, loadProjectCans, type Can } from '@/lib/cans'
 import { noteReportRef, type SiteNote } from '@/lib/siteNotes'
 
@@ -61,6 +62,24 @@ export default function ProjectSketches({
     }
   }
 
+  /** Dropped files: each becomes a sketch on the note picked for it — and so
+   *  is offered in that note's report — or, with no note, sits here on the
+   *  project. */
+  const addFiles = async (staged: StagedSketch[]) => {
+    const added: Sketch[] = []
+    for (const st of staged) {
+      const note = st.observationId ? noteById.get(st.observationId) : undefined
+      added.push(await addSketch(st.file, {
+        projectId,
+        inspectionId: note?.inspectionId ?? null,
+        observationId: note?.id ?? null,
+        title: st.title,
+      }))
+    }
+    setSketches(prev => [...added, ...prev])
+    setMessage(`${added.length} sketch${added.length === 1 ? '' : 'es'} added.`)
+  }
+
   const remove = async (s: Sketch) => {
     if (!window.confirm(`Delete "${s.title || s.fileName || 'this sketch'}"? It is removed from its site note and its report too.`)) return
     try {
@@ -85,6 +104,17 @@ export default function ProjectSketches({
         Sketches from CANs, site notes and reports. Sketches from a CAN can be opened and marked up on site like a drawing.
       </div>
 
+      <div style={{ marginBottom: 16 }}>
+        <SketchDropZone
+          noteOptions={[
+            ...siteNotes.map(n => ({ id: n.id as string | null, label: noteLabel(n) })),
+            { id: null, label: 'Not linked to a site note' },
+          ]}
+          submitLabel="Add sketches"
+          onSubmit={addFiles}
+        />
+      </div>
+
       {message && (
         <div style={{
           marginBottom: 12, padding: '9px 12px', borderRadius: 8, background: 'var(--paper)',
@@ -96,7 +126,7 @@ export default function ProjectSketches({
         <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner /></div>
       ) : sketches.length === 0 ? (
         <Card style={{ padding: 24, textAlign: 'center', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>
-          No sketches on this project yet. Upload a CAN, or attach one to a site note or report.
+          No sketches on this project yet. Drop one above, upload a CAN, or attach one to a site note or report.
         </Card>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>

@@ -61,6 +61,8 @@ export default function ProjectCans({
   const [review, setReview] = useState<Review | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
+  // A file is being dragged over the tab — show where to drop it.
+  const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const load = async () => {
@@ -189,6 +191,20 @@ export default function ProjectCans({
     }
   }
 
+  /** A CAN dropped anywhere on the tab starts the same upload and review as
+   *  the button. One at a time: each CAN gets its own review. */
+  const canDrop = !review && busyId !== 'upload'
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragging(false)
+    if (!canDrop) return
+    const files = Array.from(e.dataTransfer.files)
+    const pdf = files.find(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name))
+    if (!pdf) { setMessage('A CAN must be a PDF.'); return }
+    if (files.length > 1) setMessage(`Uploading ${pdf.name} — drop the others one at a time, after this one is filed.`)
+    startUpload(pdf)
+  }
+
   if (tableMissing) {
     return (
       <Card style={{ padding: 18, fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)', lineHeight: 1.6 }}>
@@ -198,10 +214,26 @@ export default function ProjectCans({
   }
 
   return (
-    <div>
+    <div
+      onDragOver={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); if (canDrop) setDragging(true) } }}
+      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false) }}
+      onDrop={onDrop}
+      style={{ position: 'relative', minHeight: 220 }}
+    >
+      {dragging && (
+        <div style={{
+          position: 'absolute', inset: -8, zIndex: 20, pointerEvents: 'none',
+          border: '2px dashed var(--indigo)', borderRadius: 14,
+          background: 'rgba(250,248,244,0.92)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: 'var(--f-heading)', fontSize: 16, fontWeight: 700, color: 'var(--indigo)',
+        }}>
+          Drop the CAN (PDF) to upload it
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
         <div style={{ fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-mid)', maxWidth: 560, lineHeight: 1.5 }}>
-          Upload an issued CAN as a PDF. AI reads its details and finds any sketches, which you confirm; sketches are then available on site to check and mark up.
+          Upload an issued CAN as a PDF — or drag it onto this tab. AI reads its details and finds any sketches, which you confirm; sketches are then available on site to check and mark up.
         </div>
         <Btn variant="primary" onClick={() => inputRef.current?.click()} disabled={busyId === 'upload' || !!review}>
           {busyId === 'upload' ? 'Uploading…' : '+ Upload CAN'}
@@ -222,8 +254,11 @@ export default function ProjectCans({
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner /></div>
       ) : cans.length === 0 ? (
-        <Card style={{ padding: 24, textAlign: 'center', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>
-          No CANs on this project yet.
+        <Card style={{
+          padding: 36, textAlign: 'center', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)',
+          border: '1.5px dashed var(--border-line)', boxShadow: 'none',
+        }}>
+          No CANs on this project yet. Drag a CAN's PDF here, or use Upload CAN.
         </Card>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
