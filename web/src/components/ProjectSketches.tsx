@@ -6,6 +6,7 @@ import SketchDropZone, { type StagedSketch } from '@/components/SketchDropZone'
 import { canLabel, loadProjectCans, type Can } from '@/lib/cans'
 import { noteReportRef, type SiteNote } from '@/lib/siteNotes'
 import { supabase } from '@/lib/supabase'
+import SketchNoteLink from '@/components/SketchNoteLink'
 
 /**
  * Every sketch on the project in one place: the ones taken from CANs, and
@@ -172,18 +173,14 @@ export default function ProjectSketches({
                       {sketchSummary(s)}
                     </div>
                   )}
-                  <select
-                    value={s.observationId ?? ''}
-                    onChange={e => relink(s, e.target.value)}
-                    title="The site note this sketch explains"
-                    style={{
-                      marginTop: 8, width: '100%', fontFamily: 'var(--f-text)', fontSize: 12, padding: '5px 6px',
-                      border: '1px solid var(--border-line)', borderRadius: 6, background: 'var(--paper)', color: 'var(--text-ink)',
-                    }}
-                  >
-                    <option value="">Not linked to a site note</option>
-                    {siteNotes.map(n => <option key={n.id} value={n.id}>{noteLabel(n)}</option>)}
-                  </select>
+                  <SketchNoteLink
+                    value={s.observationId}
+                    options={[
+                      { id: null, label: 'Not linked to a site note' },
+                      ...siteNotes.map(n => ({ id: n.id as string | null, label: noteLabel(n) })),
+                    ]}
+                    onChange={noteId => relink(s, noteId ?? '')}
+                  />
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <Btn small onClick={() => window.open(s.fileUrl, '_blank', 'noopener,noreferrer')}>Open</Btn>
                     <Btn small variant="danger" onClick={() => remove(s)}>Delete</Btn>

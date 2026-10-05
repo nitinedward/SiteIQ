@@ -1,6 +1,7 @@
 'use client'
 import SketchDropZone, { type StagedSketch } from '@/components/SketchDropZone'
 import { SKETCHES_SQL_FILE, sketchSummary, type Sketch } from '@/lib/sketches'
+import SketchNoteLink from '@/components/SketchNoteLink'
 
 /** A sketch as the report page holds it: ticked or not, and whether it has
  *  appeared since the report's sketch section was last written (attached to
@@ -32,7 +33,7 @@ export default function ReportSketchesPanel({
   onToggle: (id: string) => void
   onUpdateReport: () => void
   onAddFiles: (staged: StagedSketch[]) => Promise<void>
-  onMove: (id: string, observationId: string | null) => void
+  onMove: (id: string, observationId: string | null) => void | Promise<void>
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
 }) {
@@ -155,21 +156,13 @@ export default function ReportSketchesPanel({
                         {note ? `Site note ${note.number}: ${note.label}` : 'General'}
                       </div>
                     ) : (
-                      <select
-                        value={s.observationId ?? '__general'}
-                        onChange={e => onMove(s.id, e.target.value === '__general' ? null : e.target.value)}
+                      <SketchNoteLink
+                        compact
+                        value={s.observationId}
+                        options={noteOptions}
+                        onChange={noteId => onMove(s.id, noteId)}
                         disabled={busy}
-                        title="Which site note this sketch belongs to"
-                        style={{
-                          marginTop: 5, width: '100%', fontFamily: 'var(--f-text)', fontSize: 11, padding: '4px 5px',
-                          border: '1px solid var(--border-line)', borderRadius: 6,
-                          background: 'var(--paper)', color: 'var(--text-ink)',
-                        }}
-                      >
-                        {noteOptions.map(o => (
-                          <option key={o.id ?? '__general'} value={o.id ?? '__general'}>{o.label}</option>
-                        ))}
-                      </select>
+                      />
                     )}
 
                     <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
