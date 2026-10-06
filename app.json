@@ -15,7 +15,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.nitinedward.SiteIQ",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "SiteIQ needs camera access to capture site inspection photos.",
