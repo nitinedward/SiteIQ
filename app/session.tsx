@@ -132,7 +132,7 @@ export default function SessionScreen() {
   };
 
   const fetchDrawings = async () => {
-    const { data, error } = await supabase.from('drawings').select('id,title,number,revision,file_url,preview_url,created_at').eq('project_id', String(project_id)).order('number', { ascending: true });
+    const { data, error } = await supabase.from('drawings').select('*').eq('project_id', String(project_id)).order('number', { ascending: true });
     console.log('[fetchDrawings] project_id:', project_id, 'rows:', data?.length ?? 0, 'error:', error);
     setAllDrawings(data as Drawing[] ?? []);
   };
@@ -408,7 +408,11 @@ export default function SessionScreen() {
             <TouchableOpacity onPress={() => {
               // Only current sheets are offered; a superseded revision is
               // reachable from "Select drawings", deliberately.
-              const unsel = latestRevisions(allDrawings).filter(d => !selectedDrawings.includes(d.id));
+              // Drawings only: sketches (hidden rows of kind 'sketch', see
+              // lib/projectDocs) are picked from "Select drawings", where they
+              // are listed apart — grouped by number here, they'd collapse.
+              const unsel = latestRevisions(allDrawings.filter(d => ((d as any).kind ?? 'drawing') !== 'sketch'))
+                .filter(d => !selectedDrawings.includes(d.id));
               if (!unsel.length) { Alert.alert('All drawings added', 'All project drawings are already in this inspection.'); return; }
               Alert.alert('Add Drawing', 'Select an additional drawing:', [...unsel.map(d => ({ text: `${d.number ? d.number + ' -' : ''}${d.title}`, onPress: () => setSelectedDrawings(curr => [...curr, d.id]) })), { text: 'Cancel', style: 'cancel' as const }]);
             }}>

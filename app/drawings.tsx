@@ -27,7 +27,9 @@ export default function DrawingsListScreen() {
       .select('*')
       .eq('project_id', project_id)
       .order('created_at', { ascending: false });
-    setDrawings((data as Drawing[]) ?? []);
+    // Sketches have a hidden drawing row so they can be marked up; they are
+    // listed under the project's Sketches, not here (lib/projectDocs).
+    setDrawings(((data as (Drawing & { kind?: string | null })[]) ?? []).filter(d => (d.kind ?? 'drawing') !== 'sketch'));
     setLoading(false);
   };
 

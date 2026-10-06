@@ -8,15 +8,20 @@ import { setPendingDrawingSelection } from '../lib/pendingSelection';
 import { latestRevisions, revisionsOf, revisionCount } from '../lib/drawingRevisions';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../lib/theme';
+import { loadProjectDocs, sketchSource, type CanItem, type SketchItem, type DrawingRow } from '../lib/projectDocs';
 
 const T = theme.colors;
 const R = theme.radius;
 
-type Drawing = { id: string; title: string; number: string; revision: string; created_at: string };
+type Drawing = { id: string; title: string; number: string; revision: string; created_at: string; kind?: string | null; sketch_id?: string | null };
 
 export default function SelectDrawingsScreen() {
   const { project_id, selected } = useLocalSearchParams();
   const [drawings, setDrawings] = useState<Drawing[]>([]);
+  // Sketches (from CANs, or added in the office) are picked here too, to
+  // mark up like a drawing — listed apart from the drawings.
+  const [sketches, setSketches] = useState<SketchItem[]>([]);
+  const [cans, setCans]         = useState<CanItem[]>([]);
   const [loading, setLoading]   = useState(true);
   // Which sheet's older revisions are open, by drawing number.
   const [historyFor, setHistoryFor] = useState<string | null>(null);
@@ -28,10 +33,21 @@ export default function SelectDrawingsScreen() {
     setLoading(true);
     const { data } = await supabase
       .from('drawings')
-      .select('id,title,number,revision,created_at')
+      .select('*')
       .eq('project_id', String(project_id))
       .order('number', { ascending: true });
-    setDrawings((data as Drawing[]) ?? []);
+    const rows = (data as DrawingRow[]) ?? [];
+    setDrawings(rows.filter(r => (r.kind ?? 'drawing') !== 'sketch') as Drawing[]);
+    try {
+      const docs = await loadProjectDocs(String(project_id), rows);
+      // A superseded CAN's sketches stay out of the list for new markups.
+      const superseded = new Set(docs.cans.filter(c => c.status === 'superseded').map(c => c.id));
+      setSketches(docs.sketches.filter(sk => !sk.canId || !superseded.has(sk.canId)));
+      setCans(docs.cans);
+    } catch (err) {
+      console.warn('[select-drawings] sketches:', err);
+      setSketches([]);
+    }
     setLoading(false);
   };
 
@@ -62,6 +78,7 @@ export default function SelectDrawingsScreen() {
         <View style={S.centred}><ActivityIndicator size="large" color={T.indigo} /></View>
       ) : (
         <ScrollView style={S.scroll} contentContainerStyle={S.list} showsVerticalScrollIndicator={false}>
+          <Text style={[S.sectionLabel, { marginTop: 0 }]}>Drawings</Text>
           {drawings.length === 0 ? (
             <View style={S.emptyCard}>
               <Text style={S.emptyText}>No drawings — admin uploads via web portal</Text>
@@ -115,6 +132,30 @@ export default function SelectDrawingsScreen() {
               </View>
             );
           })}
+          {sketches.length > 0 && (
+            <>
+              <Text style={S.sectionLabel}>Sketches</Text>
+              {sketches.map(sk => {
+                const sel = picked.includes(sk.drawing.id);
+                return (
+                  <TouchableOpacity
+                    key={sk.drawing.id}
+                    style={[S.row, sel && S.rowActive]}
+                    onPress={() => toggle(sk.drawing.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[S.checkbox, sel && S.checkboxActive]}>
+                      {sel && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
+                    </View>
+                    <View style={S.rowInfo}>
+                      <Text style={S.rowTitle} numberOfLines={1}>{sk.title}</Text>
+                      <Text style={S.rowMeta} numberOfLines={1}>{sketchSource(sk, cans)}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </>
+          )}
           <View style={{ height: 90 }} />
         </ScrollView>
       )}
@@ -144,6 +185,7 @@ const S = StyleSheet.create({
     borderWidth: 1.5, borderColor: T.line,
   },
   rowActive:    { borderColor: T.indigo, backgroundColor: T.indigoSoft },
+  sectionLabel: { fontSize: 11, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1, marginTop: 18, marginBottom: 8 },
   rowOlder:     { marginLeft: 16, borderStyle: 'dashed' },
   revToggle:    { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingLeft: 14, marginBottom: 8 },
   revToggleText:{ fontSize: 12, fontWeight: '600', color: T.indigo },
