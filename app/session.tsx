@@ -139,9 +139,18 @@ export default function SessionScreen() {
 
   const toggleDrawing = (id: string) => setSelectedDrawings(curr => curr.includes(id) ? curr.filter(d => d !== id) : [...curr, id]);
 
+  // While capturing, the picker only adds: a drawing or sketch already in
+  // the inspection may carry markups, so it is removed deliberately (swipe),
+  // never by an untick in the picker. Before capturing, the picker's choice
+  // is the selection.
+  const stepRef = useRef(step);
+  stepRef.current = step;
   useFocusEffect(useCallback(() => {
     const pending = consumePendingDrawingSelection();
-    if (pending) setSelectedDrawings(pending);
+    if (!pending) return;
+    setSelectedDrawings(curr => stepRef.current === 'capture'
+      ? [...curr, ...pending.filter(id => !curr.includes(id))]
+      : pending);
   }, []));
 
   const fetchGeneralObservations = async (id: string) => {
@@ -329,7 +338,7 @@ export default function SessionScreen() {
 
           {/* Drawings */}
           <View style={S.section}>
-            <Text style={S.sectionTitle}>Drawings</Text>
+            <Text style={S.sectionTitle}>Drawings & sketches</Text>
             {allDrawings.length === 0 ? (
               <View style={S.emptyBox}><Text style={S.emptyText}>No drawings uploaded yet</Text></View>
             ) : (
@@ -341,9 +350,9 @@ export default function SessionScreen() {
                 </View>
                 <View style={S.checkInfo}>
                   <Text style={S.checkTitle}>
-                    {selectedDrawings.length === 0 ? 'Select drawings' : 'Drawings Selected'}
+                    {selectedDrawings.length === 0 ? 'Select drawings & sketches' : 'Drawings & sketches selected'}
                   </Text>
-                  <Text style={S.checkMeta}>Tap to choose the drawings relevant to today's inspection</Text>
+                  <Text style={S.checkMeta}>Tap to choose the drawings and sketches for today's inspection</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={T.mid} />
               </TouchableOpacity>
@@ -404,18 +413,12 @@ export default function SessionScreen() {
 
         <View style={S.section}>
           <View style={S.sectionRow}>
-            <Text style={[S.sectionTitle, { marginBottom: 0 }]}>Drawings ({inspDrawings.length})</Text>
-            <TouchableOpacity onPress={() => {
-              // Only current sheets are offered; a superseded revision is
-              // reachable from "Select drawings", deliberately.
-              // Drawings only: sketches (hidden rows of kind 'sketch', see
-              // lib/projectDocs) are picked from "Select drawings", where they
-              // are listed apart — grouped by number here, they'd collapse.
-              const unsel = latestRevisions(allDrawings.filter(d => ((d as any).kind ?? 'drawing') !== 'sketch'))
-                .filter(d => !selectedDrawings.includes(d.id));
-              if (!unsel.length) { Alert.alert('All drawings added', 'All project drawings are already in this inspection.'); return; }
-              Alert.alert('Add Drawing', 'Select an additional drawing:', [...unsel.map(d => ({ text: `${d.number ? d.number + ' -' : ''}${d.title}`, onPress: () => setSelectedDrawings(curr => [...curr, d.id]) })), { text: 'Cancel', style: 'cancel' as const }]);
-            }}>
+            <Text style={[S.sectionTitle, { marginBottom: 0 }]}>Drawings & sketches ({inspDrawings.length})</Text>
+            <TouchableOpacity onPress={() =>
+              // The same picker as before capturing: drawings, and sketches
+              // (from CANs or the office) in their own section.
+              router.push({ pathname: '/select-drawings', params: { project_id: String(project_id), selected: selectedDrawings.join(',') } })
+            }>
               <Text style={S.addDrawText}>+ Add</Text>
             </TouchableOpacity>
           </View>

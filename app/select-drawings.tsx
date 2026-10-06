@@ -68,7 +68,7 @@ export default function SelectDrawingsScreen() {
           <Ionicons name="close" size={22} color={T.indigo} />
         </TouchableOpacity>
         <View style={S.headerMid}>
-          <Text style={S.headerTitle} numberOfLines={1}>Select Drawings</Text>
+          <Text style={S.headerTitle} numberOfLines={1}>Select drawings & sketches</Text>
           <Text style={S.headerSub}>{picked.length} selected</Text>
         </View>
         <View style={{ width: 36 }} />
@@ -132,9 +132,14 @@ export default function SelectDrawingsScreen() {
               </View>
             );
           })}
-          {sketches.length > 0 && (
+          {/* Always shown, so "none on this project" reads as that rather than as missing. */}
+          <Text style={S.sectionLabel}>Sketches</Text>
+          {sketches.length === 0 ? (
+            <View style={S.emptyCard}>
+              <Text style={S.emptyText}>No sketches on this project — they come from CANs and sketches added on the web portal</Text>
+            </View>
+          ) : (
             <>
-              <Text style={S.sectionLabel}>Sketches</Text>
               {sketches.map(sk => {
                 const sel = picked.includes(sk.drawing.id);
                 return (
