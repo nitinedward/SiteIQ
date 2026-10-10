@@ -1,5 +1,6 @@
 import AdmZip from 'adm-zip'
 import { PLACEHOLDERS, type TemplateCheck, type TemplateIssue } from './templatePlaceholders'
+import { BLOCK_FIELDS, BLOCK_PARAGRAPH_FIELDS } from './observationBlocks'
 
 /**
  * What a firm can put in its Word template, and whether a given file uses it
@@ -17,6 +18,11 @@ import { PLACEHOLDERS, type TemplateCheck, type TemplateIssue } from './template
 
 const KNOWN = new Set(PLACEHOLDERS.map(p => p.name))
 const AI_ONLY = new Set(PLACEHOLDERS.filter(p => p.kind === 'ai').map(p => p.name))
+/** Placeholders that replace the whole paragraph they sit in. */
+const WHOLE_PARAGRAPH = new Set<string>([...AI_ONLY, ...BLOCK_PARAGRAPH_FIELDS])
+/** A site note's own placeholders, filled only inside an observations block. */
+const IN_BLOCK_ONLY = new Set<string>(BLOCK_FIELDS)
+const MARKERS = new Set(['#observations', '/observations'])
 
 /** The headers and footers report generation fills in (lib/templateProcessor,
  *  fillTemplate). Placeholders in any other are left as typed. */
@@ -103,8 +109,8 @@ export function checkTemplate(buffer: Buffer): TemplateCheck {
       // An AI section replaces its whole paragraph, so anything else on that
       // line — words, or another placeholder after a Shift+Enter line
       // break — disappears with it.
-      if (!AI_ONLY.has(name)) continue
-      const rest = para.text.replace(/\{\{\s*[a-zA-Z0-9_]+\s*\}\}/g, '').trim()
+      if (!WHOLE_PARAGRAPH.has(name)) continue
+      const rest = para.text.replace(/\{\{\s*[#/]?[a-zA-Z0-9_]+\s*\}\}/g, '').trim()
       if ((rest.length > 0 || names.length > 1) && !sharingParagraph.has(name)) {
         sharingParagraph.add(name)
         const softBreak = /<w:br\/>|<w:br [^>]*\/>/.test(para.xml) && !/w:type="page"/.test(para.xml)
@@ -131,6 +137,15 @@ export function checkTemplate(buffer: Buffer): TemplateCheck {
         })
       }
     }
+    const blockOnly = [...new Set([...text.matchAll(/\{\{\s*([#/]?[a-zA-Z0-9_]+)\s*\}\}/g)].map(m => m[1]))]
+      .filter(n => IN_BLOCK_ONLY.has(n) || MARKERS.has(n))
+    if (blockOnly.length > 0) {
+      issues.push({
+        severity: 'typed',
+        message: `${blockOnly.map(n => `{{${n}}}`).join(', ')} ${blockOnly.length === 1 ? 'is' : 'are'} in a header or footer, so would be printed as typed. A site note's details only go in the body, inside an {{#observations}} … {{/observations}} block.`,
+        context: around(text, text.indexOf(`{{${blockOnly[0]}`), blockOnly[0].length + 4),
+      })
+    }
     if (!FILLED_HEADERS_FOOTERS.has(hf.name) && placeholdersIn(text).length > 0) {
       issues.push({
         severity: 'typed',
@@ -154,6 +169,7 @@ export function checkTemplate(buffer: Buffer): TemplateCheck {
     for (const m of text.matchAll(/\{\{([^{}]*)\}\}/g)) {
       const inner = m[1].trim()
       if (/^[a-zA-Z0-9_]+$/.test(inner) && KNOWN.has(inner)) continue
+      if (MARKERS.has(inner)) continue
       const suggestion = suggestionFor(inner)
       once(`unknown:${inner}`, {
         severity: 'typed',
@@ -216,9 +232,61 @@ export function checkTemplate(buffer: Buffer): TemplateCheck {
     }
   }
 
+  // ── Blocks, one per site note ─────────────────────────────────────────────
+  // Read in document order: the markers must pair up, and a note's own
+  // placeholders only mean something between them.
+  let depth = 0
+  let findingInBlock = false
+  const outside = new Set<string>()
+  for (const para of bodyParas) {
+    for (const m of para.text.matchAll(/\{\{\s*([#/]?[a-zA-Z0-9_]+)\s*\}\}/g)) {
+      const name = m[1]
+      if (name === '#observations') {
+        if (depth > 0) {
+          once('block:nested', {
+            severity: 'fix',
+            message: 'An {{#observations}} block starts inside another one. End the first with {{/observations}} before starting the next.',
+            context: around(para.text, m.index!, m[0].length),
+          })
+        }
+        depth++
+      } else if (name === '/observations') {
+        if (depth === 0) {
+          once('block:unopened', {
+            severity: 'fix',
+            message: '{{/observations}} ends a block that was never started. Put {{#observations}} at the start of the part that repeats for each site note.',
+            context: around(para.text, m.index!, m[0].length),
+          })
+        } else {
+          depth--
+        }
+      } else if (IN_BLOCK_ONLY.has(name)) {
+        if (depth === 0) outside.add(name)
+        else if (name === 'finding') findingInBlock = true
+      }
+    }
+  }
+  if (depth > 0) {
+    issues.push({
+      severity: 'fix',
+      message: 'An {{#observations}} block is never ended. Put {{/observations}} at the end of the part that repeats for each site note.',
+    })
+  }
+  if (outside.size > 0) {
+    issues.push({
+      severity: 'typed',
+      message: `${[...outside].map(n => `{{${n}}}`).join(', ')} ${outside.size === 1 ? 'is' : 'are'} only filled inside an {{#observations}} … {{/observations}} block, so would be printed as typed where ${outside.size === 1 ? 'it is' : 'they are'}.`,
+    })
+  }
+
   // ── Required placeholders ─────────────────────────────────────────────────
-  const missing = PLACEHOLDERS.map(p => p.name).filter(n => !found.has(n))
-  const missingRequired = PLACEHOLDERS.filter(p => p.required && !found.has(p.name)).map(p => p.name)
+  // Notes' own placeholders aren't counted as missing — only a template
+  // laid out in blocks uses them.
+  const missing = PLACEHOLDERS.filter(p => p.kind !== 'block').map(p => p.name).filter(n => !found.has(n))
+  // A block's {{finding}} lists every note, as {{findings}} does.
+  const missingRequired = PLACEHOLDERS
+    .filter(p => p.required && !found.has(p.name) && !(p.name === 'findings' && findingInBlock))
+    .map(p => p.name)
   if (missingRequired.length) {
     issues.push({
       severity: 'fix',

@@ -1,6 +1,9 @@
 import AdmZip from 'adm-zip'
 import sharp from 'sharp'
-import { xmlEscape } from '@/lib/templateProcessor'
+import { createClient } from '@supabase/supabase-js'
+import { xmlEscape, templateUsesObservationBlocks } from '@/lib/templateProcessor'
+import { findSlots, hasObservationBlocks, loadNoteDrawings, noteKey, type Slot } from '@/lib/observationBlocks'
+import { noteLabel } from '@/lib/reportNotes'
 import { saveDoc, loadDoc } from '@/lib/docStorage'
 import { readAttachmentSelection, writeAttachmentSelection } from '@/lib/attachmentSelection'
 import { drawingAssetStem } from '@/lib/drawingAssetName'
@@ -16,6 +19,7 @@ import {
   placeSection,
   removeOrphanSections,
   removeSections,
+  replaceBookmarkedContent,
   wrapSection,
 } from '@/lib/attachmentSections'
 
@@ -306,6 +310,100 @@ export type AppendResult = {
   sketchesAdded: number
   sections: SectionName[]
   legacyMigrated: boolean
+  /** The report is laid out a block per site note, so photos and markups
+   *  went into each note's block rather than onto pages at the end. */
+  inBlocks?: boolean
+  /** Notes with photos or a markup to show whose space for them is gone
+   *  from the document (deleted in the editor); regenerating restores it. */
+  missingSlots?: string[]
+}
+
+// ── Observation blocks ───────────────────────────────────────────────────────
+// A report built from a template laid out a block per site note (see
+// lib/observationBlocks) holds an empty, named slot in each note's block for
+// its photos and one for its markup. They are filled here, from the same
+// selection the photo and markup pages use for other reports.
+
+const EMU_PER_DXA = 635
+/** Photos in a block are never placed at the size the photo pages use
+ *  (7.5cm), nor markups at theirs (15cm): finalising finds those pages'
+ *  pictures in the PDF by size (lib/reportPdfHotspots). */
+const BLOCK_PHOTO_MAX_W = 2520000   // 7cm
+const BLOCK_PHOTO_MAX_H = 3240000   // 9cm
+const BLOCK_MARKUP_MAX_W = 5040000  // 14cm
+const BLOCK_MARKUP_MAX_H = 4320000  // 12cm
+const BLOCK_PHOTO_GAP = 200         // dxa between two photos in a row
+
+type BlockNote = { key: string; title: string; photos: string[]; stem: string | null }
+
+async function loadBlockNotes(inspectionId: string): Promise<BlockNote[]> {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
+    (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^\uFEFF/, '').trim()
+  )
+  const { data: notes } = await supabase
+    .from('observations')
+    .select('id, zone_id, zone_label, photos')
+    .eq('inspection_id', inspectionId)
+    .order('id', { ascending: true })
+  const drawings = await loadNoteDrawings(supabase, notes ?? [])
+  return (notes ?? []).map((n: any) => {
+    let photos: unknown = n.photos
+    if (typeof photos === 'string') { try { photos = JSON.parse(photos || '[]') } catch { photos = [] } }
+    return {
+      key: noteKey(n.id),
+      title: noteLabel(n),
+      photos: Array.isArray(photos) ? photos.filter((u: unknown): u is string => typeof u === 'string') : [],
+      stem: drawings.get(n.id)?.stem ?? null,
+    }
+  })
+}
+
+/** Width and height for a picture of `size` fitting maxW × maxH. */
+function fit(size: { width?: number; height?: number }, maxW: number, maxH: number, fallbackRatio: number): { cx: number; cy: number } {
+  const ratio = size.width && size.height ? size.height / size.width : fallbackRatio
+  let cx = maxW
+  let cy = Math.round(cx * ratio)
+  if (cy > maxH) { cy = maxH; cx = Math.round(cy / ratio) }
+  return { cx, cy }
+}
+
+/** How many photos a slot fits side by side. */
+const photoColumns = (widthDxa: number) => (widthDxa >= 7000 ? 2 : 1)
+
+/** A note's photos, two to a row where the slot is wide enough, each with
+ *  the note's title beneath as a link to the full-size photo. */
+function blockPhotosXml(
+  cells: { rId: string; linkRId: string; docPr: number; cx: number; cy: number }[],
+  title: string,
+  widthDxa: number,
+): string {
+  if (cells.length === 0) return '<w:p/>'
+  const cols = photoColumns(widthDxa)
+  const colW = Math.floor((widthDxa - BLOCK_PHOTO_GAP * (cols - 1)) / cols)
+  const cell = (c: typeof cells[number] | undefined) => c
+    ? `<w:tc><w:tcPr><w:tcW w:w="${colW}" w:type="dxa"/>${NO_BORDERS}</w:tcPr>` +
+      `<w:p><w:r>${buildInlineImage(c.rId, c.docPr, c.cx, c.cy, c.linkRId)}</w:r></w:p>` +
+      `<w:p><w:pPr><w:spacing w:before="20" w:after="120"/></w:pPr><w:hyperlink r:id="${c.linkRId}">` +
+      `<w:r><w:rPr><w:color w:val="2C5282"/><w:u w:val="single"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>` +
+      `<w:t xml:space="preserve">${xmlEscape(title)}</w:t></w:r></w:hyperlink></w:p></w:tc>`
+    : `<w:tc><w:tcPr><w:tcW w:w="${colW}" w:type="dxa"/>${NO_BORDERS}</w:tcPr><w:p/></w:tc>`
+  const spacer = `<w:tc><w:tcPr><w:tcW w:w="${BLOCK_PHOTO_GAP}" w:type="dxa"/>${NO_BORDERS}</w:tcPr><w:p/></w:tc>`
+
+  let rows = ''
+  for (let i = 0; i < cells.length; i += cols) {
+    rows += '<w:tr>' + (cols === 2 ? cell(cells[i]) + spacer + cell(cells[i + 1]) : cell(cells[i])) + '</w:tr>'
+  }
+  const none = 'w:val="none" w:sz="0" w:space="0" w:color="auto"'
+  const grid = cols === 2
+    ? `<w:gridCol w:w="${colW}"/><w:gridCol w:w="${BLOCK_PHOTO_GAP}"/><w:gridCol w:w="${colW}"/>`
+    : `<w:gridCol w:w="${colW}"/>`
+  return (
+    `<w:tbl><w:tblPr><w:tblW w:w="${widthDxa}" w:type="dxa"/>` +
+    `<w:tblBorders><w:top ${none}/><w:left ${none}/><w:bottom ${none}/><w:right ${none}/><w:insideH ${none}/><w:insideV ${none}/></w:tblBorders>` +
+    `<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid>` +
+    rows + '</w:tbl><w:p/>'
+  )
 }
 
 /** Rebuilds a report's photo, sketch and markup sections and stores the
@@ -453,6 +551,13 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
     // above, and the report ends up listing the section twice.
     ;({ docXml } = removeOrphanSections(docXml))
 
+    // A report laid out a block per note takes its photos and markups into
+    // the blocks; its end-of-report photo and markup sections stay empty
+    // (the removal above has already cleared any). Judged from the document,
+    // or — if the editor dropped every mark of the blocks — from the template.
+    const touchesBlocks = requested.includes('photos') || requested.includes('drawings')
+    const inBlocks = touchesBlocks && (hasObservationBlocks(docXml) || await templateUsesObservationBlocks(inspectionId))
+
     let nextRId = getMaxRId(relsXml) + 1
 
     // ── Content-Types: ensure PNG and JPEG are registered ───────────────────
@@ -485,7 +590,7 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
     let docPrId = 500
 
     // ── STRUCTURAL DRAWINGS section ──────────────────────────────────────────
-    if (requested.includes('drawings') && validDrawings.length > 0) {
+    if (!inBlocks && requested.includes('drawings') && validDrawings.length > 0) {
       drawingsXml += PAGE_BREAK + sectionHeading('STRUCTURAL DRAWINGS')
 
       validDrawings.forEach((drawing, i) => {
@@ -543,7 +648,7 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
     }
 
     // ── SITE PHOTOGRAPHS section ─────────────────────────────────────────────
-    if (requested.includes('photos') && validPhotos.length > 0) {
+    if (!inBlocks && requested.includes('photos') && validPhotos.length > 0) {
       photosXml += PAGE_BREAK + sectionHeading('SITE PHOTOGRAPHS')
 
       // Group by zone
@@ -600,6 +705,94 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
       }
     }
 
+    // ── Each note's block ────────────────────────────────────────────────────
+    let photosInBlocks = 0
+    let markupsInBlocks = 0
+    const missingSlots: string[] = []
+    if (inBlocks) {
+      const notes = await loadBlockNotes(inspectionId)
+      const slots = findSlots(docXml)
+      const chosenPhotoUrls = new Set(validPhotos.map(p => p.url))
+      // Above every existing picture id, so none is repeated.
+      for (const m of docXml.matchAll(/<wp:docPr\b[^>]*\bid="(\d+)"/g)) docPrId = Math.max(docPrId, Number(m[1]) + 1)
+
+      // Sizes, for keeping each picture's proportions.
+      const sizes = new Map<Buffer, { width?: number; height?: number }>()
+      const sizeOf = async (b: Buffer) => {
+        if (!sizes.has(b)) sizes.set(b, await sharp(b).metadata().catch(() => ({})))
+        return sizes.get(b)!
+      }
+      // One media part per markup, however many notes are on that drawing.
+      const markupRIds = new Map<number, string>()
+      const removed: string[] = []
+
+      const fill = (slot: Slot, inner: string) => {
+        const done = replaceBookmarkedContent(docXml, slot.name, inner)
+        if (!done) return
+        docXml = done.docXml
+        removed.push(done.removed)
+      }
+
+      for (const note of notes) {
+        const noteSlots = slots.filter(s => s.key === note.key)
+
+        if (requested.includes('photos')) {
+          const photos = note.photos.filter(u => chosenPhotoUrls.has(u) && photoFiles.has(u))
+          const photoSlots = noteSlots.filter(s => s.kind === 'photos')
+          if (photoSlots.length === 0 && photos.length > 0) missingSlots.push(note.title)
+          for (const slot of photoSlots) {
+            const cols = photoColumns(slot.widthDxa)
+            const maxW = Math.min(BLOCK_PHOTO_MAX_W, Math.floor(((slot.widthDxa - (cols - 1) * BLOCK_PHOTO_GAP) / cols) * EMU_PER_DXA))
+            const cells = []
+            for (const url of photos) {
+              const file = photoFiles.get(url)!
+              const name = `blockPhoto_${nextRId}.${file.ext}`
+              zip.addFile(`word/media/${name}`, file.buffer)
+              const rId = `rId${nextRId++}`
+              newRels.push({ id: rId, type: REL_IMAGE, target: `media/${name}` })
+              const linkRId = `rId${nextRId++}`
+              newRels.push({ id: linkRId, type: REL_HYPERLINK, target: url, external: true })
+              cells.push({ rId, linkRId, docPr: docPrId++, ...fit(await sizeOf(file.buffer), maxW, BLOCK_PHOTO_MAX_H, 0.75) })
+            }
+            fill(slot, blockPhotosXml(cells, note.title, slot.widthDxa))
+            photosInBlocks += cells.length
+          }
+        }
+
+        if (requested.includes('drawings')) {
+          const index = note.stem == null ? -1 : validDrawings.findIndex((d, i) =>
+            drawingAssetStem(String(d.number ?? '')) === note.stem && !!drawingBuffers[i])
+          const markupSlots = noteSlots.filter(s => s.kind === 'markup')
+          if (markupSlots.length === 0 && index >= 0) missingSlots.push(note.title)
+          for (const slot of markupSlots) {
+            if (index < 0) { fill(slot, '<w:p/>'); continue }
+            const image = shrunkDrawings[index] ?? drawingBuffers[index]!
+            let rId = markupRIds.get(index)
+            if (!rId) {
+              const name = `blockMarkup_${nextRId}.png`
+              zip.addFile(`word/media/${name}`, image)
+              rId = `rId${nextRId++}`
+              newRels.push({ id: rId, type: REL_IMAGE, target: `media/${name}` })
+              markupRIds.set(index, rId)
+            }
+            const { cx, cy } = fit(await sizeOf(image), Math.min(BLOCK_MARKUP_MAX_W, slot.widthDxa * EMU_PER_DXA), BLOCK_MARKUP_MAX_H, 0.707)
+            fill(slot, `<w:p><w:r>${buildInlineImage(rId, docPrId++, cx, cy)}</w:r></w:p>`)
+            markupsInBlocks++
+          }
+        }
+      }
+
+      // The slots' previous pictures and links, unless something still uses them.
+      const oldIds = new Set(removed.flatMap(x => [...x.matchAll(/r:(?:embed|id)="(rId\d+)"/g)].map(m => m[1])))
+      for (const rId of oldIds) {
+        if (new RegExp(`r:(?:embed|id)="${rId}"`).test(docXml)) continue
+        const target = relsXml.match(new RegExp(`<Relationship Id="${rId}"[^>]*Target="([^"]+)"`))?.[1]
+        if (target && !/^https?:/.test(target)) { try { zip.deleteFile(`word/${target}`) } catch { /* best effort */ } }
+        relsXml = relsXml.replace(new RegExp(`\\s*<Relationship Id="${rId}"[^>]*/>`), '')
+      }
+      if (missingSlots.length) console.warn('[append] blocks without a space for their photos/markup:', missingSlots.join(', '))
+    }
+
     // ── Apply relationships ──────────────────────────────────────────────────
     if (newRels.length > 0) {
       relsXml = addRelEntries(relsXml, newRels)
@@ -639,11 +832,14 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
       sketchesSeen: doSketches ? sketchCandidates.map(s => s.id) : undefined,
     })
 
-    const photosAdded   = requested.includes('photos')   ? validPhotos.length   : 0
-    const drawingsAdded = requested.includes('drawings') ? validDrawings.length : 0
+    const photosAdded   = !requested.includes('photos')   ? 0 : inBlocks ? photosInBlocks  : validPhotos.length
+    const drawingsAdded = !requested.includes('drawings') ? 0 : inBlocks ? markupsInBlocks : validDrawings.length
     console.log(`[append] Saved ${requested.join('+')} — photos: ${photosAdded}, drawings: ${drawingsAdded}, sketches: ${sketchesAdded}`)
 
     // legacyMigrated is true when this call had to fold a pre-split
     // document's combined section back into the two separate ones.
-    return { photosAdded, drawingsAdded, sketchesAdded, sections: requested, legacyMigrated: legacy }
+    return {
+      photosAdded, drawingsAdded, sketchesAdded, sections: requested, legacyMigrated: legacy,
+      inBlocks, missingSlots: inBlocks ? [...new Set(missingSlots)] : undefined,
+    }
 }

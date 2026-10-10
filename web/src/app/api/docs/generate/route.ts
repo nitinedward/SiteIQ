@@ -10,6 +10,7 @@ import { noteBulletLine, noteDictation } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
+import { buildObservationBlocks } from '@/lib/observationBlocks'
 
 export const dynamic = 'force-dynamic'
 
@@ -123,6 +124,12 @@ export async function POST(request: NextRequest) {
     let carried: string[] = []
 
     if (firmId) {
+      // For templates laid out a block per note: each note's dictation as
+      // recorded. Nothing writes contractor items from the plain notes.
+      const observationBlocks = await buildObservationBlocks(supabase, observations, (ob: any) => ({
+        finding: noteDictation(ob) || 'Observation recorded',
+        action: '',
+      }))
       const templateData: TemplateData = {
         engineer_name:   engineer.name,
         engineer_user:   engineer.user,
@@ -144,6 +151,7 @@ export async function POST(request: NextRequest) {
         other_activity:  buildParagraphXml(''),
         date:            inspection.date            ?? '',
         time:            inspectionTime(inspection as any),
+        observations:    observationBlocks,
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined

@@ -9,6 +9,7 @@ import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRe
 import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
 import { parseSelected } from '@/lib/attachmentSelection'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
+import { buildObservationBlocks } from '@/lib/observationBlocks'
 
 export const dynamic = 'force-dynamic'
 
@@ -233,6 +234,12 @@ Return:
     let carried: string[] = []
 
     if (firmId) {
+      // For templates laid out a block per note: the same wording, kept per
+      // note rather than gathered into two lists.
+      const observationBlocks = await buildObservationBlocks(supabase, observations, (ob: any, i: number) => ({
+        finding: wordingByRef.get(refs[i]) || noteDictation(ob) || 'Observation recorded; refer to site photographs.',
+        action: itemByRef.get(refs[i]) ?? '',
+      }))
       const templateData: TemplateData = {
         engineer_name:   engineer.name,
         engineer_user:   engineer.user,
@@ -255,6 +262,7 @@ Return:
         other_activity:  buildParagraphXml(''),
         date:            inspection.date            ?? '',
         time:            inspectionTime(inspection as any),
+        observations:    observationBlocks,
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined

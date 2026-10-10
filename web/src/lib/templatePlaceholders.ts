@@ -7,7 +7,7 @@
  * library — into the browser bundle.
  */
 
-export type PlaceholderKind = 'ai' | 'data'
+export type PlaceholderKind = 'ai' | 'data' | 'block'
 
 export type PlaceholderDef = {
   name: string
@@ -42,6 +42,22 @@ export const PLACEHOLDERS: PlaceholderDef[] = [
   { name: 'contact_phone', kind: 'data', description: 'Site contact’s phone number' },
   { name: 'weather', kind: 'data', description: 'Weather, recorded when starting the inspection' },
   { name: 'drawings', kind: 'data', description: 'Drawing numbers chosen for the visit' },
+  { name: 'items_count', kind: 'data', description: 'How many site notes the report lists' },
+  { name: 'open_count', kind: 'data', description: 'How many of them are open' },
+  { name: 'closed_count', kind: 'data', description: 'How many of them are closed' },
+
+  // One block per site note: put {{#observations}} before the part that
+  // repeats and {{/observations}} after it (lib/observationBlocks). These
+  // are filled only inside such a block.
+  { name: 'ref', kind: 'block', description: 'The note’s number: 01, 02…' },
+  { name: 'title', kind: 'block', description: 'The site note’s title' },
+  { name: 'location', kind: 'block', description: 'The drawing the note was marked on, e.g. S-202 · Ground floor plan' },
+  { name: 'status', kind: 'block', description: 'Open or Closed' },
+  { name: 'finding', kind: 'block', description: 'The note’s wording — needs a line of its own' },
+  { name: 'action', kind: 'block', description: 'What the contractor is to do for this note — needs a line of its own' },
+  { name: 'drawing_ref', kind: 'block', description: 'The drawing’s number and revision, e.g. S-202 Rev B' },
+  { name: 'markup', kind: 'block', description: 'The marked-up drawing the note is on — needs a line of its own' },
+  { name: 'photos', kind: 'block', description: 'The note’s ticked photos, captioned with its title — needs a line of its own' },
 ]
 
 /** One thing the checker noticed, in the words Settings shows.

@@ -44,6 +44,34 @@ function decodeXml(text: string): string {
 }
 
 /**
+ * Each note's finding in a report laid out a block per note: the paragraphs
+ * between the hidden marker filling the block left around it
+ * (lib/observationBlocks, findingBookmark), joined one per line. A note
+ * whose marker the editor dropped is left out.
+ */
+export function blockNoteWording(documentXml: string, notes: ReportNoteSource[], bookmarkFor: (noteId: string) => string): Map<string, string> {
+  const found = new Map<string, string>()
+  for (const note of notes) {
+    const start = documentXml.match(new RegExp(`<w:bookmarkStart\\b[^>]*\\bw:name="${bookmarkFor(note.id)}"[^>]*/>`))
+    const id = start?.[0].match(/\bw:id="(\d+)"/)?.[1]
+    if (!start || start.index === undefined || !id) continue
+    const from = start.index + start[0].length
+    const end = documentXml.slice(from).search(new RegExp(`<w:bookmarkEnd\\b[^>]*\\bw:id="${id}"`))
+    if (end === -1) continue
+    // The text between the two marks, a line per paragraph.
+    const text = documentXml.slice(from, from + end)
+      .split(/<\/w:p>/)
+      .map(part => [...part.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g)].map(t => t[1]).join(''))
+      .map(decodeXml)
+      .map(t => t.trim())
+      .filter(Boolean)
+      .join('\n')
+    if (text) found.set(note.id, text)
+  }
+  return found
+}
+
+/**
  * Find each note's bullet in the report and return the text after its label.
  * Notes are matched in order, each to the first unused paragraph after the
  * previous match that starts with "<label>:", so two notes sharing a label

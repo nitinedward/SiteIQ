@@ -1133,9 +1133,15 @@ export default function ReportPage() {
         if (data.photosAdded)   parts.push(`${data.photosAdded} photo${data.photosAdded === 1 ? '' : 's'}`)
         if (data.drawingsAdded) parts.push(`${data.drawingsAdded} markup${data.drawingsAdded === 1 ? '' : 's'}`)
         setInsertResult(
-          parts.length
-            ? `${parts.join(' and ')} added at the end of the report — scroll to the last pages.`
-            : `${label[0].toUpperCase()}${label.slice(1)} removed from the report.`
+          data.inBlocks
+            ? (data.missingSlots?.length
+                ? `Updated in each site note’s block, except ${data.missingSlots.join(', ')} — its space for photos or markups was deleted in the editor. Regenerate the report text to put it back.`
+                : parts.length
+                  ? `${parts.join(' and ')} placed in each site note’s block.`
+                  : `${label[0].toUpperCase()}${label.slice(1)} removed from the report.`)
+            : parts.length
+              ? `${parts.join(' and ')} added at the end of the report — scroll to the last pages.`
+              : `${label[0].toUpperCase()}${label.slice(1)} removed from the report.`
         )
         setTimeout(() => setInsertResult(''), 8000)
         setMobileTab('document')

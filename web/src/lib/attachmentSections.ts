@@ -309,6 +309,35 @@ export function removeSections(
   return { docXml, relsXml, removed }
 }
 
+/**
+ * Replaces what a bookmark holds, keeping the bookmark — for the photo and
+ * markup slots in a report laid out a block per note (lib/observationBlocks).
+ *
+ * Gentler than removeSections: if the editor has moved the start of the
+ * bookmark into a paragraph, the rest of that paragraph is kept rather than
+ * treated as ours, since in a block it is likely the engineer's own text.
+ * Returns null when the bookmark isn't there; `removed` is what was taken
+ * out, for tidying away images nothing uses any more.
+ */
+export function replaceBookmarkedContent(
+  docXml: string,
+  bookmark: string,
+  innerXml: string,
+): { docXml: string; removed: string } | null {
+  const span = findSectionSpan(docXml, bookmark)
+  if (!span) return null
+  const id = span.outer.match(/w:id="(\d+)"/)?.[1] ?? '0'
+  return {
+    docXml:
+      docXml.slice(0, span.start) +
+      span.leading +
+      `<w:bookmarkStart w:id="${id}" w:name="${bookmark}"/>` + innerXml + `<w:bookmarkEnd w:id="${id}"/>` +
+      span.trailing +
+      docXml.slice(span.end),
+    removed: span.middle,
+  }
+}
+
 /** True if the document still carries the pre-split combined bookmark. */
 export function hasLegacySection(docXml: string): boolean {
   return findSectionSpan(docXml, LEGACY_SECTION.bookmark) !== null

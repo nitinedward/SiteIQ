@@ -504,10 +504,12 @@ export default function SettingsPage() {
 
             {showPlaceholders && (
               <div style={{ background: 'var(--paper)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)', padding: '12px 14px', marginTop: 10 }}>
-                {(['ai', 'data'] as const).map(kind => (
-                  <div key={kind} style={{ marginBottom: kind === 'ai' ? 14 : 0 }}>
+                {(['ai', 'data', 'block'] as const).map(kind => (
+                  <div key={kind} style={{ marginBottom: kind === 'block' ? 0 : 14 }}>
                     <div style={{ fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 6 }}>
-                      {kind === 'ai' ? 'Written by the AI — each needs a line of its own' : 'Filled in from your project and inspection — can sit mid-sentence'}
+                      {kind === 'ai' ? 'Written by the AI — each needs a line of its own'
+                        : kind === 'data' ? 'Filled in from your project and inspection — can sit mid-sentence'
+                        : 'One block per site note — put {{#observations}} before the part that repeats and {{/observations}} after it (at the start and end of one table row, for a summary table)'}
                     </div>
                     {PLACEHOLDERS.filter(p => p.kind === kind).map(p => (
                       <div key={p.name} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '3px 0' }}>

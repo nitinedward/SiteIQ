@@ -3,6 +3,7 @@ import * as fs from 'fs/promises'
 import * as path from 'path'
 import AdmZip from 'adm-zip'
 import { fetchFromOurStorage } from '@/lib/storageFetch'
+import { BLOCK_START, expandObservationBlocks, observationCounts, type ObservationBlock } from '@/lib/observationBlocks'
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
@@ -48,6 +49,10 @@ export type TemplateData = {
   date?: string
   /** When the inspection was started, as "14:00". */
   time?: string
+  /** One per site note, for templates laid out a block per note
+   *  ({{#observations}} … {{/observations}}, lib/observationBlocks).
+   *  Other templates ignore it. */
+  observations?: ObservationBlock[]
 }
 
 // ── XML Helpers ────────────────────────────────────────────────────────────────
@@ -98,7 +103,7 @@ export function buildParagraphXml(text: string): string {
  * placeholder appears as a continuous string. Paragraphs without `{{` are
  * left untouched.
  */
-function mergeRunsContainingPlaceholders(xml: string): string {
+export function mergeRunsContainingPlaceholders(xml: string): string {
   return xml.replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (para) => {
     // Concatenate text from every <w:t> in this paragraph
     const allText = [...para.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)]
@@ -277,6 +282,12 @@ export async function fillTemplate(
 ): Promise<{ buffer: Buffer; templateId: string | null }> {
   const template = await resolveTemplate(firmId, choice)
   const templateBuffer = await fetchTemplateBuffer(template)
+  return { buffer: fillTemplateBuffer(templateBuffer, data), templateId: template.templateId }
+}
+
+/** Fills a template already in hand — the whole of filling, with no
+ *  storage or database involved. */
+export function fillTemplateBuffer(templateBuffer: Buffer, data: TemplateData): Buffer {
   const zip = new AdmZip(templateBuffer)
 
   const dateStr =
@@ -313,6 +324,7 @@ export async function fillTemplate(
     '{{issued_to_emails}}': data.issued_to_emails || '',
     '{{date}}':            dateStr,
     '{{time}}':            data.time            || '',
+    ...observationCounts(data.observations ?? []),
   }
 
   // Process document.xml: paragraph-level replacement first, then inline
@@ -322,6 +334,15 @@ export async function fillTemplate(
     // Word fragmented across multiple <w:r> elements are reunited.
     let xml = mergeRunsContainingPlaceholders(docEntry.getData().toString('utf-8'))
     let changed = false
+
+    // A template laid out one block per site note. Only such a template
+    // takes this branch; every other one fills exactly as before. Content
+    // controls come off first so a marker in one can't split a block.
+    if (xml.includes(BLOCK_START)) {
+      xml = expandObservationBlocks(flattenContentControls(xml), data.observations ?? [])
+      changed = true
+      console.log('[templateProcessor] Observation blocks filled:', (data.observations ?? []).length)
+    }
 
     console.log('[templateProcessor] Normalised doc XML, looking for placeholders...')
     for (const ph of Object.keys(multiLine)) {
@@ -385,7 +406,38 @@ export async function fillTemplate(
     }
   }
 
-  return { buffer: zip.toBuffer(), templateId: template.templateId }
+  return zip.toBuffer()
+}
+
+/**
+ * Whether a report's template lays it out a block per site note — so its
+ * photos and markups belong in the blocks, not on pages at the end.
+ *
+ * Asked only when the report itself no longer shows (the editor can drop
+ * every slot's bookmark); the template a report was built from is pinned,
+ * so this answers for that report. False on any doubt, which leaves the
+ * report getting photo pages as other reports do.
+ */
+export async function templateUsesObservationBlocks(inspectionId: string): Promise<boolean> {
+  try {
+    const { data: inspection } = await getSupabase()
+      .from('inspections')
+      .select('report_template_id, project_id, projects(firm_id)')
+      .eq('id', inspectionId)
+      .single()
+    const firmId = (inspection?.projects as any)?.firm_id as string | undefined
+    if (!inspection || !firmId) return false
+    const template = await resolveTemplate(firmId, {
+      pinnedTemplateId: (inspection as any).report_template_id,
+      projectId: (inspection as any).project_id,
+    })
+    const zip = new AdmZip(await fetchTemplateBuffer(template))
+    const xml = zip.getEntry('word/document.xml')?.getData().toString('utf-8') ?? ''
+    return mergeRunsContainingPlaceholders(xml).includes(BLOCK_START)
+  } catch (err) {
+    console.warn('[template] could not tell whether the report uses observation blocks:', err)
+    return false
+  }
 }
 
 /**
