@@ -108,6 +108,7 @@ export async function POST(request: NextRequest) {
     // Build findings as Word bullet XML from observations
     const observations = obsRes.data ?? []
     console.log(`[generate] observations: ${observations.length}, with transcript: ${observations.filter((o: any) => o.transcript).length}`)
+    console.log(`[generate] purpose recorded on site: ${String(inspection.purpose ?? '').trim().length} chars`)
     observations.forEach((ob: any, i: number) => {
       console.log(`[generate] obs[${i}] zone="${ob.zone_label}" transcript="${(ob.transcript ?? '').substring(0, 80)}" severity="${ob.severity}"`)
     })
