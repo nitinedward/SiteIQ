@@ -44,7 +44,21 @@ export const PLACEHOLDERS: PlaceholderDef[] = [
   { name: 'drawings', kind: 'data', description: 'Drawing numbers chosen for the visit' },
 ]
 
+/** One thing the checker noticed, in the words Settings shows.
+ *  - fix:   the report comes out wrong, or a part of it is destroyed
+ *  - typed: harmless to the report's structure, but something is printed
+ *           exactly as typed instead of being filled in
+ *  - info:  worth knowing, nothing to change */
+export type TemplateIssue = {
+  severity: 'fix' | 'typed' | 'info'
+  message: string
+  /** The words around it, so it can be found in Word. */
+  context?: string
+}
+
 export type TemplateCheck = {
+  /** Everything worth telling the firm, most serious first. */
+  issues: TemplateIssue[]
   found: string[]
   /** Looks like a placeholder, but nothing fills it — printed as typed. */
   unknown: string[]

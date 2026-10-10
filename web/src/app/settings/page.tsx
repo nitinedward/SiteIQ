@@ -577,11 +577,13 @@ export default function SettingsPage() {
                       <div style={{ width: '100%', fontFamily: 'var(--f-text)', fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-mid)' }}>
                         {(() => {
                           const c = checks[t.id]
-                          const problems: string[] = []
-                          if (c.missingRequired.length) problems.push(`Nothing will be written where the report needs it: ${c.missingRequired.map(n => `{{${n}}}`).join(', ')} ${c.missingRequired.length === 1 ? 'is' : 'are'} missing from the file.`)
-                          if (c.unknown.length) problems.push(`Not filled in, printed as typed: ${c.unknown.map(n => `{{${n}}}`).join(', ')}. Check the spelling against the list below.`)
-                          if (c.sharingParagraph.length) problems.push(`${c.sharingParagraph.map(n => `{{${n}}}`).join(', ')} shares a line with other words — the whole line is replaced, so that text would be lost. Put the placeholder on its own line.`)
-                          if (c.inHeaderFooter.length) problems.push(`${c.inHeaderFooter.map(n => `{{${n}}}`).join(', ')} is in a header or footer, where written sections can't go.`)
+                          const issues = c.issues ?? []
+                          const problems = issues.filter(i => i.severity !== 'info')
+                          const groups = [
+                            { title: 'Must fix', items: issues.filter(i => i.severity === 'fix') },
+                            { title: 'Will be printed as typed', items: issues.filter(i => i.severity === 'typed') },
+                          ].filter(g => g.items.length > 0)
+                          const notes = issues.filter(i => i.severity === 'info')
                           return (
                             <div style={{
                               background: problems.length ? 'var(--clay-soft)' : 'var(--sage-soft)',
@@ -593,17 +595,27 @@ export default function SettingsPage() {
                                   ? `${problems.length} thing${problems.length === 1 ? '' : 's'} to fix in this template`
                                   : `Ready — fills in ${c.found.length} field${c.found.length === 1 ? '' : 's'}`}
                               </div>
-                              {problems.map((p, i) => <div key={i}>• {p}</div>)}
+                              {groups.map(g => (
+                                <div key={g.title} style={{ marginTop: 6 }}>
+                                  <div style={{ fontWeight: 700, color: 'var(--text-ink)' }}>{g.title}</div>
+                                  {g.items.map((p, i) => (
+                                    <div key={i} style={{ marginTop: 3 }}>
+                                      • {p.message}
+                                      {p.context && (
+                                        <div style={{ marginLeft: 12, fontStyle: 'italic', color: 'var(--text-soft, var(--text-mid))' }}>{p.context}</div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ))}
                               {c.found.length > 0 && (
-                                <div style={{ marginTop: problems.length ? 6 : 4 }}>
+                                <div style={{ marginTop: problems.length ? 8 : 4 }}>
                                   Uses: {c.found.map(n => `{{${n}}}`).join(', ')}
                                 </div>
                               )}
-                              {c.contentControls > 0 && (
-                                <div style={{ marginTop: 4 }}>
-                                  {c.contentControls} Word content control{c.contentControls === 1 ? '' : 's'} (date pickers, locked fields) — removed automatically from generated reports.
-                                </div>
-                              )}
+                              {notes.map((p, i) => (
+                                <div key={i} style={{ marginTop: 4 }}>{p.message}</div>
+                              ))}
                             </div>
                           )
                         })()}
