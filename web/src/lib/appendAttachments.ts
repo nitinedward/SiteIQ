@@ -6,7 +6,7 @@ import { findSlots, hasObservationBlocks, loadNoteDrawings, noteKey, type Slot }
 import { noteLabel } from '@/lib/reportNotes'
 import { saveDoc, loadDoc } from '@/lib/docStorage'
 import { readAttachmentSelection, writeAttachmentSelection } from '@/lib/attachmentSelection'
-import { drawingAssetStem } from '@/lib/drawingAssetName'
+import { drawingAssetStem, zoneMarkupPath } from '@/lib/drawingAssetName'
 import { loadReportSketches, sketchCaption, isSketchFileUrl, type ReportSketch } from '@/lib/reportSketches'
 import { sketchesHeldByDefault } from '@/lib/sketchSelection'
 import {
@@ -334,13 +334,28 @@ const BLOCK_MARKUP_MAX_W = 5040000  // 14cm
 const BLOCK_MARKUP_MAX_H = 4320000  // 12cm
 const BLOCK_PHOTO_GAP = 200         // dxa between two photos in a row
 
-type BlockNote = { key: string; title: string; photos: string[]; stem: string | null }
+type BlockNote = { key: string; title: string; photos: string[]; stem: string | null; zoneId: string | null }
+
+const serviceClient = () => createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
+  (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^\uFEFF/, '').trim()
+)
+
+/** Each note's own copy of its drawing, showing only its markup, by zone \u2014
+ *  stored when the drawing was captured on the report page. A zone without
+ *  one is left out, and its note shows the whole marked-up drawing. */
+async function loadZoneImages(inspectionId: string, zoneIds: string[]): Promise<Map<string, Buffer>> {
+  const out = new Map<string, Buffer>()
+  const storage = serviceClient().storage.from('reports')
+  await Promise.all([...new Set(zoneIds)].map(async zoneId => {
+    const { data } = await storage.download(zoneMarkupPath(inspectionId, zoneId))
+    if (data) out.set(zoneId, await shrinkDrawing(Buffer.from(await data.arrayBuffer())))
+  }))
+  return out
+}
 
 async function loadBlockNotes(inspectionId: string): Promise<BlockNote[]> {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
-    (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^\uFEFF/, '').trim()
-  )
+  const supabase = serviceClient()
   const { data: notes } = await supabase
     .from('observations')
     .select('id, zone_id, zone_label, photos')
@@ -355,6 +370,7 @@ async function loadBlockNotes(inspectionId: string): Promise<BlockNote[]> {
       title: noteLabel(n),
       photos: Array.isArray(photos) ? photos.filter((u: unknown): u is string => typeof u === 'string') : [],
       stem: drawings.get(n.id)?.stem ?? null,
+      zoneId: n.zone_id ?? null,
     }
   })
 }
@@ -722,8 +738,11 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
         if (!sizes.has(b)) sizes.set(b, await sharp(b).metadata().catch(() => ({})))
         return sizes.get(b)!
       }
-      // One media part per markup, however many notes are on that drawing.
-      const markupRIds = new Map<number, string>()
+      // One media part per image, however many slots show it.
+      const markupRIds = new Map<string, string>()
+      const zoneImages = requested.includes('drawings')
+        ? await loadZoneImages(inspectionId, notes.map(n => n.zoneId).filter((z): z is string => !!z))
+        : new Map<string, Buffer>()
       const removed: string[] = []
 
       const fill = (slot: Slot, inner: string) => {
@@ -764,16 +783,20 @@ export async function appendAttachments(input: AppendInput): Promise<AppendResul
             drawingAssetStem(String(d.number ?? '')) === note.stem && !!drawingBuffers[i])
           const markupSlots = noteSlots.filter(s => s.kind === 'markup')
           if (markupSlots.length === 0 && index >= 0) missingSlots.push(note.title)
+          // The note's own copy of the drawing — only its markup drawn —
+          // when one was captured; otherwise the drawing with all of them.
+          const own = note.zoneId ? zoneImages.get(note.zoneId) : undefined
           for (const slot of markupSlots) {
             if (index < 0) { fill(slot, '<w:p/>'); continue }
-            const image = shrunkDrawings[index] ?? drawingBuffers[index]!
-            let rId = markupRIds.get(index)
+            const image = own ?? shrunkDrawings[index] ?? drawingBuffers[index]!
+            const imageKey = own ? `zone:${note.zoneId}` : `drawing:${index}`
+            let rId = markupRIds.get(imageKey)
             if (!rId) {
               const name = `blockMarkup_${nextRId}.png`
               zip.addFile(`word/media/${name}`, image)
               rId = `rId${nextRId++}`
               newRels.push({ id: rId, type: REL_IMAGE, target: `media/${name}` })
-              markupRIds.set(index, rId)
+              markupRIds.set(imageKey, rId)
             }
             const { cx, cy } = fit(await sizeOf(image), Math.min(BLOCK_MARKUP_MAX_W, slot.widthDxa * EMU_PER_DXA), BLOCK_MARKUP_MAX_H, 0.707)
             fill(slot, `<w:p><w:r>${buildInlineImage(rId, docPrId++, cx, cy)}</w:r></w:p>`)

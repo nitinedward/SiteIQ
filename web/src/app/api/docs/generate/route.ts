@@ -10,7 +10,7 @@ import { noteBulletLine, noteDictation } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
-import { buildObservationBlocks } from '@/lib/observationBlocks'
+import { buildObservationBlocks, earlierNoteCount } from '@/lib/observationBlocks'
 
 export const dynamic = 'force-dynamic'
 
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
       const observationBlocks = await buildObservationBlocks(supabase, observations, (ob: any) => ({
         finding: noteDictation(ob) || 'Observation recorded',
         action: '',
-      }))
+      }), await earlierNoteCount(supabase, inspection as any))
       const templateData: TemplateData = {
         engineer_name:   engineer.name,
         engineer_user:   engineer.user,

@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/apiFetch'
 import { useRouter, useParams } from 'next/navigation'
-import { captureDrawingWithMarkup } from '@/lib/captureDrawing'
+import { captureDrawingAndEachZone, captureDrawingWithMarkup } from '@/lib/captureDrawing'
 import { reportFileName, reportDisplayName, reportNoLabel } from '@/lib/reportFileName'
 import { buildMarkupPdf, type MarkupDrawing } from '@/lib/markupPdf'
 import dynamic from 'next/dynamic'
@@ -38,6 +38,9 @@ type DrawingInfo = {
   file_url: string; zone_count: number
   selected: boolean; captured: boolean; capturing: boolean
   capturedBlob: Blob | null; previewUrl: string | null
+  /** For a report laid out a block per site note: a copy of the drawing
+   *  per markup, showing only that one, by zone id. */
+  zoneBlobs?: Map<string, Blob>
   /** The image already stored for a markup the report holds, so it can go
    *  back in without being captured again. Superseded by capturedBlob once
    *  the markup is re-captured. */
@@ -52,6 +55,8 @@ type RecordedSelection = {
   drawings: { stem: string; url: string }[] | null
   sketches: string[] | null
   sketchesSeen: string[] | null
+  /** The report's template lays it out a block per site note. */
+  inBlocks: boolean
 }
 
 async function fetchRecordedSelection(inspectionId: string): Promise<RecordedSelection> {
@@ -64,9 +69,10 @@ async function fetchRecordedSelection(inspectionId: string): Promise<RecordedSel
       drawings: Array.isArray(d?.drawings) ? d.drawings : null,
       sketches: ids(d?.sketches),
       sketchesSeen: ids(d?.sketchesSeen),
+      inBlocks: d?.inBlocks === true,
     }
   } catch {
-    return { photos: null, drawings: null, sketches: null, sketchesSeen: null }
+    return { photos: null, drawings: null, sketches: null, sketchesSeen: null, inBlocks: false }
   }
 }
 
@@ -78,6 +84,8 @@ export default function ReportPage() {
   const inspectionId = id
 
   const [pageData,           setPageData]           = useState<PageData | null>(null)
+  // Laid out a block per site note: markups are also captured one per note.
+  const reportInBlocks = useRef(false)
   const [loading,            setLoading]             = useState(true)
   const [reportStatus,       setReportStatus]        = useState('pending')
   const [finalisingReport,   setFinalisingReport]    = useState(false)
@@ -1023,6 +1031,14 @@ export default function ReportPage() {
         throw new Error(`Could not add drawing ${d.number}: ${detail}`)
       }
       const { url } = await res.json()
+      // Each note's own copy, for a report laid out a block per note.
+      for (const [zoneId, zoneBlob] of d.zoneBlobs ?? []) {
+        const zr = await apiFetch(
+          `/api/docs/drawing-asset?inspectionId=${inspectionId}&zone=${encodeURIComponent(zoneId)}`,
+          { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: zoneBlob }
+        )
+        if (!zr.ok) console.warn('[insert] one markup copy did not upload; that note shows the whole drawing', zoneId)
+      }
       out.push({ title: d.title, number: d.number, revision: d.revision || 'A', url })
     }
     return out
@@ -1409,6 +1425,7 @@ export default function ReportPage() {
       // describe the report. Nothing is ticked for a report with no recorded
       // selection: photos are chosen by hand, never all by default.
       const recorded = await recordedSelection
+      reportInBlocks.current = recorded.inBlocks
       const inReport = new Set(recorded.photos ?? [])
       const allPhotos: SelectedPhoto[] = []
       ;(obsData ?? []).forEach((ob: any) => {
@@ -1485,11 +1502,14 @@ export default function ReportPage() {
         .from('zones').select('*')
         .eq('drawing_id', drawingId).eq('inspection_id', id)
 
-      const { blob }   = await captureDrawingWithMarkup(drawing.file_url, (zonesData ?? []) as any[], 1)
+      const zones = (zonesData ?? []) as any[]
+      const { blob, zones: zoneBlobs } = reportInBlocks.current
+        ? await captureDrawingAndEachZone(drawing.file_url, zones, 1)
+        : { ...(await captureDrawingWithMarkup(drawing.file_url, zones, 1)), zones: undefined }
       const previewUrl = URL.createObjectURL(blob)
       setDrawings(prev => prev.map(d =>
         d.id === drawingId
-          ? { ...d, capturing: false, captured: true, selected: true, capturedBlob: blob, previewUrl }
+          ? { ...d, capturing: false, captured: true, selected: true, capturedBlob: blob, previewUrl, zoneBlobs }
           : d
       ))
     } catch (err) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { drawingAssetStem } from '@/lib/drawingAssetName'
+import { drawingAssetStem, zoneMarkupPath } from '@/lib/drawingAssetName'
 import { requireInspectionAccess } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
@@ -46,8 +46,14 @@ export async function POST(request: NextRequest) {
       (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()
     )
 
-    const safeName = drawingAssetStem(name)
-    const path = `drawing-assets/${inspectionId}/${safeName}.png`
+    // `zone`: a copy of a drawing showing only that markup, for a report
+    // laid out a block per site note (lib/observationBlocks). Kept in a
+    // folder of its own, which the markup listings never look in, so it is
+    // never taken for a drawing.
+    const zone = request.nextUrl.searchParams.get('zone')
+    const path = zone
+      ? zoneMarkupPath(inspectionId, zone)
+      : `drawing-assets/${inspectionId}/${drawingAssetStem(name)}.png`
 
     const { error } = await supabase.storage
       .from('reports')

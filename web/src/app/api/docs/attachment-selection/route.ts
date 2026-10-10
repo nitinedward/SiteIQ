@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { readAttachmentSelection } from '@/lib/attachmentSelection'
 import { drawingAssetStem } from '@/lib/drawingAssetName'
 import { requireInspectionAccess } from '@/lib/apiAuth'
+import { templateUsesObservationBlocks } from '@/lib/templateProcessor'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,7 +53,12 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(
     // sketches/sketchesSeen: ids, for what the page ticks and marks as new
     // (lib/sketchSelection); null when nothing is recorded yet.
-    { photos: selection.photos, drawings, sketches: selection.sketches, sketchesSeen: selection.sketchesSeen },
+    // inBlocks: the report's template lays it out a block per site note, so
+    // the page also captures each markup on its own (lib/observationBlocks).
+    {
+      photos: selection.photos, drawings, sketches: selection.sketches, sketchesSeen: selection.sketchesSeen,
+      inBlocks: asked === null ? await templateUsesObservationBlocks(inspectionId) : undefined,
+    },
     { headers: { 'Cache-Control': 'no-store' } }
   )
 }

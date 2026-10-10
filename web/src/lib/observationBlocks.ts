@@ -123,12 +123,53 @@ export async function loadNoteDrawings(
   return out
 }
 
+/**
+ * How many site notes the project's earlier reports hold, so this report's
+ * Refs carry on from them: SR 001 lists 01–03, SR 002 starts at 04.
+ *
+ * Earlier means a lower report number, or for reports without one, an
+ * earlier visit date. Worked out afresh at each generation, so a note added
+ * to an earlier report later moves the numbers of reports regenerated after
+ * that. 0 when it can't be read, which numbers from 01 as before.
+ */
+export async function earlierNoteCount(
+  supabase: SupabaseClient,
+  inspection: { id: string; project_id?: string | null; report_no?: string | null; date?: string | null; created_at?: string | null },
+): Promise<number> {
+  try {
+    if (!inspection.project_id) return 0
+    const { data: reports } = await supabase
+      .from('inspections')
+      .select('id, report_no, date, created_at')
+      .eq('project_id', inspection.project_id)
+    const order = (r: any): [number, string, string] => {
+      const n = parseInt(String(r.report_no ?? '').replace(/\D/g, ''), 10)
+      return [Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER, String(r.date ?? ''), String(r.created_at ?? '')]
+    }
+    const before = (a: [number, string, string], b: [number, string, string]) =>
+      a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1] : a[2] < b[2]
+    const self = order(inspection)
+    const earlier = (reports ?? []).filter((r: any) => r.id !== inspection.id && before(order(r), self)).map((r: any) => r.id)
+    if (earlier.length === 0) return 0
+    const { count } = await supabase
+      .from('observations')
+      .select('id', { count: 'exact', head: true })
+      .in('inspection_id', earlier)
+    return count ?? 0
+  } catch (err) {
+    console.warn('[blocks] could not count earlier reports’ notes; numbering from 01:', err)
+    return 0
+  }
+}
+
 /** The blocks for a report's notes, in note order. `finding` and `action`
- *  give each note's wording by its position. */
+ *  give each note's wording by its position; Refs start after `earlier`
+ *  (see earlierNoteCount). */
 export async function buildObservationBlocks(
   supabase: SupabaseClient,
   notes: any[],
   wording: (note: any, index: number) => { finding: string; action: string },
+  earlier = 0,
 ): Promise<ObservationBlock[]> {
   let drawings = new Map<string, NoteDrawing>()
   try {
@@ -143,7 +184,7 @@ export async function buildObservationBlocks(
     const { finding, action } = wording(note, i)
     return {
       noteId: note.id,
-      ref: String(i + 1).padStart(2, '0'),
+      ref: String(earlier + i + 1).padStart(2, '0'),
       title: noteLabel(note),
       location: d ? [d.number, d.title].filter(Boolean).join(' · ') : '',
       status: statusOf(note.severity),
