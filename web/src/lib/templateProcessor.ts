@@ -103,7 +103,7 @@ export function buildParagraphXml(text: string): string {
  * placeholder appears as a continuous string. Paragraphs without `{{` are
  * left untouched.
  */
-export function mergeRunsContainingPlaceholders(xml: string): string {
+export function mergeRunsContainingPlaceholders(xml: string, { textFormat = false }: { textFormat?: boolean } = {}): string {
   return xml.replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (para) => {
     // Concatenate text from every <w:t> in this paragraph
     const allText = [...para.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)]
@@ -113,8 +113,14 @@ export function mergeRunsContainingPlaceholders(xml: string): string {
     // Only touch paragraphs that contain placeholder start marker
     if (!allText.includes('{{')) return para
 
-    // Preserve formatting: grab <w:rPr> from the first run
-    const rPr = para.match(/<w:rPr>[\s\S]*?<\/w:rPr>/)?.[0] ?? ''
+    // Preserve formatting: grab <w:rPr> from the first run. Without
+    // `textFormat` this is the paragraph's first <w:rPr> wherever it is —
+    // which, when the paragraph mark has its own formatting (inside <w:pPr>),
+    // is that and not the text's. Kept as it was for existing templates;
+    // block templates (lib/observationBlocks) take the first run's own.
+    const pPrEnd = para.indexOf('</w:pPr>')
+    const firstRun = para.slice(pPrEnd === -1 ? 0 : pPrEnd + '</w:pPr>'.length).match(/<w:r[ >][\s\S]*?<\/w:r>/)?.[0] ?? ''
+    const rPr = (textFormat ? firstRun : para).match(/<w:rPr>[\s\S]*?<\/w:rPr>/)?.[0] ?? ''
 
     // Strip all runs and run-splitting artefacts, then inject one clean run
     const stripped = para
@@ -332,13 +338,17 @@ export function fillTemplateBuffer(templateBuffer: Buffer, data: TemplateData): 
   if (docEntry) {
     // Normalise split runs BEFORE any replacement so {{placeholders}} that
     // Word fragmented across multiple <w:r> elements are reunited.
-    let xml = mergeRunsContainingPlaceholders(docEntry.getData().toString('utf-8'))
+    const original = docEntry.getData().toString('utf-8')
+    let xml = mergeRunsContainingPlaceholders(original)
     let changed = false
 
     // A template laid out one block per site note. Only such a template
     // takes this branch; every other one fills exactly as before. Content
     // controls come off first so a marker in one can't split a block.
     if (xml.includes(BLOCK_START)) {
+      // Merged again keeping each line's text formatting, so a filled
+      // finding looks like the placeholder did, not like its paragraph mark.
+      xml = mergeRunsContainingPlaceholders(original, { textFormat: true })
       xml = expandObservationBlocks(flattenContentControls(xml), data.observations ?? [])
       changed = true
       console.log('[templateProcessor] Observation blocks filled:', (data.observations ?? []).length)
