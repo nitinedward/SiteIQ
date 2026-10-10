@@ -270,6 +270,20 @@ export default function SessionScreen() {
     if (siteContact.trim()) await SecureStore.setItemAsync(SITE_CONTACT_KEY, siteContact.trim());
     if (contactPhone.trim()) await SecureStore.setItemAsync(CONTACT_PHONE_KEY, contactPhone.trim());
     const drawingRef = allDrawings.filter(d => selectedDrawings.includes(d.id)).map(d => d.number || d.title).join(', ');
+    // Already started and come back to the details (the back arrow while
+    // capturing): save the changes to that inspection rather than start a
+    // second one, which used to leave the edits unsaved and a duplicate behind.
+    if (inspectionId) {
+      const { error } = await supabase.from('inspections').update({
+        start_time: startTime.trim(), weather,
+        site_contact: siteContact.trim(), contact_phone: contactPhone.trim(),
+        drawing_ref: drawingRef, report_no: reportNo.trim(), purpose: purpose.trim(),
+      }).eq('id', inspectionId);
+      setIsSaving(false);
+      if (error) { Alert.alert('Error', 'Could not save the inspection details.'); return; }
+      setStep('capture');
+      return;
+    }
     // Recorded so the report can print who carried out the inspection.
     const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase.from('inspections').insert({
@@ -378,8 +392,22 @@ export default function SessionScreen() {
 
           {/* Start */}
           <View style={S.section}>
-            <TouchableOpacity style={[S.startBtn, isSaving && { opacity: 0.6 }]} onPress={startCapturing} disabled={isSaving} activeOpacity={0.85}>
-              {isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={S.startBtnText}>{'Start Capturing →'}</Text>}
+            {/* Held while a dictated purpose is still being written out, or
+                it would be saved without it. */}
+            <TouchableOpacity
+              style={[S.startBtn, (isSaving || isRecording || isTranscribing) && { opacity: 0.6 }]}
+              onPress={startCapturing}
+              disabled={isSaving || isRecording || isTranscribing}
+              activeOpacity={0.85}
+            >
+              {isSaving ? <ActivityIndicator color="#FFFFFF" /> : (
+                <Text style={S.startBtnText}>
+                  {isRecording ? 'Stop dictating to continue'
+                    : isTranscribing ? 'Writing out your dictation…'
+                    : inspectionId ? 'Save & Continue Capturing →'
+                    : 'Start Capturing →'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
 
