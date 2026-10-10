@@ -1,6 +1,6 @@
 import AdmZip from 'adm-zip'
 import { PLACEHOLDERS, type TemplateCheck, type TemplateIssue } from './templatePlaceholders'
-import { BLOCK_FIELDS, BLOCK_PARAGRAPH_FIELDS } from './observationBlocks'
+import { BLOCK_FIELDS, BLOCK_PARAGRAPH_FIELDS, OPEN_ITEM_FIELDS } from './observationBlocks'
 
 /**
  * What a firm can put in its Word template, and whether a given file uses it
@@ -22,7 +22,9 @@ const AI_ONLY = new Set(PLACEHOLDERS.filter(p => p.kind === 'ai').map(p => p.nam
 const WHOLE_PARAGRAPH = new Set<string>([...AI_ONLY, ...BLOCK_PARAGRAPH_FIELDS])
 /** A site note's own placeholders, filled only inside an observations block. */
 const IN_BLOCK_ONLY = new Set<string>(BLOCK_FIELDS)
-const MARKERS = new Set(['#observations', '/observations'])
+const BLOCK_KINDS = new Set(['observations', 'open_items'])
+const MARKERS = new Set(['#observations', '/observations', '#open_items', '/open_items'])
+const OPEN_ITEM_ONLY = new Set<string>(OPEN_ITEM_FIELDS)
 
 /** The headers and footers report generation fills in (lib/templateProcessor,
  *  fillTemplate). Placeholders in any other are left as typed. */
@@ -235,47 +237,59 @@ export function checkTemplate(buffer: Buffer): TemplateCheck {
   // ── Blocks, one per site note ─────────────────────────────────────────────
   // Read in document order: the markers must pair up, and a note's own
   // placeholders only mean something between them.
-  let depth = 0
+  // Two kinds of block: {{#observations}} (this visit's notes) and
+  // {{#open_items}} (items carried forward from earlier reports).
+  let open: string | null = null
   let findingInBlock = false
   const outside = new Set<string>()
+  const openItemFieldsInObservations = new Set<string>()
   for (const para of bodyParas) {
     for (const m of para.text.matchAll(/\{\{\s*([#/]?[a-zA-Z0-9_]+)\s*\}\}/g)) {
       const name = m[1]
-      if (name === '#observations') {
-        if (depth > 0) {
+      const kind = name.slice(1)
+      if (name.startsWith('#') && BLOCK_KINDS.has(kind)) {
+        if (open) {
           once('block:nested', {
             severity: 'fix',
-            message: 'An {{#observations}} block starts inside another one. End the first with {{/observations}} before starting the next.',
+            message: `A {{#${kind}}} block starts inside {{#${open}}}. End the first with {{/${open}}} before starting the next.`,
             context: around(para.text, m.index!, m[0].length),
           })
         }
-        depth++
-      } else if (name === '/observations') {
-        if (depth === 0) {
-          once('block:unopened', {
+        open = kind
+      } else if (name.startsWith('/') && BLOCK_KINDS.has(kind)) {
+        if (open !== kind) {
+          once(`block:unopened:${kind}`, {
             severity: 'fix',
-            message: '{{/observations}} ends a block that was never started. Put {{#observations}} at the start of the part that repeats for each site note.',
+            message: open
+              ? `{{/${kind}}} ends a block, but the one open is {{#${open}}}. Each block needs its own pair of markers.`
+              : `{{/${kind}}} ends a block that was never started. Put {{#${kind}}} at the start of the part that repeats.`,
             context: around(para.text, m.index!, m[0].length),
           })
-        } else {
-          depth--
         }
+        open = null
       } else if (IN_BLOCK_ONLY.has(name)) {
-        if (depth === 0) outside.add(name)
-        else if (name === 'finding') findingInBlock = true
+        if (!open) outside.add(name)
+        else if (open === 'observations' && OPEN_ITEM_ONLY.has(name)) openItemFieldsInObservations.add(name)
+        else if (open === 'observations' && name === 'finding') findingInBlock = true
       }
     }
   }
-  if (depth > 0) {
+  if (open) {
     issues.push({
       severity: 'fix',
-      message: 'An {{#observations}} block is never ended. Put {{/observations}} at the end of the part that repeats for each site note.',
+      message: `A {{#${open}}} block is never ended. Put {{/${open}}} at the end of the part that repeats.`,
     })
   }
   if (outside.size > 0) {
     issues.push({
       severity: 'typed',
-      message: `${[...outside].map(n => `{{${n}}}`).join(', ')} ${outside.size === 1 ? 'is' : 'are'} only filled inside an {{#observations}} … {{/observations}} block, so would be printed as typed where ${outside.size === 1 ? 'it is' : 'they are'}.`,
+      message: `${[...outside].map(n => `{{${n}}}`).join(', ')} ${outside.size === 1 ? 'is' : 'are'} only filled inside an {{#observations}} or {{#open_items}} block, so would be printed as typed where ${outside.size === 1 ? 'it is' : 'they are'}.`,
+    })
+  }
+  if (openItemFieldsInObservations.size > 0) {
+    issues.push({
+      severity: 'info',
+      message: `${[...openItemFieldsInObservations].map(n => `{{${n}}}`).join(', ')} only ${openItemFieldsInObservations.size === 1 ? 'has' : 'have'} something to show in {{#open_items}} rows (items from earlier reports), so will always be blank in the {{#observations}} block.`,
     })
   }
 

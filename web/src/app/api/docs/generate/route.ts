@@ -10,7 +10,7 @@ import { noteBulletLine, noteDictation } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
-import { buildObservationBlocks, earlierNoteCount } from '@/lib/observationBlocks'
+import { buildObservationBlocks, earlierNoteCount, loadPreviousItems } from '@/lib/observationBlocks'
 
 export const dynamic = 'force-dynamic'
 
@@ -153,6 +153,7 @@ export async function POST(request: NextRequest) {
         date:            inspection.date            ?? '',
         time:            inspectionTime(inspection as any),
         observations:    observationBlocks,
+        previousItems:   await loadPreviousItems(supabase, inspection as any),
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined

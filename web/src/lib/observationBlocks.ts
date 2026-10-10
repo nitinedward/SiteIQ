@@ -40,10 +40,24 @@ export type ObservationBlock = {
   action: string[]
   /** "S-202 Rev B". */
   drawingRef: string
+  /** For an item from an earlier report: that report, "SR 002". */
+  fromReport?: string
+  /** For a closed item from an earlier report: when, "12 Oct 2026". */
+  closedOn?: string
+  /** For an item from an earlier report: its latest response. */
+  update?: string
+  /** False for items from earlier reports: finalising reads back only this
+   *  visit's notes, so only theirs are marked. */
+  markFinding?: boolean
 }
 
+export const OPEN_ITEMS_START = '{{#open_items}}'
+export const OPEN_ITEMS_END = '{{/open_items}}'
+
 /** Per-note placeholders, filled only inside a block. */
-export const BLOCK_FIELDS = ['ref', 'title', 'location', 'status', 'finding', 'action', 'drawing_ref', 'photos', 'markup'] as const
+export const BLOCK_FIELDS = ['ref', 'title', 'location', 'status', 'finding', 'action', 'drawing_ref', 'photos', 'markup', 'from_report', 'closed_on', 'update'] as const
+/** Only meaningful in {{#open_items}} rows. */
+export const OPEN_ITEM_FIELDS = ['from_report', 'closed_on', 'update'] as const
 /** Of those, the ones that replace the whole paragraph they sit in. */
 export const BLOCK_PARAGRAPH_FIELDS = ['finding', 'action', 'photos', 'markup'] as const
 
@@ -132,24 +146,46 @@ export async function loadNoteDrawings(
  * to an earlier report later moves the numbers of reports regenerated after
  * that. 0 when it can't be read, which numbers from 01 as before.
  */
+type ReportRow = { id: string; report_no?: string | null; date?: string | null; created_at?: string | null }
+type ThisReport = ReportRow & { project_id?: string | null }
+
+/** When a report's visit was: its visit date ("10 October 2026", as the app
+ *  writes it), else when it was created. */
+function visitTime(r: ReportRow): number {
+  const visit = Date.parse(String(r.date ?? ''))
+  if (Number.isFinite(visit)) return visit
+  const created = Date.parse(String(r.created_at ?? ''))
+  return Number.isFinite(created) ? created : Number.MAX_SAFE_INTEGER
+}
+
+/** The project's reports before this one, oldest first: by report number,
+ *  then visit date, then when created. */
+async function earlierReports(supabase: SupabaseClient, inspection: ThisReport): Promise<ReportRow[]> {
+  if (!inspection.project_id) return []
+  const { data: reports, error } = await supabase
+    .from('inspections')
+    .select('id, report_no, date, created_at')
+    .eq('project_id', inspection.project_id)
+  if (error) throw new Error(error.message)
+  const order = (r: ReportRow): [number, number, number] => {
+    const n = parseInt(String(r.report_no ?? '').replace(/\D/g, ''), 10)
+    const created = Date.parse(String(r.created_at ?? ''))
+    return [Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER, visitTime(r), Number.isFinite(created) ? created : 0]
+  }
+  const compare = (a: [number, number, number], b: [number, number, number]) =>
+    a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
+  const self = order(inspection)
+  return ((reports ?? []) as ReportRow[])
+    .filter(r => r.id !== inspection.id && compare(order(r), self) < 0)
+    .sort((a, b) => compare(order(a), order(b)))
+}
+
 export async function earlierNoteCount(
   supabase: SupabaseClient,
-  inspection: { id: string; project_id?: string | null; report_no?: string | null; date?: string | null; created_at?: string | null },
+  inspection: ThisReport,
 ): Promise<number> {
   try {
-    if (!inspection.project_id) return 0
-    const { data: reports } = await supabase
-      .from('inspections')
-      .select('id, report_no, date, created_at')
-      .eq('project_id', inspection.project_id)
-    const order = (r: any): [number, string, string] => {
-      const n = parseInt(String(r.report_no ?? '').replace(/\D/g, ''), 10)
-      return [Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER, String(r.date ?? ''), String(r.created_at ?? '')]
-    }
-    const before = (a: [number, string, string], b: [number, string, string]) =>
-      a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1] : a[2] < b[2]
-    const self = order(inspection)
-    const earlier = (reports ?? []).filter((r: any) => r.id !== inspection.id && before(order(r), self)).map((r: any) => r.id)
+    const earlier = (await earlierReports(supabase, inspection)).map(r => r.id)
     if (earlier.length === 0) return 0
     const { count } = await supabase
       .from('observations')
@@ -160,6 +196,104 @@ export async function earlierNoteCount(
     console.warn('[blocks] could not count earlier reports’ notes; numbering from 01:', err)
     return 0
   }
+}
+
+/**
+ * Items from the project's earlier reports to carry into this one's
+ * {{#open_items}} rows: every one still open, and those closed since the
+ * previous report's visit. Each keeps the Ref it had in its own report.
+ *
+ * When an item was closed comes from observations.closed_at, stamped by the
+ * database (web/sql/note_closed_at.sql). Until that has been run — and for
+ * items closed before it was — nothing counts as recently closed.
+ * An empty list on any failure: the rows are left out, nothing else changes.
+ */
+export async function loadPreviousItems(supabase: SupabaseClient, inspection: ThisReport): Promise<ObservationBlock[]> {
+  try {
+    const reports = await earlierReports(supabase, inspection)
+    if (reports.length === 0) return []
+    const ids = reports.map(r => r.id)
+
+    const columns = 'id, inspection_id, zone_id, zone_label, transcript, notes, report_text, severity'
+    let rows: any[] = []
+    let closedDates = true
+    const withClosed = await supabase.from('observations').select(`${columns}, closed_at`).in('inspection_id', ids).order('id', { ascending: true })
+    if (withClosed.error) {
+      // No closed_at column yet.
+      closedDates = false
+      const plain = await supabase.from('observations').select(columns).in('inspection_id', ids).order('id', { ascending: true })
+      if (plain.error) throw new Error(plain.error.message)
+      rows = plain.data ?? []
+    } else {
+      rows = withClosed.data ?? []
+    }
+
+    // Refs as each report numbered them: its notes in order, counted on
+    // from the reports before it (see earlierNoteCount).
+    const refOf = new Map<string, number>()
+    let running = 0
+    for (const report of reports) {
+      for (const note of rows.filter(n => n.inspection_id === report.id)) refOf.set(note.id, ++running)
+    }
+
+    const previousVisit = visitTime(reports[reports.length - 1])
+    const keep = rows.filter(n => {
+      if (statusOf(n.severity) === 'Open') return true
+      if (!closedDates || !n.closed_at) return false
+      return Date.parse(n.closed_at) > previousVisit
+    })
+    if (keep.length === 0) return []
+
+    const reportNo = new Map(reports.map(r => [r.id, String(r.report_no ?? '').trim()]))
+    const [drawings, updates] = await Promise.all([
+      loadNoteDrawings(supabase, keep).catch(() => new Map<string, NoteDrawing>()),
+      latestResponses(supabase, keep.map(n => n.id)),
+    ])
+    const lines = (text: string) => text.split('\n').map(l => l.trim()).filter(Boolean)
+
+    return keep
+      .sort((a, b) => (refOf.get(a.id) ?? 0) - (refOf.get(b.id) ?? 0))
+      .map(n => {
+        const d = drawings.get(n.id)
+        const no = reportNo.get(n.inspection_id)
+        return {
+          noteId: n.id,
+          ref: String(refOf.get(n.id) ?? 0).padStart(2, '0'),
+          title: noteLabel(n),
+          location: d ? [d.number, d.title].filter(Boolean).join(' · ') : '',
+          status: statusOf(n.severity),
+          finding: lines(String(n.report_text || n.transcript || n.notes || '').trim()),
+          action: [],
+          drawingRef: d ? [d.number, d.revision && `Rev ${d.revision}`].filter(Boolean).join(' ') : '',
+          fromReport: no ? `SR ${no}` : '',
+          closedOn: statusOf(n.severity) === 'Closed' && n.closed_at
+            ? new Date(n.closed_at).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Pacific/Auckland' })
+            : '',
+          update: updates.get(n.id) ?? '',
+          markFinding: false,
+        }
+      })
+  } catch (err) {
+    console.warn('[blocks] could not read earlier reports’ items; none carried forward:', err)
+    return []
+  }
+}
+
+/** Each item's most recent response with something written in it. */
+async function latestResponses(supabase: SupabaseClient, noteIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  if (noteIds.length === 0) return out
+  const { data, error } = await supabase
+    .from('note_responses')
+    .select('observation_id, comment, created_at')
+    .in('observation_id', noteIds)
+    .order('created_at', { ascending: false })
+  if (error) return out
+  for (const r of data ?? []) {
+    const comment = String(r.comment ?? '').trim()
+    if (comment && !out.has(r.observation_id)) out.set(r.observation_id, comment)
+  }
+  return out
 }
 
 /** The blocks for a report's notes, in note order. `finding` and `action`
@@ -378,7 +512,7 @@ function fillBlock(block: string, note: ObservationBlock, nextId: () => number, 
   let findingMarked = false
   xml = eachParagraphWith(xml, '{{finding}}', para => {
     // Only the first copy is marked: finalising reads one finding per note.
-    const bookmark = findingMarked ? undefined : { id: nextId(), name: findingBookmark(note.noteId) }
+    const bookmark = findingMarked || note.markFinding === false ? undefined : { id: nextId(), name: findingBookmark(note.noteId) }
     findingMarked = true
     return styledParagraphs(para, note.finding, bookmark)
   })
@@ -390,6 +524,9 @@ function fillBlock(block: string, note: ObservationBlock, nextId: () => number, 
     '{{location}}': note.location,
     '{{status}}': note.status,
     '{{drawing_ref}}': note.drawingRef,
+    '{{from_report}}': note.fromReport ?? '',
+    '{{closed_on}}': note.closedOn ?? '',
+    '{{update}}': note.update ?? '',
   }
   for (const [ph, value] of Object.entries(inline)) xml = xml.split(ph).join(esc(value))
   return xml
@@ -400,27 +537,32 @@ function fillBlock(block: string, note: ObservationBlock, nextId: () => number, 
  * Expects runs already merged (mergeRunsContainingPlaceholders) and content
  * controls flattened, so markers and placeholders are whole strings.
  */
-export function expandObservationBlocks(xml: string, notes: ObservationBlock[]): string {
+export function expandObservationBlocks(xml: string, notes: ObservationBlock[], previous: ObservationBlock[] = []): string {
   let id = 990000
   const nextId = () => id++
   const pageWidth = pageTextWidth(xml)
+  xml = expandBlocks(xml, BLOCK_START, BLOCK_END, notes, nextId, pageWidth)
+  // Items carried forward from earlier reports ({{#open_items}}).
+  return expandBlocks(xml, OPEN_ITEMS_START, OPEN_ITEMS_END, previous, nextId, pageWidth)
+}
 
+function expandBlocks(xml: string, start: string, end: string, notes: ObservationBlock[], nextId: () => number, pageWidth: number): string {
   // A summary table and the detailed blocks are two separate blocks, so
   // this repeats until none are left; the cap only guards a malformed file.
   for (let pass = 0; pass < 20; pass++) {
-    const startAt = xml.indexOf(BLOCK_START)
+    const startAt = xml.indexOf(start)
     if (startAt === -1) break
-    const endAt = xml.indexOf(BLOCK_END, startAt)
+    const endAt = xml.indexOf(end, startAt)
     const range = endAt === -1 ? null : blockRange(xml, startAt, endAt)
     if (!range) {
       // Unpaired or unreadable: drop the marker rather than print it.
-      console.warn('[blocks] {{#observations}} without a matching {{/observations}} — marker removed')
-      xml = xml.replace(BLOCK_START, '')
+      console.warn(`[blocks] ${start} without a matching ${end} — marker removed`)
+      xml = xml.replace(start, '')
       continue
     }
 
     let block = xml.slice(range.start, range.end)
-    block = removeMarker(removeMarker(block, BLOCK_START, range.siblings), BLOCK_END, range.siblings)
+    block = removeMarker(removeMarker(block, start, range.siblings), end, range.siblings)
 
     const copies = notes.map(note => fillBlock(block, note, nextId, pageWidth))
     // No notes, and the block was part of a cell: the cell still needs a
@@ -435,11 +577,14 @@ export function expandObservationBlocks(xml: string, notes: ObservationBlock[]):
 }
 
 /** Count fields, usable anywhere in the template. */
-export function observationCounts(notes: ObservationBlock[]): Record<string, string> {
+export function observationCounts(notes: ObservationBlock[], previous: ObservationBlock[] = []): Record<string, string> {
   const closed = notes.filter(n => n.status === 'Closed').length
+  const previousClosed = previous.filter(n => n.status === 'Closed').length
   return {
     '{{items_count}}': String(notes.length),
     '{{open_count}}': String(notes.length - closed),
     '{{closed_count}}': String(closed),
+    '{{carried_open_count}}': String(previous.length - previousClosed),
+    '{{carried_closed_count}}': String(previousClosed),
   }
 }

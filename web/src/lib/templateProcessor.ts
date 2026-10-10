@@ -3,7 +3,7 @@ import * as fs from 'fs/promises'
 import * as path from 'path'
 import AdmZip from 'adm-zip'
 import { fetchFromOurStorage } from '@/lib/storageFetch'
-import { BLOCK_START, expandObservationBlocks, observationCounts, type ObservationBlock } from '@/lib/observationBlocks'
+import { BLOCK_START, OPEN_ITEMS_START, expandObservationBlocks, observationCounts, type ObservationBlock } from '@/lib/observationBlocks'
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
@@ -53,6 +53,9 @@ export type TemplateData = {
    *  ({{#observations}} … {{/observations}}, lib/observationBlocks).
    *  Other templates ignore it. */
   observations?: ObservationBlock[]
+  /** Items from the project's earlier reports, still open or closed since
+   *  the last one ({{#open_items}}, loadPreviousItems). */
+  previousItems?: ObservationBlock[]
 }
 
 // ── XML Helpers ────────────────────────────────────────────────────────────────
@@ -330,7 +333,7 @@ export function fillTemplateBuffer(templateBuffer: Buffer, data: TemplateData): 
     '{{issued_to_emails}}': data.issued_to_emails || '',
     '{{date}}':            dateStr,
     '{{time}}':            data.time            || '',
-    ...observationCounts(data.observations ?? []),
+    ...observationCounts(data.observations ?? [], data.previousItems ?? []),
   }
 
   // Process document.xml: paragraph-level replacement first, then inline
@@ -345,11 +348,11 @@ export function fillTemplateBuffer(templateBuffer: Buffer, data: TemplateData): 
     // A template laid out one block per site note. Only such a template
     // takes this branch; every other one fills exactly as before. Content
     // controls come off first so a marker in one can't split a block.
-    if (xml.includes(BLOCK_START)) {
+    if (xml.includes(BLOCK_START) || xml.includes(OPEN_ITEMS_START)) {
       // Merged again keeping each line's text formatting, so a filled
       // finding looks like the placeholder did, not like its paragraph mark.
       xml = mergeRunsContainingPlaceholders(original, { textFormat: true })
-      xml = expandObservationBlocks(flattenContentControls(xml), data.observations ?? [])
+      xml = expandObservationBlocks(flattenContentControls(xml), data.observations ?? [], data.previousItems ?? [])
       changed = true
       console.log('[templateProcessor] Observation blocks filled:', (data.observations ?? []).length)
     }
