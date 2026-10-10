@@ -66,6 +66,7 @@ export const PLACEHOLDERS: PlaceholderDef[] = [
   { name: 'from_report', kind: 'block', description: 'In {{#open_items}} rows: the report the item was raised in, e.g. SR 002' },
   { name: 'closed_on', kind: 'block', description: 'In {{#open_items}} rows: when it was closed, e.g. 12 Oct 2026 — blank while open' },
   { name: 'update', kind: 'block', description: 'In {{#open_items}} rows: the latest response on the item' },
+  { name: 'carried_count', kind: 'data', description: 'How many items from earlier reports are listed — still open plus closed since the last report' },
   { name: 'carried_open_count', kind: 'data', description: 'How many items from earlier reports are still open' },
   { name: 'carried_closed_count', kind: 'data', description: 'How many items from earlier reports were closed since the last report' },
 ]

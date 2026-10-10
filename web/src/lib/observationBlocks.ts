@@ -584,6 +584,7 @@ export function observationCounts(notes: ObservationBlock[], previous: Observati
     '{{items_count}}': String(notes.length),
     '{{open_count}}': String(notes.length - closed),
     '{{closed_count}}': String(closed),
+    '{{carried_count}}': String(previous.length),
     '{{carried_open_count}}': String(previous.length - previousClosed),
     '{{carried_closed_count}}': String(previousClosed),
   }
