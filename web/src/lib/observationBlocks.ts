@@ -425,7 +425,7 @@ function removeMarker(block: string, marker: string, siblings: boolean): string 
   const tables = structure(block).filter(e => e.tag === 'w:tbl')
   let out = ''
   let last = 0
-  for (const m of block.matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)) {
+  for (const m of block.matchAll(/<w:p(?:\s[^>]*)?(?<!\/)>[\s\S]*?<\/w:p>/g)) {
     const para = m[0]
     if (!textOf(para).includes(marker)) continue
     const topLevel = !tables.some(t => t.start < m.index! && m.index! < t.end)
@@ -487,7 +487,7 @@ function widthAt(block: string, at: number, pageWidth: number): number {
 function eachParagraphWith(xml: string, placeholder: string, build: (para: string, at: number) => string): string {
   let out = ''
   let last = 0
-  for (const m of xml.matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)) {
+  for (const m of xml.matchAll(/<w:p(?:\s[^>]*)?(?<!\/)>[\s\S]*?<\/w:p>/g)) {
     if (!textOf(m[0]).includes(placeholder)) continue
     out += xml.slice(last, m.index!) + build(m[0], m.index!)
     last = m.index! + m[0].length
