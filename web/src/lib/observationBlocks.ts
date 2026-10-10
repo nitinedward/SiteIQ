@@ -295,7 +295,10 @@ function removeMarker(block: string, marker: string, siblings: boolean): string 
     const para = m[0]
     if (!textOf(para).includes(marker)) continue
     const topLevel = !tables.some(t => t.start < m.index! && m.index! < t.end)
-    const onlyMarker = !textOf(para).split(marker).join('').trim() && !para.includes('<w:drawing')
+    // A page break on the marker's line is how a template starts each note
+    // on a new page, so that paragraph stays (without the marker).
+    const onlyMarker = !textOf(para).split(marker).join('').trim()
+      && !para.includes('<w:drawing') && !/<w:br\b[^>]*w:type="page"/.test(para) && !para.includes('w:pageBreakBefore')
     out += block.slice(last, m.index!) + (siblings && topLevel && onlyMarker ? '' : para.split(marker).join(''))
     last = m.index! + para.length
   }
