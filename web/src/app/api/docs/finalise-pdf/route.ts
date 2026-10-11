@@ -9,6 +9,7 @@ import { PDFDocument } from 'pdf-lib'
 import { readAttachmentSelection } from '@/lib/attachmentSelection'
 import { drawingAssetStem } from '@/lib/drawingAssetName'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
+import { writeReportSummary } from '@/lib/reportSummary'
 
 // Drawing page sizes rarely change, so a warm instance keeps them: a finalise
 // otherwise re-downloads a 17MB sheet just to read its dimensions.
@@ -200,6 +201,21 @@ export async function POST(request: NextRequest) {
       console.log('[finalise-pdf] Report wording saved to notes:', wording.updated, '| unmatched:', wording.unmatched)
     } catch (err) {
       console.error('[finalise-pdf] Could not save report wording to notes:', err)
+    }
+
+    // The list's short description, rewritten from that final wording —
+    // unless an engineer edited it. Never blocks the finalise either.
+    try {
+      await writeReportSummary(
+        createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
+          (process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').replace(/^﻿/, '').trim()
+        ),
+        inspectionId,
+        { keepEdited: true },
+      )
+    } catch (err) {
+      console.error('[finalise-pdf] Could not rewrite the report description:', err)
     }
 
     return NextResponse.json({ success: true, pdfSize: pdfBuffer.length, wording, hotspots: { added: hotspots.added, reason: hotspots.reason } }, { headers: cors })
