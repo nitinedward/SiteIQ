@@ -49,13 +49,15 @@ export type ObservationBlock = {
   /** False for items from earlier reports: finalising reads back only this
    *  visit's notes, so only theirs are marked. */
   markFinding?: boolean
+  /** The finding in one short line, for a summary table ({{brief}}). */
+  brief?: string
 }
 
 export const OPEN_ITEMS_START = '{{#open_items}}'
 export const OPEN_ITEMS_END = '{{/open_items}}'
 
 /** Per-note placeholders, filled only inside a block. */
-export const BLOCK_FIELDS = ['ref', 'title', 'location', 'status', 'finding', 'action', 'drawing_ref', 'photos', 'markup', 'from_report', 'closed_on', 'update', 'ref_link', 'title_link', 'back_link'] as const
+export const BLOCK_FIELDS = ['ref', 'title', 'location', 'status', 'finding', 'action', 'drawing_ref', 'photos', 'markup', 'from_report', 'closed_on', 'update', 'ref_link', 'title_link', 'back_link', 'brief'] as const
 /** Only meaningful in {{#open_items}} rows. */
 export const OPEN_ITEM_FIELDS = ['from_report', 'closed_on', 'update'] as const
 /** Of those, the ones that replace the whole paragraph they sit in. */
@@ -255,19 +257,12 @@ export async function loadPreviousItems(
     if (reports.length === 0) return []
     const ids = reports.map(r => r.id)
 
-    const columns = 'id, inspection_id, zone_id, zone_label, transcript, notes, report_text, severity'
-    let rows: any[] = []
-    let closedDates = true
-    const withClosed = await supabase.from('observations').select(`${columns}, closed_at`).in('inspection_id', ids).order('id', { ascending: true })
-    if (withClosed.error) {
-      // No closed_at column yet.
-      closedDates = false
-      const plain = await supabase.from('observations').select(columns).in('inspection_id', ids).order('id', { ascending: true })
-      if (plain.error) throw new Error(plain.error.message)
-      rows = plain.data ?? []
-    } else {
-      rows = withClosed.data ?? []
-    }
+    // Every column, so closed_at and brief come along once their SQL has
+    // run (note_closed_at.sql, note_brief.sql) and are simply absent before.
+    const { data, error } = await supabase.from('observations').select('*').in('inspection_id', ids).order('id', { ascending: true })
+    if (error) throw new Error(error.message)
+    const rows: any[] = data ?? []
+    const closedDates = rows.length > 0 && 'closed_at' in rows[0]
 
     // Refs as each report numbered them: its notes in order, counted on
     // from the reports before it (see earlierNoteCount).
@@ -312,6 +307,7 @@ export async function loadPreviousItems(
             ? new Date(n.closed_at).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Pacific/Auckland' })
             : '',
           update: updates.get(n.id) ?? '',
+          brief: String(n.brief ?? '').trim() || shortBrief(String(n.report_text || n.transcript || n.notes || '')),
           markFinding: false,
         }
       })
@@ -341,10 +337,22 @@ async function latestResponses(supabase: SupabaseClient, noteIds: string[]): Pro
 /** The blocks for a report's notes, in note order. `finding` and `action`
  *  give each note's wording by its position; Refs start after `earlier`
  *  (see earlierNoteCount). */
+/**
+ * A finding cut to one short line, for {{brief}} when no AI-written one is
+ * to hand: its first sentence, at most 15 words.
+ */
+export function shortBrief(text: string): string {
+  const first = text.trim().split('\n')[0].split(/(?<=[.;!?])\s/)[0].trim().replace(/[.;]$/, '')
+  const words = first.split(/\s+/).filter(Boolean)
+  return words.length > 15 ? `${words.slice(0, 15).join(' ')}…` : words.join(' ')
+}
+
+/** The blocks for a report's notes. `brief` is the AI's one-line version
+ *  where there is one; otherwise the note's stored one, else shortBrief. */
 export async function buildObservationBlocks(
   supabase: SupabaseClient,
   notes: any[],
-  wording: (note: any, index: number) => { finding: string; action: string },
+  wording: (note: any, index: number) => { finding: string; action: string; brief?: string },
   earlier = 0,
 ): Promise<ObservationBlock[]> {
   let drawings = new Map<string, NoteDrawing>()
@@ -357,8 +365,9 @@ export async function buildObservationBlocks(
 
   return notes.map((note, i) => {
     const d = drawings.get(note.id)
-    const { finding, action } = wording(note, i)
+    const { finding, action, brief } = wording(note, i)
     return {
+      brief: brief?.trim() || String(note.brief ?? '').trim() || shortBrief(finding),
       noteId: note.id,
       ref: String(earlier + i + 1).padStart(2, '0'),
       title: noteLabel(note),
@@ -650,6 +659,7 @@ function fillBlock(block: string, note: ObservationBlock, nextId: () => number, 
     '{{from_report}}': note.fromReport ?? '',
     '{{closed_on}}': note.closedOn ?? '',
     '{{update}}': note.update ?? '',
+    '{{brief}}': note.brief ?? '',
   }
   for (const [ph, value] of Object.entries(inline)) xml = xml.split(ph).join(esc(value))
   return xml

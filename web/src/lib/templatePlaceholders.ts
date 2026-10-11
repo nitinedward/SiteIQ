@@ -66,6 +66,7 @@ export const PLACEHOLDERS: PlaceholderDef[] = [
   // too (Ref is the item's original one), plus these.
   // Links: the Ref or title as a link to the top of that note's page (the
   // block with its photos or markup), and a link back to the summary.
+  { name: 'brief', kind: 'block', description: 'The note’s finding in one short line (about 12 words) — for the summary table, where {{finding}} is too long' },
   { name: 'ref_link', kind: 'block', description: 'The note’s Ref as a link to its observation page — for the summary table' },
   { name: 'title_link', kind: 'block', description: 'The note’s title as a link to its observation page — for the summary table' },
   { name: 'back_link', kind: 'block', description: '“↑ Back to summary”, a link to the summary table — for each observation page' },
