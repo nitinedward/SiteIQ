@@ -286,6 +286,20 @@ export function checkTemplate(buffer: Buffer): TemplateCheck {
       message: `${[...outside].map(n => `{{${n}}}`).join(', ')} ${outside.size === 1 ? 'is' : 'are'} only filled inside an {{#observations}} or {{#open_items}} block, so would be printed as typed where ${outside.size === 1 ? 'it is' : 'they are'}.`,
     })
   }
+  // Links need somewhere to land.
+  const bodyText = bodyParas.map(p => p.text).join(' ')
+  if (/\{\{back_link\}\}/.test(bodyText) && !/\{\{(ref_link|title_link)\}\}/.test(bodyText)) {
+    issues.push({
+      severity: 'info',
+      message: '{{back_link}} links to the summary table, which is found by its {{ref_link}} or {{title_link}}. With neither in the template, the link has nowhere to go.',
+    })
+  }
+  if (/\{\{(ref_link|title_link)\}\}/.test(bodyText) && !/\{\{(photos|markup|back_link)\}\}/.test(bodyText)) {
+    issues.push({
+      severity: 'info',
+      message: '{{ref_link}} and {{title_link}} land on each note’s page — the {{#observations}} block with its {{photos}}, {{markup}} or {{back_link}}. The template has none of those, so the links have nowhere to go.',
+    })
+  }
   if (openItemFieldsInObservations.size > 0) {
     issues.push({
       severity: 'info',

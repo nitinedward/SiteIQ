@@ -63,6 +63,12 @@ export const PLACEHOLDERS: PlaceholderDef[] = [
   // {{/open_items}} around a table row repeats it for each one still open or
   // closed since the last report. The note placeholders above work there
   // too (Ref is the item's original one), plus these.
+  // Links: the Ref or title as a link to the top of that note's page (the
+  // block with its photos or markup), and a link back to the summary.
+  { name: 'ref_link', kind: 'block', description: 'The note’s Ref as a link to its observation page — for the summary table' },
+  { name: 'title_link', kind: 'block', description: 'The note’s title as a link to its observation page — for the summary table' },
+  { name: 'back_link', kind: 'block', description: '“↑ Back to summary”, a link to the summary table — for each observation page' },
+
   { name: 'from_report', kind: 'block', description: 'In {{#open_items}} rows: the report the item was raised in, e.g. SR 002' },
   { name: 'closed_on', kind: 'block', description: 'In {{#open_items}} rows: when it was closed, e.g. 12 Oct 2026 — blank while open' },
   { name: 'update', kind: 'block', description: 'In {{#open_items}} rows: the latest response on the item' },

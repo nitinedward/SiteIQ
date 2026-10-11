@@ -55,7 +55,7 @@ export const OPEN_ITEMS_START = '{{#open_items}}'
 export const OPEN_ITEMS_END = '{{/open_items}}'
 
 /** Per-note placeholders, filled only inside a block. */
-export const BLOCK_FIELDS = ['ref', 'title', 'location', 'status', 'finding', 'action', 'drawing_ref', 'photos', 'markup', 'from_report', 'closed_on', 'update'] as const
+export const BLOCK_FIELDS = ['ref', 'title', 'location', 'status', 'finding', 'action', 'drawing_ref', 'photos', 'markup', 'from_report', 'closed_on', 'update', 'ref_link', 'title_link', 'back_link'] as const
 /** Only meaningful in {{#open_items}} rows. */
 export const OPEN_ITEM_FIELDS = ['from_report', 'closed_on', 'update'] as const
 /** Of those, the ones that replace the whole paragraph they sit in. */
@@ -496,8 +496,89 @@ function eachParagraphWith(xml: string, placeholder: string, build: (para: strin
 }
 
 /** One note's copy of the block. */
-function fillBlock(block: string, note: ObservationBlock, nextId: () => number, pageWidth: number): string {
+// ── Links between the summary and each note's page ──────────────────────────
+// {{ref_link}} / {{title_link}} show the Ref or title as a link to the top of
+// that note's page — the block holding its {{photos}} or {{markup}} (or a
+// {{back_link}}). {{back_link}} links back to the table they sit in. Word
+// bookmarks inside paragraphs are the targets; the editor keeps those, and a
+// regeneration rebuilds them.
+
+const SUMMARY_ANCHOR = 'siteiq_summary'
+const BACK_TEXT = '↑ Back to summary'
+
+/** Where a link to a note's page lands. */
+export function noteAnchor(noteId: string): string {
+  return `siteiq_ob_${noteKey(noteId)}`
+}
+
+/** A note's own page: where its links land. */
+const isNotePage = (block: string) => /\{\{(photos|markup|back_link)\}\}/.test(block)
+const hasLinks = (block: string) => /\{\{(ref_link|title_link)\}\}/.test(block)
+
+type LinkState = { anchors: Set<string>; summaryPlaced: boolean }
+
+/** Run properties made blue and underlined, keeping Word's element order
+ *  (color before the size/spacing group, u after it). */
+function linkRunProps(rPr: string): string {
+  let inner = rPr.replace(/^<w:rPr>|<\/w:rPr>$/g, '')
+    .replace(/<w:color\b[^>]*\/>/g, '')
+    .replace(/<w:u\b[^>]*\/>/g, '')
+  const insertBefore = (el: string, after: string[]) => {
+    const at = after.map(t => inner.search(new RegExp(`<w:${t}\\b`))).filter(i => i >= 0).sort((a, b) => a - b)[0]
+    inner = at === undefined ? inner + el : inner.slice(0, at) + el + inner.slice(at)
+  }
+  const tail = ['effect', 'bdr', 'shd', 'fitText', 'vertAlign', 'rtl', 'cs', 'em', 'lang', 'eastAsianLayout', 'specVanish', 'oMath']
+  insertBefore('<w:color w:val="0563C1"/>', ['spacing', 'w', 'kern', 'position', 'sz', 'szCs', 'highlight', 'u', ...tail])
+  insertBefore('<w:u w:val="single"/>', tail)
+  return `<w:rPr>${inner}</w:rPr>`
+}
+
+/** Replaces `placeholder` in each run with `text` — as a link to `anchor`
+ *  when there is one, in the run's own formatting made blue and underlined. */
+function linkify(xml: string, placeholder: string, text: string, anchor: string | null): string {
+  return xml.replace(/<w:r(?:\s[^>]*)?>[\s\S]*?<\/w:r>/g, run => {
+    if (!run.includes(placeholder)) return run
+    const rPr = run.match(/<w:rPr>[\s\S]*?<\/w:rPr>/)?.[0] ?? ''
+    const runText = [...run.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g)].map(t => t[1]).join('')
+    const plain = (s: string) => (s ? `<w:r>${rPr}<w:t xml:space="preserve">${s}</w:t></w:r>` : '')
+    const linked = anchor
+      ? `<w:hyperlink w:anchor="${anchor}" w:history="1"><w:r>${linkRunProps(rPr)}<w:t xml:space="preserve">${esc(text)}</w:t></w:r></w:hyperlink>`
+      : plain(esc(text))
+    return runText.split(placeholder).map(plain).join(linked)
+  })
+}
+
+/** A zero-width bookmark at the start of the first paragraph with content
+ *  (a paragraph holding only a page break is passed over, so a jump lands
+ *  on the page, not before the break). */
+function anchorAtTop(xml: string, from: number, name: string, id: number): string {
+  const re = /<w:p(?:\s[^>]*)?(?<!\/)>[\s\S]*?<\/w:p>/g
+  re.lastIndex = from
+  let m: RegExpExecArray | null
+  while ((m = re.exec(xml))) {
+    const para = m[0]
+    if (/w:type="page"/.test(para) && !textOf(para).trim()) continue
+    const pPrEnd = para.indexOf('</w:pPr>')
+    const at = m.index + (pPrEnd === -1 ? para.indexOf('>') + 1 : pPrEnd + '</w:pPr>'.length)
+    return xml.slice(0, at) + `<w:bookmarkStart w:id="${id}" w:name="${name}"/><w:bookmarkEnd w:id="${id}"/>` + xml.slice(at)
+  }
+  return xml
+}
+
+function fillBlock(block: string, note: ObservationBlock, nextId: () => number, pageWidth: number, links: LinkState): string {
   let xml = block
+
+  // This visit's note, on its own page: where its links land (once).
+  const ownsPage = note.markFinding !== false
+  if (ownsPage && isNotePage(block) && !links.anchors.has(note.noteId)) {
+    links.anchors.add(note.noteId)
+    xml = anchorAtTop(xml, 0, noteAnchor(note.noteId), nextId())
+  }
+  // Items from earlier reports have no page in this report: plain text.
+  const target = ownsPage ? noteAnchor(note.noteId) : null
+  xml = linkify(xml, '{{ref_link}}', note.ref, target)
+  xml = linkify(xml, '{{title_link}}', note.title, target)
+  xml = linkify(xml, '{{back_link}}', BACK_TEXT, SUMMARY_ANCHOR)
 
   // Slots first, while the copy's cells still have their template widths.
   for (const kind of ['photos', 'markup'] as const) {
@@ -541,12 +622,13 @@ export function expandObservationBlocks(xml: string, notes: ObservationBlock[], 
   let id = 990000
   const nextId = () => id++
   const pageWidth = pageTextWidth(xml)
-  xml = expandBlocks(xml, BLOCK_START, BLOCK_END, notes, nextId, pageWidth)
+  const links: LinkState = { anchors: new Set(), summaryPlaced: false }
+  xml = expandBlocks(xml, BLOCK_START, BLOCK_END, notes, nextId, pageWidth, links)
   // Items carried forward from earlier reports ({{#open_items}}).
-  return expandBlocks(xml, OPEN_ITEMS_START, OPEN_ITEMS_END, previous, nextId, pageWidth)
+  return expandBlocks(xml, OPEN_ITEMS_START, OPEN_ITEMS_END, previous, nextId, pageWidth, links)
 }
 
-function expandBlocks(xml: string, start: string, end: string, notes: ObservationBlock[], nextId: () => number, pageWidth: number): string {
+function expandBlocks(xml: string, start: string, end: string, notes: ObservationBlock[], nextId: () => number, pageWidth: number, links: LinkState): string {
   // A summary table and the detailed blocks are two separate blocks, so
   // this repeats until none are left; the cap only guards a malformed file.
   for (let pass = 0; pass < 20; pass++) {
@@ -564,14 +646,23 @@ function expandBlocks(xml: string, start: string, end: string, notes: Observatio
     let block = xml.slice(range.start, range.end)
     block = removeMarker(removeMarker(block, start, range.siblings), end, range.siblings)
 
-    const copies = notes.map(note => fillBlock(block, note, nextId, pageWidth))
+    const copies = notes.map(note => fillBlock(block, note, nextId, pageWidth, links))
     // No notes, and the block was part of a cell: the cell still needs a
     // paragraph.
     if (copies.length === 0 && range.inCell) copies.push('<w:p/>')
     // Two tables side by side merge into one in Word, so whole-table blocks
     // are kept apart by an empty paragraph.
     const apart = block.trimStart().startsWith('<w:tbl') && block.trimEnd().endsWith('</w:tbl>')
+    // The first block with Ref or title links is the summary: "Back to
+    // summary" lands at the top of the table it is in (its header row).
+    const summaryAt = !links.summaryPlaced && hasLinks(block)
+      ? (ancestors(structure(xml), range.start).filter(e => e.tag === 'w:tbl').pop()?.start ?? range.start)
+      : null
     xml = xml.slice(0, range.start) + copies.join(apart ? '<w:p/>' : '') + xml.slice(range.end)
+    if (summaryAt !== null) {
+      xml = anchorAtTop(xml, summaryAt, SUMMARY_ANCHOR, nextId())
+      links.summaryPlaced = true
+    }
   }
   return xml
 }
