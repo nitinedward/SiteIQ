@@ -46,7 +46,7 @@ export function SyncStatus({ always = false }: { always?: boolean }) {
 
   const onPress = () => {
     if (s.failed > 0) router.push('/(tabs)/profile')
-    else if (s.waiting > 0 && s.online) syncNow()
+    else if (s.waiting > 0 && s.online) syncNow(true)
   }
 
   return (

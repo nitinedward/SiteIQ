@@ -17,7 +17,7 @@ import {
   deleteRow, getMeta, getRow, getRows, putRow, replaceRows, serverFields, setMeta, db,
 } from './db'
 import { discardFile, isLocal } from './files'
-import { isOnline, withTimeout } from './net'
+import { isConnectionError, isOnline, markUnreachable, withTimeout } from './net'
 import { dropInspection, dropTarget, enqueue, neverSent } from './outbox'
 
 const READ_MS = 12_000
@@ -27,9 +27,14 @@ export type Fresh<T> = ((value: T) => void) | undefined
 /** Runs a server query; throws on any error, so a failed refresh never
  *  wipes what's on the phone. */
 async function q<T>(query: PromiseLike<{ data: T | null; error: any }>): Promise<T> {
-  const { data, error } = await withTimeout(query, READ_MS)
-  if (error) throw new Error(error.message)
-  return (data ?? []) as T
+  try {
+    const { data, error } = await withTimeout(query, READ_MS)
+    if (error) throw new Error(error.message)
+    return (data ?? []) as T
+  } catch (err) {
+    if (isConnectionError(err)) markUnreachable()
+    throw err
+  }
 }
 
 async function read<T>(

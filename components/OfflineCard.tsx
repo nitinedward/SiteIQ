@@ -57,7 +57,7 @@ export default function OfflineCard() {
       <SyncStatus always />
 
       {status.waiting > 0 && status.online && !status.uploading && (
-        <TouchableOpacity style={S.button} onPress={() => syncNow()} activeOpacity={0.8}>
+        <TouchableOpacity style={S.button} onPress={() => syncNow(true)} activeOpacity={0.8}>
           <Text style={S.buttonText}>Upload now</Text>
         </TouchableOpacity>
       )}
@@ -68,7 +68,7 @@ export default function OfflineCard() {
           {failed.slice(0, 5).map(op => (
             <Text key={op.seq} style={S.failLine} numberOfLines={2}>• {WHAT[op.kind] ?? op.kind}: {op.last_error}</Text>
           ))}
-          <TouchableOpacity onPress={() => retryFailed().then(() => syncNow())} activeOpacity={0.7}>
+          <TouchableOpacity onPress={() => retryFailed().then(() => syncNow(true))} activeOpacity={0.7}>
             <Text style={S.retry}>Try again</Text>
           </TouchableOpacity>
         </View>

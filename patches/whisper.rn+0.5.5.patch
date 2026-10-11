@@ -1,0 +1,29 @@
+diff --git a/node_modules/whisper.rn/android/src/main/jni.cpp b/node_modules/whisper.rn/android/src/main/jni.cpp
+index b1fa548..2f35377 100644
+--- a/node_modules/whisper.rn/android/src/main/jni.cpp
++++ b/node_modules/whisper.rn/android/src/main/jni.cpp
+@@ -351,6 +351,9 @@ struct whisper_full_params createFullParams(JNIEnv *env, jobject options) {
+     if (offset > -1) params.offset_ms = offset;
+     int duration = readablemap::getInt(env, options, "duration", -1);
+     if (duration > -1) params.duration_ms = duration;
++    // SiteIQ: process only as much of the 30 s window as was spoken (faster for short notes).
++    int audio_ctx = readablemap::getInt(env, options, "audioCtx", -1);
++    if (audio_ctx > 0) params.audio_ctx = audio_ctx;
+     int word_thold = readablemap::getInt(env, options, "wordThold", -1);
+     if (word_thold > -1) params.thold_pt = word_thold;
+     float temperature = readablemap::getFloat(env, options, "temperature", -1);
+diff --git a/node_modules/whisper.rn/ios/RNWhisperContext.mm b/node_modules/whisper.rn/ios/RNWhisperContext.mm
+index 13a880f..3280d4e 100644
+--- a/node_modules/whisper.rn/ios/RNWhisperContext.mm
++++ b/node_modules/whisper.rn/ios/RNWhisperContext.mm
+@@ -553,6 +553,10 @@ struct rnwhisper_segments_callback_data {
+     if (options[@"duration"] != nil) {
+         params.duration_ms = [options[@"duration"] intValue];
+     }
++    // SiteIQ: process only as much of the 30 s window as was spoken (faster for short notes).
++    if (options[@"audioCtx"] != nil && [options[@"audioCtx"] intValue] > 0) {
++        params.audio_ctx = [options[@"audioCtx"] intValue];
++    }
+     if (options[@"wordThold"] != nil) {
+         params.thold_pt = [options[@"wordThold"] intValue];
+     }

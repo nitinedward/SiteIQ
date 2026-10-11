@@ -11,7 +11,7 @@ import { AppState } from 'react-native'
 import { supabase } from '../supabase'
 import { db, getRow, putRow, type Table } from './db'
 import { ensureUploaded, isLocal, PermanentError } from './files'
-import { isOnline, onConnectivity, startNetworkWatch, withTimeout } from './net'
+import { isConnectionError, isOnline, markReachable, markUnreachable, onConnectivity, startNetworkWatch, withTimeout } from './net'
 import {
   completeOp, hasPending, nextOp, onOutboxChange, queueCounts, recordFailure, setInFlight,
   type Op, type QueueCounts,
@@ -57,9 +57,26 @@ async function refreshCounts() {
 let running: Promise<void> | null = null
 let again = false
 let timer: ReturnType<typeof setTimeout> | null = null
+/** After a failed attempt, the next waits longer: 30 s, doubling to 5 min,
+ *  so a dead connection isn't hammered (and the battery isn't drained).
+ *  A new connection, the app coming back to the front, or "Upload now"
+ *  tries straight away. */
+let backoffMs = 0
+let notBefore = 0
+const BACKOFF_MIN = 30_000
+const BACKOFF_MAX = 300_000
 
-/** Starts an upload pass, or queues one after the pass already running. */
-export function syncNow(): Promise<void> {
+function failedAttempt() {
+  backoffMs = backoffMs ? Math.min(BACKOFF_MAX, backoffMs * 2) : BACKOFF_MIN
+  notBefore = Date.now() + backoffMs
+  syncSoon(backoffMs + 200)
+}
+
+/** Starts an upload pass, or queues one after the pass already running.
+ *  `force` ignores the wait after a failure. */
+export function syncNow(force = false): Promise<void> {
+  if (force) { backoffMs = 0; notBefore = 0 }
+  if (!force && Date.now() < notBefore) return Promise.resolve()
   if (running) { again = true; return running }
   running = (async () => {
     try {
@@ -84,9 +101,9 @@ export function startSync(): void {
   if (started) return
   started = true
   startNetworkWatch()
-  onConnectivity(online => { setStatus({ online }); if (online) syncSoon(1500) })
-  onOutboxChange(() => { refreshCounts().catch(() => {}); syncSoon() })
-  AppState.addEventListener('change', s => { if (s === 'active') syncSoon(500) })
+  onConnectivity(online => { setStatus({ online }); if (online) { backoffMs = 0; notBefore = 0; syncSoon(1500) } })
+  onOutboxChange(() => { refreshCounts().catch(() => {}); if (Date.now() >= notBefore) syncSoon() })
+  AppState.addEventListener('change', s => { if (s === 'active') { backoffMs = 0; notBefore = 0; syncSoon(500) } })
   setInterval(() => { if (status.waiting > 0 && isOnline()) syncNow() }, 60_000)
   // Signing in (or the token refreshing) can unblock waiting changes.
   supabase.auth.onAuthStateChange(event => {
@@ -111,12 +128,16 @@ async function pass(): Promise<void> {
         await run(op)
         await completeOp(op.seq)
         await markSynced(op)
+        markReachable()
+        backoffMs = 0
         setStatus({ problem: null })
       } catch (err: any) {
         const permanent = err instanceof PermanentError
         console.warn(`[sync] ${op.kind} ${op.target}:`, err?.message ?? err)
+        if (!permanent && isConnectionError(err)) markUnreachable()
         await recordFailure(op.seq, err?.message ?? String(err), permanent)
         setStatus({ problem: permanent ? `Couldn't upload a change: ${err?.message}` : 'Waiting for a better signal…' })
+        failedAttempt()
         break
       } finally {
         setInFlight(null)

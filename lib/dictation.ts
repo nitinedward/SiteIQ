@@ -20,7 +20,7 @@ import LiveAudioStream from '@fugood/react-native-audio-pcm-stream'
 import { isModelReady, whisperContext } from './whisperModel'
 import { transcribeAudio } from './transcribe'
 import { whisperPrompt } from './vocabulary'
-import { isOnline } from './offline/net'
+import { isConnectionError, isOnline, markReachable, markUnreachable } from './offline/net'
 
 const SAMPLE_RATE = 16000
 const BYTES_PER_SECOND = SAMPLE_RATE * 2 // mono, 16-bit
@@ -31,6 +31,10 @@ const DIR = `${FileSystem.documentDirectory}recordings/`
 const SERVER_MAX_BYTES = 4_300_000
 /** How long the server has before the phone starts transcribing as well. */
 const SERVER_HEAD_START_MS = 15_000
+/** Recordings up to this long are transcribed on the phone with a window
+ *  cut to their length rather than Whisper's full 30 s — several times
+ *  faster for a short note. Longer ones use the full window. */
+const SHORT_WINDOW_MAX_S = 20
 
 export type Transcription = {
   /** What was said; '' when nothing could be made out. */
@@ -153,6 +157,7 @@ export async function transcribeRecording(
   const info = await FileSystem.getInfoAsync(audioUri)
   if (!info.exists) return { text: '', engine: 'phone', error: 'The recording is no longer on the phone.' }
   const size = info.size ?? 0
+  const seconds = Math.max(0, size - 44) / BYTES_PER_SECOND
   const serverUsable = isOnline() && size <= SERVER_MAX_BYTES
   const phoneReady = await isModelReady()
 
@@ -164,12 +169,17 @@ export async function transcribeRecording(
         : 'No signal, and offline transcription isn\'t on this phone yet. The recording is kept with the note and will be transcribed when there\'s signal.',
     }
   }
-  if (!serverUsable) return onPhone(audioUri, context, onStage)
+  if (!serverUsable) return onPhone(audioUri, seconds, context, onStage)
 
   const abort = new AbortController()
   onStage?.({ engine: 'server' })
   const server: Promise<Transcription> = transcribeAudio(audioUri, 'audio/wav', abort.signal)
-    .then(text => ({ text: cleanTranscript(text), engine: 'server' as const }))
+    .then(text => { markReachable(); return { text: cleanTranscript(text), engine: 'server' as const } })
+    .catch(err => {
+      // No connection after all: the next recording goes straight to the phone.
+      if (!abort.signal.aborted && isConnectionError(err)) markUnreachable()
+      throw err
+    })
 
   if (!phoneReady) {
     return server.catch((err: any) => ({
@@ -183,11 +193,12 @@ export async function transcribeRecording(
     server.then(v => ({ ok: true as const, v }), () => ({ ok: false as const })),
     new Promise<'slow'>(resolve => setTimeout(() => resolve('slow'), SERVER_HEAD_START_MS)),
   ])
-  if (early !== 'slow') return early.ok ? early.v : onPhone(audioUri, context, onStage)
+  if (early !== 'slow') return early.ok ? early.v : onPhone(audioUri, seconds, context, onStage)
 
   // Slow: the phone starts too, and the first to finish is used.
   let stopPhone: (() => void) | null = null
-  const phone = onPhone(audioUri, context, onStage, stop => { stopPhone = stop })
+  markUnreachable() // fifteen seconds without an answer: treat the signal as unusable for now
+  const phone = onPhone(audioUri, seconds, context, onStage, stop => { stopPhone = stop })
   const winner = await firstSuccess(server, phone)
   if (winner.engine === 'server') (stopPhone as (() => void) | null)?.()
   else abort.abort()
@@ -207,8 +218,18 @@ function firstSuccess(server: Promise<Transcription>, phone: Promise<Transcripti
 /** On-phone transcriptions run one at a time — the model can only do one. */
 let phoneQueue: Promise<unknown> = Promise.resolve()
 
+/** Whisper's window, in its units (50 per second), for a short recording:
+ *  its length plus a margin, in steps of 64, never below 384 — smaller
+ *  windows make it repeat itself. */
+function windowFor(seconds: number): number | undefined {
+  if (seconds > SHORT_WINDOW_MAX_S) return undefined
+  const units = Math.ceil(((seconds + 1.5) * 50) / 64) * 64
+  return Math.min(1500, Math.max(384, units))
+}
+
 function onPhone(
   audioUri: string,
+  seconds: number,
   context: string[],
   onStage?: (stage: Stage) => void,
   register?: (stop: () => void) => void,
@@ -221,14 +242,18 @@ function onPhone(
     if (!whisper) return { text: '', engine: 'phone', error: 'Could not load offline transcription on this phone. The recording is kept with the note.' }
     onStage?.({ engine: 'phone', progress: 0 })
     try {
+      const started = Date.now()
       const { stop, promise } = whisper.transcribe(audioUri, {
         language: 'en',
         prompt: whisperPrompt(context),
         onProgress: (p: number) => onStage?.({ engine: 'phone', progress: p / 100 }),
+        // Passed through by our patch (patches/whisper.rn+*.patch).
+        ...({ audioCtx: windowFor(seconds) } as object),
       })
       register?.(() => { cancelled = true; stop().catch(() => {}) })
       const { result, isAborted } = await promise
       if (isAborted || cancelled) return { text: '', engine: 'phone', error: 'Cancelled' }
+      console.log(`[dictation] ${seconds.toFixed(1)}s on the phone in ${((Date.now() - started) / 1000).toFixed(1)}s (window ${windowFor(seconds) ?? 1500})`)
       return { text: cleanTranscript(result), engine: 'phone' }
     } catch (err: any) {
       console.warn('[dictation] on-phone transcription failed:', err)

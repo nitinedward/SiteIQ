@@ -10,6 +10,11 @@ import * as Network from 'expo-network'
 
 let online = true
 let wifi = false
+/** Until when the phone is treated as offline although it reports a
+ *  connection: a request just failed for want of one (Wi-Fi without
+ *  internet, a signal too weak to use). */
+let unreachableUntil = 0
+const UNREACHABLE_MS = 60_000
 let started = false
 const listeners = new Set<(online: boolean) => void>()
 
@@ -17,6 +22,8 @@ function apply(s: Network.NetworkState) {
   const was = online
   online = s.isConnected !== false && s.isInternetReachable !== false && s.type !== Network.NetworkStateType.NONE
   wifi = s.type === Network.NetworkStateType.WIFI
+  // A change of network is a fresh chance; the next request will tell.
+  if (online && !was) unreachableUntil = 0
   if (online !== was) listeners.forEach(l => l(online))
 }
 
@@ -27,8 +34,31 @@ export function startNetworkWatch(): void {
   Network.addNetworkStateListener(apply)
 }
 
-export function isOnline(): boolean { return online }
-export function isWifi(): boolean { return online && wifi }
+export function isOnline(): boolean { return online && Date.now() >= unreachableUntil }
+export function isWifi(): boolean { return isOnline() && wifi }
+
+/** Called when a request fails for lack of a connection, so for the next
+ *  minute nothing waits on the server first (dictation goes straight to
+ *  the phone). */
+export function markUnreachable(): void {
+  if (!online || Date.now() < unreachableUntil) return
+  unreachableUntil = Date.now() + UNREACHABLE_MS
+  listeners.forEach(l => l(false))
+  setTimeout(() => { if (online && Date.now() >= unreachableUntil) listeners.forEach(l => l(true)) }, UNREACHABLE_MS + 100)
+}
+
+/** Called when a request gets through. */
+export function markReachable(): void {
+  if (unreachableUntil === 0) return
+  unreachableUntil = 0
+  if (online) listeners.forEach(l => l(true))
+}
+
+/** Whether an error means "no connection" rather than a server refusal. */
+export function isConnectionError(err: unknown): boolean {
+  const m = String((err as any)?.message ?? err ?? '')
+  return /network request failed|failed to fetch|network error|timed? ?out|too slow|could not reach|aborted|no response/i.test(m)
+}
 
 /** Follows the connection; returns the unsubscribe. */
 export function onConnectivity(listener: (online: boolean) => void): () => void {
