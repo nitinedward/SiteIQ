@@ -141,7 +141,8 @@ export default function RecorderScreen() {
       setIsTranscribing(true);
       try {
         // This screen only shows the text, so the recording isn't kept.
-        const { text, audioUri: uri, error } = await recording.stop();
+        const { audioUri: uri, transcription } = await recording.stop();
+        const { text, error } = await transcription;
         await deleteRecording(uri);
         setAudioUri(uri);
         if (error) {

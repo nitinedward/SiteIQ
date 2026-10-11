@@ -1,27 +1,29 @@
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, KeyboardAvoidingView, Platform, Alert,
-  ActivityIndicator, Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase } from '../lib/supabase';
 import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { theme } from '../lib/theme'
 import { latestRevisions } from '../lib/drawingRevisions';
-import { startDictation, deleteRecording, type Dictation } from '../lib/dictation';
+import { startDictation, deleteRecording, type Dictation, type Stage } from '../lib/dictation';
 import { consumePendingDrawingSelection } from '../lib/pendingSelection';
-import { deleteSiteNote } from '../lib/siteNotes';
+import {
+  createInspection, deleteObservation, getInspection, listDrawings, listObservations,
+  myId, nextReportNo, updateInspection,
+} from '../lib/offline/store';
+import { Waveform, useLevel } from '../components/Waveform';
+import { SyncStatus } from '../components/SyncStatus';
 
 const T = theme.colors;
 const R = theme.radius;
 
 const SITE_CONTACT_KEY  = 'last_site_contact';
 const CONTACT_PHONE_KEY = 'last_contact_phone';
-
-const BAR_COUNT = 24;
 
 const WEATHER_OPTIONS = [
   { label: 'Fine',         icon: '☀️' },
@@ -36,57 +38,8 @@ type Step = 'details' | 'capture';
 type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; preview_url: string | null; created_at: string };
 type GeneralObservation = { id: string; notes: string | null; transcript: string | null; report_text?: string | null; severity: string | null; observed_at: string; zone_label: string | null };
 
-function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; metering: number }) {
-  const barAnims = useRef(Array.from({ length: BAR_COUNT }, () => new Animated.Value(0.05))).current;
-  const timeRef = useRef(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Read by the running animation, so a new level doesn't restart it.
-  const meteringRef = useRef(metering);
-  meteringRef.current = metering;
-
-  useEffect(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(() => {
-      timeRef.current += 1;
-      barAnims.forEach((anim, index) => {
-        let targetValue: number;
-        if (isRecording) {
-          const normalised = Math.max(0, Math.min(1, (meteringRef.current + 50) / 40));
-          const wave = Math.sin(timeRef.current * 0.4 + index * 0.6) * 0.15;
-          const centreBoost = 1 - Math.abs(index - BAR_COUNT / 2) / (BAR_COUNT / 2) * 0.4;
-          targetValue = Math.max(0.05, (normalised + wave) * centreBoost);
-        } else {
-          const wave = Math.sin(timeRef.current * 0.15 + index * 0.5);
-          targetValue = 0.05 + (wave + 1) / 2 * 0.04;
-        }
-        Animated.spring(anim, { toValue: targetValue, useNativeDriver: false, speed: 60, bounciness: 0 }).start();
-      });
-    }, 80);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [isRecording]);
-
-  return (
-    <View style={waveStyles.container}>
-      {barAnims.map((anim, index) => (
-        <Animated.View key={index} style={[waveStyles.bar, {
-          height: anim.interpolate({ inputRange: [0, 1], outputRange: [3, 48] }),
-          backgroundColor: isRecording
-            ? anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['#FCE8C2', '#F5A524', '#F5A524'] })
-            : T.line,
-          opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }),
-        }]} />
-      ))}
-    </View>
-  );
-}
-
-const waveStyles = StyleSheet.create({
-  container: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 56, gap: 3, paddingHorizontal: 8 },
-  bar: { width: 3, borderRadius: 2 },
-});
-
 export default function SessionScreen() {
-  const { project_id, project_name } = useLocalSearchParams();
+  const { project_id, project_name, inspection_id: resumeId } = useLocalSearchParams();
   const [step, setStep]                 = useState<Step>('details');
   const [isSaving, setIsSaving]         = useState(false);
   const [inspectionId, setInspectionId] = useState<string | null>(null);
@@ -104,7 +57,8 @@ export default function SessionScreen() {
   const [generalObservations, setGeneralObservations] = useState<GeneralObservation[]>([]);
   const [isRecording, setIsRecording]       = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [level, setLevel]                   = useState(-60);
+  const [stage, setStage]                   = useState<Stage | null>(null);
+  const level                                = useLevel();
   const dictationRef                         = useRef<Dictation | null>(null);
   const startingRef                          = useRef(false);
 
@@ -113,13 +67,33 @@ export default function SessionScreen() {
   const nowTime    = new Date().toLocaleTimeString('en-NZ', { hour: '2-digit', minute: '2-digit' });
 
   useEffect(() => {
-    loadSavedDetails();
-    generateReportNumber();
+    if (resumeId) resumeVisit(String(resumeId));
+    else { loadSavedDetails(); generateReportNumber(); }
     fetchDrawings();
     return () => {
       dictationRef.current?.cancel().catch(() => {});
     };
   }, []);
+
+  // A visit continued from the project page: straight back to capturing,
+  // with the drawings it had open.
+  const resumeVisit = async (id: string) => {
+    const row = await getInspection(id);
+    if (!row) { Alert.alert('Visit not found', 'This visit is no longer on the phone.'); router.back(); return; }
+    setInspectionId(row.id);
+    setReportNo(row.report_no ?? '');
+    setWeather(row.weather || 'Fine');
+    setSiteContact(row.site_contact ?? '');
+    setContactPhone(row.contact_phone ?? '');
+    setPurpose(row.purpose ?? '');
+    if (row.start_time) setStartTime(row.start_time);
+    const drawings = await listDrawings(String(project_id));
+    const byNumber = String(row.drawing_ref ?? '').split(',').map((x: string) => x.trim()).filter(Boolean);
+    setSelectedDrawings(Array.isArray(row._selected_drawings)
+      ? row._selected_drawings
+      : drawings.filter(d => byNumber.includes(d.number || d.title)).map(d => d.id));
+    setStep('capture');
+  };
 
   const loadSavedDetails = async () => {
     const sc = await SecureStore.getItemAsync(SITE_CONTACT_KEY);
@@ -128,15 +102,15 @@ export default function SessionScreen() {
     if (cp) setContactPhone(cp);
   };
 
+  // Worked out on the phone when offline; the upload moves it on if
+  // another visit took the number meanwhile (lib/offline/sync).
   const generateReportNumber = async () => {
-    const { count } = await supabase.from('inspections').select('*', { count: 'exact', head: true }).eq('project_id', String(project_id));
-    setReportNo(((count ?? 0) + 1).toString().padStart(3, '0'));
+    setReportNo(await nextReportNo(String(project_id)));
   };
 
   const fetchDrawings = async () => {
-    const { data, error } = await supabase.from('drawings').select('id,title,number,revision,file_url,preview_url,created_at').eq('project_id', String(project_id)).order('number', { ascending: true });
-    console.log('[fetchDrawings] project_id:', project_id, 'rows:', data?.length ?? 0, 'error:', error);
-    setAllDrawings(data as Drawing[] ?? []);
+    const byNumber = (rows: Drawing[]) => setAllDrawings([...rows].sort((a, b) => String(a.number ?? '').localeCompare(String(b.number ?? ''), undefined, { numeric: true })));
+    byNumber(await listDrawings(String(project_id), byNumber));
   };
 
   const toggleDrawing = (id: string) => setSelectedDrawings(curr => curr.includes(id) ? curr.filter(d => d !== id) : [...curr, id]);
@@ -146,9 +120,15 @@ export default function SessionScreen() {
     if (pending) setSelectedDrawings(pending);
   }, []));
 
+  // The visit remembers its drawings on the phone, so continuing it later
+  // reopens them.
+  useEffect(() => {
+    if (inspectionId) updateInspection(inspectionId, { _selected_drawings: selectedDrawings }).catch(() => {});
+  }, [inspectionId, selectedDrawings]);
+
   const fetchGeneralObservations = async (id: string) => {
-    const { data } = await supabase.from('observations').select('*').eq('inspection_id', id).is('zone_id', null).order('observed_at', { ascending: false });
-    setGeneralObservations((data as GeneralObservation[]) ?? []);
+    const general = (rows: any[]) => setGeneralObservations(rows.filter(o => !o.zone_id) as GeneralObservation[]);
+    general(await listObservations(id, general));
   };
   useFocusEffect(useCallback(() => {
     if (inspectionId) fetchGeneralObservations(inspectionId);
@@ -160,7 +140,7 @@ export default function SessionScreen() {
     if (startingRef.current) return
     startingRef.current = true
     try {
-      dictationRef.current = await startDictation({ onLevel: setLevel })
+      dictationRef.current = await startDictation({ onLevel: v => level.setValue(v) })
       setIsRecording(true)
     } catch (err: any) {
       console.error('[dictate] Start error:', err)
@@ -175,12 +155,13 @@ export default function SessionScreen() {
     const dictation = dictationRef.current
     dictationRef.current = null
     setIsRecording(false)
-    setLevel(-60)
+    level.setValue(0)
     if (!dictation) return
     setIsTranscribing(true)
     try {
-      const { text, audioUri, error } = await dictation.stop()
-      await deleteRecording(audioUri)
+      const recording = await dictation.stop({ onStage: setStage })
+      const { text, error } = await recording.transcription
+      await deleteRecording(recording.audioUri)
       if (error) Alert.alert('Transcription Failed', 'Could not transcribe the recording. Please try again, or type the purpose.')
       else if (text) setPurpose(prev => prev ? prev + ' ' + text : text)
       else Alert.alert('No Speech Detected', 'Could not detect speech. Please speak clearly and try again.')
@@ -189,41 +170,59 @@ export default function SessionScreen() {
       Alert.alert('Transcription Failed', err.message || 'Please try again.')
     } finally {
       setIsTranscribing(false)
+      setStage(null)
     }
   };
 
-
-
   const toggleRecording = () => { if (isRecording) stopRecording(); else startRecording(); };
 
-  const handleBack = () => Alert.alert('Leave Inspection?', 'Your inspection details will be lost.', [
-    { text: 'Stay', style: 'cancel' },
-    { text: 'Leave', style: 'destructive', onPress: () => router.back() },
-  ]);
+  const handleBack = () => inspectionId
+    ? Alert.alert('Leave this visit?', 'It stays on the phone — continue it from the project page.', [
+        { text: 'Stay', style: 'cancel' },
+        { text: 'Leave', onPress: () => router.back() },
+      ])
+    : Alert.alert('Leave Inspection?', 'Your inspection details will be lost.', [
+        { text: 'Stay', style: 'cancel' },
+        { text: 'Leave', style: 'destructive', onPress: () => router.back() },
+      ]);
 
   const startCapturing = async () => {
     setIsSaving(true);
     if (siteContact.trim()) await SecureStore.setItemAsync(SITE_CONTACT_KEY, siteContact.trim());
     if (contactPhone.trim()) await SecureStore.setItemAsync(CONTACT_PHONE_KEY, contactPhone.trim());
     const drawingRef = allDrawings.filter(d => selectedDrawings.includes(d.id)).map(d => d.number || d.title).join(', ');
-    // Recorded so the report can print who carried out the inspection.
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase.from('inspections').insert({
-      project_id: String(project_id), date: todayShort, start_time: startTime.trim(), weather, created_by: user?.id ?? null,
+    const details = {
+      start_time: startTime.trim(), weather,
       site_contact: siteContact.trim(), contact_phone: contactPhone.trim(),
-      drawing_ref: drawingRef, report_no: reportNo.trim(), purpose: purpose.trim(), status: 'IN_PROGRESS',
-    }).select().single();
-    setIsSaving(false);
-    if (error) { Alert.alert('Error', 'Could not start inspection.'); return; }
-    setInspectionId(data.id); setStep('capture');
+      drawing_ref: drawingRef, purpose: purpose.trim(),
+    };
+    try {
+      if (inspectionId) {
+        // Back from capturing to change the details: the same visit.
+        await updateInspection(inspectionId, details);
+      } else {
+        // Saved on the phone and uploaded when there's signal. Recorded
+        // with who carried it out, for the report.
+        const row = await createInspection({
+          ...details, project_id: String(project_id), date: todayShort, created_by: await myId(),
+          report_no: reportNo.trim(), status: 'IN_PROGRESS', _selected_drawings: selectedDrawings,
+        });
+        setInspectionId(row.id);
+      }
+      setStep('capture');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Could not start inspection.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const completeSession = async () => {
     Alert.alert('Complete Inspection?', 'Are you ready to complete this session?', [
       { text: 'Keep Capturing', style: 'cancel' },
       { text: 'Complete', onPress: async () => {
-        if (inspectionId) await supabase.from('inspections').update({ status: 'COMPLETED' }).eq('id', inspectionId);
-        Alert.alert('Session Complete', 'Your inspection has been saved.', [{ text: 'OK', onPress: () => router.replace('/(tabs)/projects') }]);
+        if (inspectionId) await updateInspection(inspectionId, { status: 'COMPLETED' });
+        Alert.alert('Session Complete', 'Your inspection has been saved. It uploads whenever there\'s signal.', [{ text: 'OK', onPress: () => router.replace('/(tabs)/projects') }]);
       }},
     ]);
   };
@@ -305,8 +304,12 @@ export default function SessionScreen() {
             </View>
             {(isRecording || isTranscribing) && (
               <View style={S.waveBox}>
-                <WaveformVisualiser isRecording={isRecording} metering={isRecording ? level : -60} />
-                <Text style={S.recordHint}>{isRecording ? '🔴 Listening — tap Stop when finished' : '⏳ Processing...'}</Text>
+                <Waveform level={level} active={isRecording} />
+                <Text style={S.recordHint}>
+                  {isRecording ? '🔴 Listening — tap Stop when finished'
+                    : stage?.engine === 'phone' ? `⏳ Transcribing on the phone… ${Math.round(stage.progress * 100)}%`
+                    : '⏳ Transcribing…'}
+                </Text>
               </View>
             )}
             <TextInput style={S.textArea} placeholder="Describe the purpose of this inspection..." placeholderTextColor={T.mid} value={purpose} onChangeText={setPurpose} multiline numberOfLines={4} textAlignVertical="top" />
@@ -345,6 +348,7 @@ export default function SessionScreen() {
             <View style={S.activeDot} />
             <Text style={S.activeBadgeText}>Active Session - SR {reportNo}</Text>
           </View>
+          <View style={{ marginTop: 8 }}><SyncStatus always /></View>
         </View>
 
         <View style={S.section}>
@@ -423,9 +427,9 @@ export default function SessionScreen() {
                         onPress={() => Alert.alert('Delete Observation', 'Delete this general observation? This cannot be undone.', [
                           { text: 'Cancel', style: 'cancel' },
                           { text: 'Delete', style: 'destructive', onPress: async () => {
-                            // Through the server so the note's photos and any
-                            // response attachments are removed with it.
-                            try { await deleteSiteNote(obs.id) }
+                            // On the phone now; the server removes its photos
+                            // and any response attachments when it uploads.
+                            try { await deleteObservation(obs.id) }
                             catch (e: any) { Alert.alert('Delete Failed', e?.message ?? 'Please try again.'); return; }
                             setGeneralObservations(curr => curr.filter(o => o.id !== obs.id));
                           } },

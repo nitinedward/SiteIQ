@@ -21,8 +21,9 @@ function apiBase(): string {
 }
 
 /** Transcribes a recorded audio file and returns the text, or '' if nothing
- *  could be made out. Throws with a readable message if the request fails. */
-export async function transcribeAudio(uri: string, type: 'audio/m4a' | 'audio/wav' = 'audio/m4a'): Promise<string> {
+ *  could be made out. Throws with a readable message if the request fails
+ *  or `signal` aborts it. */
+export async function transcribeAudio(uri: string, type: 'audio/m4a' | 'audio/wav' = 'audio/m4a', signal?: AbortSignal): Promise<string> {
   console.log('[transcribe] Starting:', uri)
 
   const formData = new FormData()
@@ -40,6 +41,7 @@ export async function transcribeAudio(uri: string, type: 'audio/m4a' | 'audio/wa
       method: 'POST',
       headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
       body: formData,
+      signal,
     })
   } catch (err: any) {
     console.error('[transcribe] Request failed:', err)

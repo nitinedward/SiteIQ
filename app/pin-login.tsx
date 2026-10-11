@@ -4,6 +4,7 @@ import { router } from 'expo-router'
 import * as LocalAuthentication from 'expo-local-authentication'
 import * as SecureStore from 'expo-secure-store'
 import { supabase } from '../lib/supabase'
+import { myProfile } from '../lib/offline/store'
 import { theme } from '../lib/theme'
 
 const T = theme.colors
@@ -21,11 +22,10 @@ export default function PinLoginScreen() {
     tryBiometric()
   }, [])
 
+  // From the phone's copy, so this works with no signal.
   const loadName = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data } = await supabase.from('firm_members').select('full_name').eq('user_id', user.id).single()
-    setName(data?.full_name?.split(' ')[0] ?? '')
+    const me = await myProfile()
+    setName(me?.name?.split(' ')[0] ?? '')
   }
 
   const tryBiometric = async () => {

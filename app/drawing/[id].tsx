@@ -6,7 +6,10 @@ import {
 } from 'react-native';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase } from '../../lib/supabase';
+import {
+  createZone, deleteZone as removeZone, listZones, observationForZone, photoList, zoneNotes,
+} from '../../lib/offline/store';
+import { localFor } from '../../lib/offline/files';
 import Svg, { Circle, Ellipse, Rect, Path, G } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -44,7 +47,8 @@ export default function DrawingViewerScreen() {
   const number       = params.number as string | undefined;
   const revision     = params.revision as string | undefined;
   const fileUrl      = params.file_url as string;
-  const previewUrl   = params.preview_url as string | undefined;
+  // The phone's copy when the project is kept offline (lib/offline/download).
+  const previewUrl   = params.preview_url ? localFor(params.preview_url as string) : undefined;
   const projectId    = params.project_id as string;
   const inspectionId = params.inspection_id as string;
   const viewOnly     = params.view_only === 'true';
@@ -175,10 +179,8 @@ export default function DrawingViewerScreen() {
     // Zones placed during an inspection are scoped to that inspection_id.
     // Zones placed while just browsing a drawing (no active inspection,
     // e.g. from Project Detail) are standalone — inspection_id is null.
-    let query = supabase.from('zones').select('*').eq('drawing_id', drawingId);
-    query = inspectionId ? query.eq('inspection_id', inspectionId) : query.is('inspection_id', null);
-    const { data } = await query.order('created_at', { ascending: true });
-    setZonesAndRef((data as Zone[]) ?? []);
+    const show = (rows: Zone[]) => setZonesAndRef(rows);
+    show(await listZones(drawingId, inspectionId || null, show));
   };
   useFocusEffect(useCallback(() => { fetchZones(); }, [drawingId, inspectionId]));
 
@@ -326,25 +328,25 @@ export default function DrawingViewerScreen() {
   const handleSave = async () => {
     if (!newLabel.trim()) { Alert.alert('Missing Label', 'Enter a zone name.'); return; }
     if (!pendingZone) return;
-    const { error } = await supabase.from('zones').insert({
-      drawing_id: drawingId, project_id: projectId,
-      inspection_id: inspectionId || null,
-      label: newLabel.trim(),
-      x_percent: pendingZone.x_percent ?? 0,
-      y_percent: pendingZone.y_percent ?? 0,
-      markup_type: pendingZone.markup_type ?? 'pin',
-      shape_data: pendingZone.shape_data ?? null,
-    });
-    if (error) { Alert.alert('Error', 'Could not save zone.'); return; }
+    // Saved on the phone; uploads when there's signal.
+    try {
+      await createZone({
+        drawing_id: drawingId, project_id: projectId,
+        inspection_id: inspectionId || null,
+        label: newLabel.trim(),
+        x_percent: pendingZone.x_percent ?? 0,
+        y_percent: pendingZone.y_percent ?? 0,
+        markup_type: pendingZone.markup_type ?? 'pin',
+        shape_data: pendingZone.shape_data ?? null,
+      });
+    } catch { Alert.alert('Error', 'Could not save zone.'); return; }
     setNewLabel(''); setShowModal(false); setPendingZone(null); setLiveRect(null); setLivePath([]);
     fetchZones();
   };
 
   const openZone = async (zone: Zone) => {
-    let obsQuery = supabase.from('observations').select('id').eq('zone_id', zone.id).limit(1);
-    obsQuery = inspectionId ? obsQuery.eq('inspection_id', inspectionId) : obsQuery.is('inspection_id', null);
-    const { data: existingObs } = await obsQuery;
-    const obsId = existingObs && existingObs.length > 0 ? existingObs[0].id : null;
+    const existing = await observationForZone(zone.id, inspectionId || null, projectId);
+    const obsId = existing?.id ?? null;
     router.push({ pathname: '/observation', params: { zone_id: zone.id, zone_label: zone.label, project_id: projectId, inspection_id: inspectionId, ...(obsId ? { observation_id: obsId } : {}) } });
   };
 
@@ -353,8 +355,7 @@ export default function DrawingViewerScreen() {
     // leave every photo taken there pointing at a row that no longer
     // exists — the photos survived but nothing said where they were taken,
     // and nothing in the database prevented it.
-    await supabase.from('observations').update({ zone_id: null }).eq('zone_id', zone.id);
-    await supabase.from('zones').delete().eq('id', zone.id);
+    await removeZone({ id: zone.id, inspection_id: inspectionId || null }, projectId);
     setZonesAndRef(zonesRef.current.filter(z => z.id !== zone.id));
   };
 
@@ -362,18 +363,10 @@ export default function DrawingViewerScreen() {
    *  pin's position can't be recovered once it's gone, so the count of
    *  photos about to lose their location is worth showing up front. */
   const confirmDeleteZone = async (zone: Zone, after?: () => void) => {
-    const { data: obs } = await supabase
-      .from('observations')
-      .select('id, photos')
-      .eq('zone_id', zone.id);
+    const obs = await zoneNotes(zone.id, projectId);
 
-    const obsCount = obs?.length ?? 0;
-    const photoCount = (obs ?? []).reduce((n: number, o: any) => {
-      let photos: any[] = [];
-      if (Array.isArray(o.photos)) photos = o.photos;
-      else if (typeof o.photos === 'string') { try { photos = JSON.parse(o.photos); } catch { photos = []; } }
-      return n + photos.length;
-    }, 0);
+    const obsCount = obs.length;
+    const photoCount = obs.reduce((n: number, o: any) => n + photoList(o.photos).length, 0);
 
     const run = async () => { await deleteZone(zone); after?.(); };
 

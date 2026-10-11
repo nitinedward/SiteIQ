@@ -3,7 +3,7 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useState, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { listDrawings } from '../lib/offline/store';
 import { setPendingDrawingSelection } from '../lib/pendingSelection';
 import { latestRevisions, revisionsOf, revisionCount } from '../lib/drawingRevisions';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,13 +25,8 @@ export default function SelectDrawingsScreen() {
   );
 
   const fetchDrawings = async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from('drawings')
-      .select('id,title,number,revision,created_at')
-      .eq('project_id', String(project_id))
-      .order('number', { ascending: true });
-    setDrawings((data as Drawing[]) ?? []);
+    const byNumber = (rows: Drawing[]) => setDrawings([...rows].sort((a, b) => String(a.number ?? '').localeCompare(String(b.number ?? ''), undefined, { numeric: true })));
+    byNumber(await listDrawings(String(project_id), byNumber));
     setLoading(false);
   };
 

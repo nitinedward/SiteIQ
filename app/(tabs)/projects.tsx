@@ -3,12 +3,14 @@ import {
   TouchableOpacity, ActivityIndicator,
   RefreshControl, TextInput,
 } from 'react-native'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
-import { getUserFirm } from '../../lib/firm'
 import { theme } from '../../lib/theme'
 import { Ionicons } from '@expo/vector-icons'
+import { listProjects, myProfile, projectStats as loadStats } from '../../lib/offline/store'
+import { offlineProjects, onOfflineProjectsChange } from '../../lib/offline/download'
+import { SyncStatus } from '../../components/SyncStatus'
 
 const T = theme.colors
 const R = theme.radius
@@ -18,7 +20,6 @@ type Project = {
   address: string; status: string
   inspection_count?: number; last_inspection?: string
 }
-type ProjectStats = { reports: number; photos: number; drawings: number }
 
 function statusPill(status: string): { bg: string; text: string; label: string } {
   switch ((status ?? '').toUpperCase()) {
@@ -37,101 +38,36 @@ export default function ProjectsScreen() {
   const [search, setSearch]         = useState('')
   const [firmName, setFirmName]     = useState('')
   const [userName, setUserName]     = useState('')
-  const [projectStats, setProjectStats] = useState<Record<string, ProjectStats>>({})
+  const [projectStats, setProjectStats] = useState<Record<string, { reports: number; photos: number; drawings: number }>>({})
+  const [offline, setOffline] = useState<Set<string>>(new Set())
 
-  // ── Data fetching — identical logic, only added setUserName from existing user object ──
+  // From the phone's copy at once, refreshed from the server behind it
+  // when there's signal (lib/offline/store).
   const fetchProjects = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.replace('/'); return }
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { router.replace('/'); return }
 
-    // Pull name from firm_members.full_name — the authoritative source used by all other screens
-    const { data: memberName } = await supabase
-      .from('firm_members')
-      .select('full_name')
-      .eq('user_id', user.id)
-      .single()
-    setUserName(memberName?.full_name?.split(' ')[0] || user.email?.split('@')[0] || '')
-
-    const { firm, role } = await getUserFirm()
-    setFirmName(firm?.name ?? '')
-    if (!firm) { setLoading(false); setRefreshing(false); return }
-
-    let query = supabase.from('projects').select('*').order('created_at', { ascending: false })
-
-    if (role === 'admin') {
-      query = query.eq('firm_id', firm.id)
-    } else {
-      const { data: assignments } = await supabase
-        .from('project_members')
-        .select('project_id')
-        .eq('user_id', user.id)
-
-      const projectIds = (assignments ?? []).map((a: any) => a.project_id)
-      if (projectIds.length === 0) {
-        setProjects([])
-        setLoading(false)
-        setRefreshing(false)
-        return
-      }
-      query = query.in('id', projectIds)
+    const showMe = (me: Awaited<ReturnType<typeof myProfile>>) => {
+      setUserName(me?.name?.split(' ')[0] || session.user.email?.split('@')[0] || '')
+      setFirmName(me?.firmName ?? '')
     }
+    showMe(await myProfile(showMe))
 
-    const { data } = await query
-    setProjects((data as Project[]) ?? [])
+    const show = (rows: any[]) => {
+      setProjects(rows as Project[])
+      // Card counts, batched for all cards; never holds up the list.
+      const ids = rows.map(p => p.id)
+      loadStats(ids, setProjectStats).then(setProjectStats).catch(() => {})
+    }
+    show(await listProjects(show))
     setLoading(false)
     setRefreshing(false)
-
-    // Additive — card stat counts. Fired without awaiting so it never
-    // delays the list; failure just leaves cards without a stats row.
-    loadProjectStats((data ?? []).map((p: any) => p.id))
   }
 
-  // Batched (not per-card) so N projects still costs 3 queries total.
-  const loadProjectStats = async (projectIds: string[]) => {
-    if (projectIds.length === 0) return
-    try {
-      const { data: inspections } = await supabase
-        .from('inspections')
-        .select('id, project_id, status')
-        .in('project_id', projectIds)
-      const inspList = inspections ?? []
-      const inspectionToProject = new Map(inspList.map((i: any) => [i.id, i.project_id]))
-      const inspectionIds = inspList.map((i: any) => i.id)
+  const loadOffline = () => offlineProjects().then(rows => setOffline(new Set(rows.map(r => r.project_id)))).catch(() => {})
+  useEffect(() => onOfflineProjectsChange(loadOffline), [])
 
-      const { data: drawings } = await supabase
-        .from('drawings')
-        .select('project_id')
-        .in('project_id', projectIds)
-
-      const { data: observations } = inspectionIds.length > 0
-        ? await supabase.from('observations').select('inspection_id, photos').in('inspection_id', inspectionIds)
-        : { data: [] as any[] }
-
-      const stats: Record<string, ProjectStats> = {}
-      projectIds.forEach(id => { stats[id] = { reports: 0, photos: 0, drawings: 0 } })
-
-      inspList.forEach((i: any) => {
-        if (i.status === 'COMPLETED' && stats[i.project_id]) stats[i.project_id].reports++
-      })
-      ;(drawings ?? []).forEach((d: any) => {
-        if (stats[d.project_id]) stats[d.project_id].drawings++
-      })
-      ;(observations ?? []).forEach((o: any) => {
-        const pid = inspectionToProject.get(o.inspection_id)
-        if (!pid || !stats[pid]) return
-        let photos: string[] = []
-        if (Array.isArray(o.photos)) photos = o.photos
-        else if (typeof o.photos === 'string') { try { photos = JSON.parse(o.photos) } catch { /* ignore */ } }
-        stats[pid].photos += photos.length
-      })
-
-      setProjectStats(stats)
-    } catch (err) {
-      console.error('[loadProjectStats] error:', err)
-    }
-  }
-
-  useFocusEffect(useCallback(() => { fetchProjects() }, []))
+  useFocusEffect(useCallback(() => { fetchProjects(); loadOffline() }, []))
 
   const filtered = projects.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -156,8 +92,16 @@ export default function ProjectsScreen() {
           </View>
         </View>
 
-        {/* Row 2 — project number */}
-        <Text style={S.cardNumber}>#{item.project_number}</Text>
+        {/* Row 2 — project number, and whether it's kept on the phone */}
+        <View style={S.cardNumberRow}>
+          <Text style={S.cardNumber}>#{item.project_number}</Text>
+          {offline.has(item.id) && (
+            <View style={S.offlineTag}>
+              <Ionicons name="cloud-done-outline" size={12} color={T.sage} />
+              <Text style={S.offlineTagText}>Available offline</Text>
+            </View>
+          )}
+        </View>
 
         {/* Row 3 — address (optional) */}
         {!!item.address && (
@@ -185,6 +129,7 @@ export default function ProjectsScreen() {
           {userName ? `Kia ora, ${userName} 👋` : 'Kia ora 👋'}
         </Text>
         <Text style={S.title}>Your Projects</Text>
+        <View style={{ marginTop: 10 }}><SyncStatus /></View>
       </View>
 
       {/* Search */}
@@ -345,6 +290,26 @@ const S = StyleSheet.create({
   pillText: {
     fontSize: 10,
     fontWeight: '700',
+  },
+  cardNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  offlineTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: T.sageSoft,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginTop: 2,
+  },
+  offlineTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: T.sage,
   },
   cardNumber: {
     fontSize: 12,

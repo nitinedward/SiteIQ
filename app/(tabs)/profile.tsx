@@ -5,6 +5,9 @@ import { supabase } from '../../lib/supabase'
 import { Ionicons } from '@expo/vector-icons'
 import { theme } from '../../lib/theme'
 import OfflineTranscriptionCard from '../../components/OfflineTranscriptionCard'
+import OfflineCard from '../../components/OfflineCard'
+import { myProfile } from '../../lib/offline/store'
+import { getSyncStatus } from '../../lib/offline/sync'
 
 const T = theme.colors
 const R = theme.radius
@@ -14,20 +17,28 @@ type Profile = { name: string; email: string; role: string; firmName: string }
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<Profile | null>(null)
 
+  // From the phone's copy, refreshed when there's signal.
   const load = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data: m } = await supabase.from('firm_members').select('full_name, role, firms(name)').eq('user_id', user.id).single()
-    const firm = m?.firms as any
-    setProfile({ name: m?.full_name ?? '', email: user.email ?? '', role: m?.role ?? '', firmName: firm?.name ?? '' })
+    const show = (me: Awaited<ReturnType<typeof myProfile>>) => {
+      if (me) setProfile({ name: me.name, email: me.email, role: me.role ?? '', firmName: me.firmName })
+    }
+    show(await myProfile(show))
   }
 
   useFocusEffect(useCallback(() => { load() }, []))
 
-  const handleSignOut = () => Alert.alert('Sign Out', 'Are you sure?', [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Sign Out', style: 'destructive', onPress: async () => { await supabase.auth.signOut(); router.replace('/') } },
-  ])
+  // Changes still on the phone upload only while their engineer is signed
+  // in, so signing out with some waiting is checked first.
+  const handleSignOut = () => {
+    const waiting = getSyncStatus().waiting
+    Alert.alert('Sign Out',
+      waiting > 0
+        ? `${waiting} change${waiting === 1 ? ' is' : 's are'} still waiting to upload. They stay on this phone and upload next time you sign in. Sign out anyway?`
+        : 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: async () => { await supabase.auth.signOut(); router.replace('/') } },
+    ])
+  }
 
   if (!profile) return <View style={S.container} />
 
@@ -63,7 +74,8 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Dictation without signal */}
+        {/* Working without signal */}
+        <OfflineCard />
         <OfflineTranscriptionCard />
 
         {/* Menu */}

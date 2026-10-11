@@ -3,10 +3,20 @@ import {
   TouchableOpacity, ActivityIndicator,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { router } from 'expo-router'
 import { supabase } from '../lib/supabase'
 import { theme } from '../lib/theme'
+import { isPinEnabled } from '../lib/auth'
+import { clearCache, getMeta, setMeta } from '../lib/offline/db'
+
+/** The phone's copy of projects belongs to whoever signed in last; another
+ *  account signing in starts from a clean copy. */
+async function rememberAccount(userId: string) {
+  const last = await getMeta<string>('device:lastUser')
+  if (last && last !== userId) await clearCache()
+  await setMeta('device:lastUser', userId)
+}
 
 const T = theme.colors
 const R = theme.radius
@@ -16,15 +26,32 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('')
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
+  const [checking, setChecking] = useState(true)
+
+  // Signed in before on this phone: straight in (behind the PIN, if one is
+  // set), with or without signal.
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) { setChecking(false); return }
+      router.replace((await isPinEnabled()) ? '/pin-login' : '/(tabs)/projects')
+    }).catch(() => setChecking(false))
+  }, [])
 
   const handleLogin = async () => {
     if (!email || !password) { setError('Please enter your email and password'); return }
     setLoading(true); setError('')
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error: err } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
-    if (err) { setError(err.message); return }
+    if (err) { setError(/network|fetch/i.test(err.message) ? 'No connection — signing in needs signal the first time.' : err.message); return }
+    if (data.user) await rememberAccount(data.user.id)
     router.replace('/(tabs)/projects')
   }
+
+  if (checking) return (
+    <View style={[S.root, { alignItems: 'center', justifyContent: 'center' }]}>
+      <ActivityIndicator color={T.indigo} size="large" />
+    </View>
+  )
 
   return (
     <KeyboardAvoidingView style={S.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>

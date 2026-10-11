@@ -1,16 +1,21 @@
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, Modal, TextInput,
-  KeyboardAvoidingView, Platform,
+  ActivityIndicator, Alert, Switch,
 } from 'react-native';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
-import { useState, useCallback } from 'react';
-import { supabase } from '../../lib/supabase';
+import { useState, useCallback, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../lib/theme'
 import { latestRevisions, revisionCount } from '../../lib/drawingRevisions';
 import { FooterNav } from '../../components/FooterNav';
-import { deleteReport } from '../../lib/siteNotes';
+import { SyncStatus } from '../../components/SyncStatus';
+import {
+  discardInspection, getProject, listDrawings, listInspections, myId, projectStats,
+} from '../../lib/offline/store';
+import {
+  downloadProject, offlineProjects, onOfflineProjectsChange, removeOfflineProject, type OfflineProject,
+} from '../../lib/offline/download';
+import { isOnline } from '../../lib/offline/net';
 
 const T = theme.colors;
 const R = theme.radius;
@@ -27,6 +32,7 @@ type Drawing = {
 type Inspection = {
   id: string; date: string; report_no: string; weather: string;
   site_contact: string; status: string; created_at: string;
+  created_by?: string | null; _pending?: boolean;
 };
 
 const statusConfig = {
@@ -36,6 +42,13 @@ const statusConfig = {
 };
 
 const fmt = (d: string) => new Date(d).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+const ago = (t: number) => {
+  const mins = Math.round((Date.now() - t) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  return hrs < 24 ? `${hrs} h ago` : fmt(new Date(t).toISOString());
+};
 const DRAWING_PREVIEW_COUNT = 3;
 const REPORT_PREVIEW_COUNT = 3;
 
@@ -53,53 +66,80 @@ export default function ProjectDetailScreen() {
   const [showSuperseded, setShowSuperseded] = useState(false);
   const [showAllReports, setShowAllReports] = useState(false);
 
+  // Visits started on this phone (or by this engineer) and not completed —
+  // continued or thrown away from here, never deleted behind their back.
+  const [inProgress, setInProgress] = useState<Inspection[]>([]);
+  const [offline, setOffline] = useState<OfflineProject | null>(null);
+  const [download, setDownload] = useState<{ fraction: number; what: string } | null>(null);
+
+  const pid = String(id);
+
+  // From the phone's copy at once, refreshed from the server behind it
+  // when there's signal (lib/offline/store).
   const fetchData = async () => {
-    setLoading(true);
-
-    // Clean up orphaned IN_PROGRESS inspections. Through the server so the
-    // photos and attachments of any notes on them go too — deleting the rows
-    // from here used to strand those files in the bucket for good.
-    // Best-effort: a failure here must not stop the screen loading.
-    const { data: orphans } = await supabase.from('inspections').select('id').eq('project_id', id).eq('status', 'IN_PROGRESS');
-    for (const orphan of orphans ?? []) {
-      try { await deleteReport(orphan.id) } catch (e) { console.warn('[project] orphan cleanup:', e) }
-    }
-
-    const [{ data: p, error: pe }, { data: d }, { data: ins }] = await Promise.all([
-      supabase.from('projects').select('*').eq('id', id).single(),
-      supabase.from('drawings').select('*').eq('project_id', id).order('created_at', { ascending: false }),
-      supabase.from('inspections').select('*').eq('project_id', id).eq('status', 'COMPLETED').order('created_at', { ascending: false }),
+    const me = await myId();
+    const showInspections = (rows: Inspection[]) => {
+      setInspections(rows.filter(r => r.status === 'COMPLETED'));
+      setInProgress(rows.filter(r => r.status !== 'COMPLETED' && (r._pending || r.created_by === me)));
+    };
+    const [p, d, ins] = await Promise.all([
+      getProject(pid, row => row && setProject(row)),
+      listDrawings(pid, rows => setDrawings(rows)),
+      listInspections(pid, showInspections),
     ]);
-
-    if (pe) { setError('Project not found.'); setLoading(false); return; }
+    if (!p) {
+      setError(isOnline()
+        ? 'Project not found.'
+        : "This project isn't on the phone yet. Open it once with signal, or make it available offline.");
+      setLoading(false);
+      return;
+    }
+    setError('');
     setProject(p as Project);
-    setDrawings(d as Drawing[] ?? []);
-    setInspections(ins as Inspection[] ?? []);
+    setDrawings(d as Drawing[]);
+    showInspections(ins as Inspection[]);
     setLoading(false);
 
-    // Additive — total photo count across this project's reports. Best-effort:
-    // failure just leaves the stat tile at 0, never blocks the rest of the screen.
-    try {
-      const inspectionIds = (ins ?? []).map((i: any) => i.id);
-      if (inspectionIds.length > 0) {
-        const { data: obs } = await supabase.from('observations').select('photos').in('inspection_id', inspectionIds);
-        let total = 0;
-        (obs ?? []).forEach((o: any) => {
-          let arr: string[] = [];
-          if (Array.isArray(o.photos)) arr = o.photos;
-          else if (typeof o.photos === 'string') { try { arr = JSON.parse(o.photos); } catch { /* ignore */ } }
-          total += arr.length;
-        });
-        setPhotoCount(total);
-      } else {
-        setPhotoCount(0);
-      }
-    } catch (err) {
-      console.error('[photoCount] error:', err);
-    }
+    // Photo count for the stat tile; best-effort.
+    const showPhotos = (stats: Record<string, { photos: number }>) => setPhotoCount(stats[pid]?.photos ?? 0);
+    projectStats([pid], showPhotos).then(showPhotos).catch(() => {});
   };
 
-  useFocusEffect(useCallback(() => { fetchData(); }, [id]));
+  const loadOffline = () => offlineProjects().then(rows => setOffline(rows.find(r => r.project_id === pid) ?? null)).catch(() => {});
+  useEffect(() => onOfflineProjectsChange(loadOffline), [pid]);
+
+  const toggleOffline = (on: boolean) => {
+    if (on) {
+      if (!isOnline()) { Alert.alert('No connection', 'Connect to Wi-Fi or mobile data to download this project.'); return; }
+      setDownload({ fraction: 0, what: 'Starting' });
+      downloadProject(pid, (fraction, what) => setDownload({ fraction, what }))
+        .then(() => { setDownload(null); fetchData(); })
+        .catch(err => { setDownload(null); Alert.alert('Download stopped', err?.message ?? 'Please try again.'); });
+      return;
+    }
+    Alert.alert('Remove from this phone?', "The project's drawings are removed from the phone to free space. Anything not yet uploaded stays and still uploads.", [
+      { text: 'Keep', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => { removeOfflineProject(pid); } },
+    ]);
+  };
+
+  const continueVisit = (ins: Inspection) =>
+    router.push({ pathname: '/session', params: { project_id: pid, project_name: project?.name ?? '', inspection_id: ins.id } });
+
+  const discardVisit = (ins: Inspection) => Alert.alert(
+    'Discard this visit?',
+    `SR ${ins.report_no} and all its notes and photos will be deleted. This cannot be undone.`,
+    [
+      { text: 'Keep', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: async () => { await discardInspection(ins.id); fetchData(); } },
+    ]);
+
+  const openReport = (ins: Inspection) => {
+    if (!isOnline()) { Alert.alert('No connection', 'Opening a finished report needs signal.'); return; }
+    router.push({ pathname: '/report/[id]', params: { id: ins.id, project_name: project?.name ?? '' } });
+  };
+
+  useFocusEffect(useCallback(() => { fetchData(); loadOffline(); }, [id]));
 
   if (loading) return (
     <View style={S.centred}>
@@ -108,7 +148,7 @@ export default function ProjectDetailScreen() {
   );
   if (error || !project) return (
     <View style={S.centred}>
-      <Text style={S.errText}>Project not found</Text>
+      <Text style={[S.errText, { textAlign: 'center', paddingHorizontal: 32 }]}>{error || 'Project not found'}</Text>
       <TouchableOpacity onPress={() => router.back()}>
         <Text style={S.link}>Go back</Text>
       </TouchableOpacity>
@@ -145,6 +185,24 @@ export default function ProjectDetailScreen() {
 
       <ScrollView style={S.scroll} showsVerticalScrollIndicator={false}>
 
+        <View style={{ paddingHorizontal: 16, paddingTop: 12 }}><SyncStatus /></View>
+
+        {/* VISITS IN PROGRESS */}
+        {inProgress.map(ins => (
+          <View key={ins.id} style={S.progressCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={S.progressTitle}>SR {ins.report_no} · in progress</Text>
+              <Text style={S.progressSub}>{ins.date}{ins._pending ? ' · not uploaded yet' : ''}</Text>
+            </View>
+            <TouchableOpacity onPress={() => discardVisit(ins)} style={S.progressDiscard}>
+              <Ionicons name="trash-outline" size={18} color={T.clay} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => continueVisit(ins)} style={S.progressContinue} activeOpacity={0.85}>
+              <Text style={S.progressContinueText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+
         {/* START INSPECTION — hero button */}
         {project.status !== 'COMPLETED' && (
           <View style={S.heroSection}>
@@ -176,6 +234,27 @@ export default function ProjectDetailScreen() {
             <Text style={S.statNum}>{latestRevisions(drawings).length}</Text>
             <Text style={S.statLabel}>Drawings</Text>
           </View>
+        </View>
+
+        {/* AVAILABLE OFFLINE */}
+        <View style={S.offlineCard}>
+          <Ionicons name={offline ? 'cloud-done-outline' : 'cloud-download-outline'} size={22} color={offline ? T.sage : T.indigo} />
+          <View style={{ flex: 1 }}>
+            <Text style={S.offlineTitle}>Available offline</Text>
+            <Text style={S.offlineSub}>
+              {download
+                ? `Downloading · ${download.what} · ${Math.round(download.fraction * 100)}%`
+                : offline
+                  ? `On this phone · updated ${ago(offline.downloaded_at)}${offline.bytes ? ` · ${Math.max(1, Math.round(offline.bytes / 1e6))} MB` : ''}`
+                  : 'Download drawings and reports to work with no signal'}
+            </Text>
+            {!!download && (
+              <View style={S.offlineBar}><View style={[S.offlineBarFill, { width: `${Math.round(download.fraction * 100)}%` }]} /></View>
+            )}
+          </View>
+          {download
+            ? <ActivityIndicator color={T.indigo} />
+            : <Switch value={!!offline} onValueChange={toggleOffline} trackColor={{ true: T.sage, false: T.line }} />}
         </View>
 
         {/* DRAWINGS */}
@@ -240,7 +319,7 @@ export default function ProjectDetailScreen() {
             </View>
           ) : (showAllReports ? inspections : inspections.slice(0, REPORT_PREVIEW_COUNT)).map(ins => (
             <TouchableOpacity key={ins.id} style={S.row} activeOpacity={0.7}
-              onPress={() => router.push({ pathname: '/report/[id]', params: { id: ins.id, project_name: project.name } })}>
+              onPress={() => openReport(ins)}>
               <View style={S.rowBadge}>
                 <Text style={S.rowBadgeText}>SR {ins.report_no}</Text>
               </View>
@@ -338,6 +417,29 @@ const S = StyleSheet.create({
   rowTitle:    { fontSize: 15, fontWeight: '700', color: T.ink, marginBottom: 2 },
   rowMeta:     { fontSize: 11, color: T.mid },
   rowArrow:    { fontSize: 22, color: T.mid },
+
+  // Visits in progress
+  progressCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginHorizontal: 16, marginTop: 12, padding: 14,
+    backgroundColor: T.goldSoft, borderRadius: R.md, borderWidth: 1, borderColor: T.marigold,
+  },
+  progressTitle:   { fontSize: 15, fontWeight: '800', color: T.indigoDeep },
+  progressSub:     { fontSize: 12, color: T.mid, marginTop: 2 },
+  progressDiscard: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: T.surface },
+  progressContinue:{ backgroundColor: T.indigo, borderRadius: R.pill, paddingHorizontal: 16, paddingVertical: 10 },
+  progressContinueText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+
+  // Available offline
+  offlineCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    marginHorizontal: 16, marginBottom: 4, padding: 14,
+    backgroundColor: T.surface, borderRadius: R.md, borderWidth: 1, borderColor: T.line,
+  },
+  offlineTitle:   { fontSize: 15, fontWeight: '700', color: T.ink },
+  offlineSub:     { fontSize: 12, color: T.mid, marginTop: 2 },
+  offlineBar:     { height: 4, backgroundColor: T.line, borderRadius: 2, marginTop: 8, overflow: 'hidden' },
+  offlineBarFill: { height: 4, backgroundColor: T.indigo },
 
   // Empty
   emptyCard: {
