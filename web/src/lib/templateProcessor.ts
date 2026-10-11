@@ -454,7 +454,10 @@ export async function reportTemplateLayout(inspectionId: string): Promise<{ bloc
     })
     const zip = new AdmZip(await fetchTemplateBuffer(template))
     const xml = mergeRunsContainingPlaceholders(zip.getEntry('word/document.xml')?.getData().toString('utf-8') ?? '')
-    return { blocks: xml.includes(BLOCK_START), openItems: xml.includes(OPEN_ITEMS_START) }
+    const layout = { blocks: xml.includes(BLOCK_START), openItems: xml.includes(OPEN_ITEMS_START) }
+    console.log('[template] layout', inspectionId, 'pinned:', (inspection as any).report_template_id ?? null,
+      'project:', (inspection as any).project_id ?? null, 'used:', template.templateId, layout)
+    return layout
   } catch (err) {
     console.warn('[template] could not tell whether the report uses observation blocks:', err)
     return { blocks: false, openItems: false }

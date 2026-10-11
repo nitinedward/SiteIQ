@@ -364,6 +364,12 @@ export default function ReportPage() {
         await reopenEditor()
       }
       setDocReady(true)
+      // Generating pins the report to its template; check again which parts
+      // that template has, so the earlier-items choice shows for it.
+      fetchRecordedSelection(inspectionId).then(r => {
+        reportInBlocks.current = r.inBlocks
+        setTemplateOpenItems(r.openItems)
+      }).catch(() => {})
     } catch (err) {
       console.error('[generateDoc] error:', err)
       alert('Could not generate document. Please refresh.')
