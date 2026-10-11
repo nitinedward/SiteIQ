@@ -3,6 +3,7 @@ import * as fs from 'fs/promises'
 import * as path from 'path'
 import AdmZip from 'adm-zip'
 import { fetchFromOurStorage } from '@/lib/storageFetch'
+import { BLOCK_START, OPEN_ITEMS_START, expandObservationBlocks, observationCounts, type ObservationBlock } from '@/lib/observationBlocks'
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
@@ -48,6 +49,13 @@ export type TemplateData = {
   date?: string
   /** When the inspection was started, as "14:00". */
   time?: string
+  /** One per site note, for templates laid out a block per note
+   *  ({{#observations}} … {{/observations}}, lib/observationBlocks).
+   *  Other templates ignore it. */
+  observations?: ObservationBlock[]
+  /** Items from the project's earlier reports, still open or closed since
+   *  the last one ({{#open_items}}, loadPreviousItems). */
+  previousItems?: ObservationBlock[]
 }
 
 // ── XML Helpers ────────────────────────────────────────────────────────────────
@@ -98,7 +106,7 @@ export function buildParagraphXml(text: string): string {
  * placeholder appears as a continuous string. Paragraphs without `{{` are
  * left untouched.
  */
-function mergeRunsContainingPlaceholders(xml: string): string {
+export function mergeRunsContainingPlaceholders(xml: string, { textFormat = false }: { textFormat?: boolean } = {}): string {
   return xml.replace(/<w:p[ >][\s\S]*?<\/w:p>/g, (para) => {
     // Concatenate text from every <w:t> in this paragraph
     const allText = [...para.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)]
@@ -108,8 +116,14 @@ function mergeRunsContainingPlaceholders(xml: string): string {
     // Only touch paragraphs that contain placeholder start marker
     if (!allText.includes('{{')) return para
 
-    // Preserve formatting: grab <w:rPr> from the first run
-    const rPr = para.match(/<w:rPr>[\s\S]*?<\/w:rPr>/)?.[0] ?? ''
+    // Preserve formatting: grab <w:rPr> from the first run. Without
+    // `textFormat` this is the paragraph's first <w:rPr> wherever it is —
+    // which, when the paragraph mark has its own formatting (inside <w:pPr>),
+    // is that and not the text's. Kept as it was for existing templates;
+    // block templates (lib/observationBlocks) take the first run's own.
+    const pPrEnd = para.indexOf('</w:pPr>')
+    const firstRun = para.slice(pPrEnd === -1 ? 0 : pPrEnd + '</w:pPr>'.length).match(/<w:r[ >][\s\S]*?<\/w:r>/)?.[0] ?? ''
+    const rPr = (textFormat ? firstRun : para).match(/<w:rPr>[\s\S]*?<\/w:rPr>/)?.[0] ?? ''
 
     // Strip all runs and run-splitting artefacts, then inject one clean run
     const stripped = para
@@ -277,6 +291,12 @@ export async function fillTemplate(
 ): Promise<{ buffer: Buffer; templateId: string | null }> {
   const template = await resolveTemplate(firmId, choice)
   const templateBuffer = await fetchTemplateBuffer(template)
+  return { buffer: fillTemplateBuffer(templateBuffer, data), templateId: template.templateId }
+}
+
+/** Fills a template already in hand — the whole of filling, with no
+ *  storage or database involved. */
+export function fillTemplateBuffer(templateBuffer: Buffer, data: TemplateData): Buffer {
   const zip = new AdmZip(templateBuffer)
 
   const dateStr =
@@ -313,6 +333,7 @@ export async function fillTemplate(
     '{{issued_to_emails}}': data.issued_to_emails || '',
     '{{date}}':            dateStr,
     '{{time}}':            data.time            || '',
+    ...observationCounts(data.observations ?? [], data.previousItems ?? []),
   }
 
   // Process document.xml: paragraph-level replacement first, then inline
@@ -320,8 +341,21 @@ export async function fillTemplate(
   if (docEntry) {
     // Normalise split runs BEFORE any replacement so {{placeholders}} that
     // Word fragmented across multiple <w:r> elements are reunited.
-    let xml = mergeRunsContainingPlaceholders(docEntry.getData().toString('utf-8'))
+    const original = docEntry.getData().toString('utf-8')
+    let xml = mergeRunsContainingPlaceholders(original)
     let changed = false
+
+    // A template laid out one block per site note. Only such a template
+    // takes this branch; every other one fills exactly as before. Content
+    // controls come off first so a marker in one can't split a block.
+    if (xml.includes(BLOCK_START) || xml.includes(OPEN_ITEMS_START)) {
+      // Merged again keeping each line's text formatting, so a filled
+      // finding looks like the placeholder did, not like its paragraph mark.
+      xml = mergeRunsContainingPlaceholders(original, { textFormat: true })
+      xml = expandObservationBlocks(flattenContentControls(xml), data.observations ?? [], data.previousItems ?? [])
+      changed = true
+      console.log('[templateProcessor] Observation blocks filled:', (data.observations ?? []).length)
+    }
 
     console.log('[templateProcessor] Normalised doc XML, looking for placeholders...')
     for (const ph of Object.keys(multiLine)) {
@@ -385,7 +419,46 @@ export async function fillTemplate(
     }
   }
 
-  return { buffer: zip.toBuffer(), templateId: template.templateId }
+  return zip.toBuffer()
+}
+
+/**
+ * Whether a report's template lays it out a block per site note — so its
+ * photos and markups belong in the blocks, not on pages at the end.
+ *
+ * Asked only when the report itself no longer shows (the editor can drop
+ * every slot's bookmark); the template a report was built from is pinned,
+ * so this answers for that report. False on any doubt, which leaves the
+ * report getting photo pages as other reports do.
+ */
+export async function templateUsesObservationBlocks(inspectionId: string): Promise<boolean> {
+  return (await reportTemplateLayout(inspectionId)).blocks
+}
+
+/** Which repeating parts a report's template has: note blocks, and
+ *  {{#open_items}} rows for earlier reports' items — the report page only
+ *  offers its choice of those items when the template has somewhere to put
+ *  them. Both false on any doubt. */
+export async function reportTemplateLayout(inspectionId: string): Promise<{ blocks: boolean; openItems: boolean }> {
+  try {
+    const { data: inspection } = await getSupabase()
+      .from('inspections')
+      .select('report_template_id, project_id, projects(firm_id)')
+      .eq('id', inspectionId)
+      .single()
+    const firmId = (inspection?.projects as any)?.firm_id as string | undefined
+    if (!inspection || !firmId) return { blocks: false, openItems: false }
+    const template = await resolveTemplate(firmId, {
+      pinnedTemplateId: (inspection as any).report_template_id,
+      projectId: (inspection as any).project_id,
+    })
+    const zip = new AdmZip(await fetchTemplateBuffer(template))
+    const xml = mergeRunsContainingPlaceholders(zip.getEntry('word/document.xml')?.getData().toString('utf-8') ?? '')
+    return { blocks: xml.includes(BLOCK_START), openItems: xml.includes(OPEN_ITEMS_START) }
+  } catch (err) {
+    console.warn('[template] could not tell whether the report uses observation blocks:', err)
+    return { blocks: false, openItems: false }
+  }
 }
 
 /**

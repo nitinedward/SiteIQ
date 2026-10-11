@@ -10,6 +10,7 @@ import { noteBulletLine, noteDictation } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
+import { buildObservationBlocks, chooseCarryForward, earlierNoteCount, loadPreviousItems } from '@/lib/observationBlocks'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,13 +24,16 @@ export async function POST(request: NextRequest) {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { inspectionId, photos: photoList, drawingIds: _drawingIds, force, docKey, selectedPhotoUrls, selectedMarkups: markupStems, selectedSketches: sketchIds } = await request.json()
+    const { inspectionId, photos: photoList, drawingIds: _drawingIds, force, docKey, selectedPhotoUrls, selectedMarkups: markupStems, selectedSketches: sketchIds, carryForward } = await request.json()
     // The photos, markups (stems) and sketches (ids) ticked on the report
     // page, which a forced rewrite's sections hold; absent means the
     // selection last recorded — see lib/attachmentSelection.
     const selectedUrls = parseSelected(selectedPhotoUrls)
     const selectedMarkups = parseSelected(markupStems)
     const selectedSketches = parseSelected(sketchIds)
+    // carryForward: which earlier reports' items the report lists, as chosen
+    // on the report page; absent means the report's kept choice (see
+    // chooseCarryForward in lib/observationBlocks).
 
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
@@ -107,6 +111,7 @@ export async function POST(request: NextRequest) {
     // Build findings as Word bullet XML from observations
     const observations = obsRes.data ?? []
     console.log(`[generate] observations: ${observations.length}, with transcript: ${observations.filter((o: any) => o.transcript).length}`)
+    console.log(`[generate] purpose recorded on site: ${String(inspection.purpose ?? '').trim().length} chars`)
     observations.forEach((ob: any, i: number) => {
       console.log(`[generate] obs[${i}] zone="${ob.zone_label}" transcript="${(ob.transcript ?? '').substring(0, 80)}" severity="${ob.severity}"`)
     })
@@ -123,6 +128,12 @@ export async function POST(request: NextRequest) {
     let carried: string[] = []
 
     if (firmId) {
+      // For templates laid out a block per note: each note's dictation as
+      // recorded. Nothing writes contractor items from the plain notes.
+      const observationBlocks = await buildObservationBlocks(supabase, observations, (ob: any) => ({
+        finding: noteDictation(ob) || 'Observation recorded',
+        action: '',
+      }), await earlierNoteCount(supabase, inspection as any))
       const templateData: TemplateData = {
         engineer_name:   engineer.name,
         engineer_user:   engineer.user,
@@ -144,6 +155,8 @@ export async function POST(request: NextRequest) {
         other_activity:  buildParagraphXml(''),
         date:            inspection.date            ?? '',
         time:            inspectionTime(inspection as any),
+        observations:    observationBlocks,
+        previousItems:   await loadPreviousItems(supabase, inspection as any, await chooseCarryForward(supabase, inspection as any, carryForward)),
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined

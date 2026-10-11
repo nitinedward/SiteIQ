@@ -220,6 +220,12 @@ function AdminPageInner() {
   const [finalisedInspections, setFinalisedInspections] = useState<any[]>([])
   const [loadingInspections, setLoadingInspections] = useState(false)
   const [deletingReportId, setDeletingReportId]   = useState<string | null>(null)
+  // Each report's short description (api/reports/summary), by report id.
+  // Reports without one get it written by the AI when the list loads.
+  const [reportSummaries, setReportSummaries]     = useState<Record<string, string | null>>({})
+  const [summaryWriting, setSummaryWriting]       = useState<Record<string, boolean>>({})
+  const [editingSummaryId, setEditingSummaryId]   = useState<string | null>(null)
+  const [summaryDraft, setSummaryDraft]           = useState('')
   const [currentUserId, setCurrentUserId]         = useState('')
   const [isAdmin, setIsAdmin]                     = useState(false)
   const [copiedCode, setCopiedCode]               = useState(false)
@@ -612,6 +618,43 @@ function AdminPageInner() {
     setPendingInspections(pending ?? [])
     setFinalisedInspections(finalised ?? [])
     setLoadingInspections(false)
+
+    const all = [...(pending ?? []), ...(finalised ?? [])]
+    setReportSummaries(Object.fromEntries(all.map(ins => [ins.id, ins.summary ?? null])))
+    // Write the missing ones, one at a time, newest first. Only once the
+    // summary column exists (web/sql/report_summary.sql) — before that the
+    // rows have no `summary` key at all.
+    const missing = all
+      .filter(ins => 'summary' in ins && !ins.summary)
+      .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
+    for (const ins of missing) await requestSummary(ins.id, {})
+  }
+
+  /** Asks for a report's description (see api/reports/summary for what each
+   *  request does) and shows what comes back. */
+  const requestSummary = async (inspectionId: string, body: { regenerate?: boolean; summary?: string }) => {
+    setSummaryWriting(prev => ({ ...prev, [inspectionId]: true }))
+    try {
+      const res = await apiFetch('/api/reports/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inspectionId, ...body }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Could not get the description')
+      setReportSummaries(prev => ({ ...prev, [inspectionId]: data.summary ?? null }))
+    } catch (err: any) {
+      console.warn('[reportSummary]', inspectionId, err?.message)
+      if (body.summary !== undefined || body.regenerate) alert(err?.message ?? 'Could not save the description')
+    } finally {
+      setSummaryWriting(prev => ({ ...prev, [inspectionId]: false }))
+    }
+  }
+
+  const saveSummary = async (inspectionId: string) => {
+    setEditingSummaryId(null)
+    if (summaryDraft.trim() === (reportSummaries[inspectionId] ?? '')) return
+    await requestSummary(inspectionId, { summary: summaryDraft })
   }
 
   const deleteReport = async (inspectionId: string) => {
@@ -1057,6 +1100,11 @@ function AdminPageInner() {
     cursor: 'pointer', transition: 'all .15s',
   })
 
+  const summaryBtn: React.CSSProperties = {
+    background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer', flexShrink: 0,
+    fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, color: 'var(--indigo)',
+  }
+
   const subTabBtn = (active: boolean): React.CSSProperties => ({
     padding: '14px 24px', fontFamily: 'var(--f-heading)', fontSize: 14.5,
     fontWeight: 700,
@@ -1443,6 +1491,58 @@ function AdminPageInner() {
                                           {reportDisplayName((ins as any).report_file_name, null, 'Site inspection report')}
                                         </Link>
                                       </div>
+                                      {/* What the report covers — written by the AI, editable. */}
+                                      {'summary' in ins && (editingSummaryId === ins.id ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                                          <input
+                                            autoFocus
+                                            value={summaryDraft}
+                                            maxLength={120}
+                                            placeholder="Leave empty to let the AI write it"
+                                            onChange={e => setSummaryDraft(e.target.value)}
+                                            onKeyDown={e => {
+                                              if (e.key === 'Enter') saveSummary(ins.id)
+                                              if (e.key === 'Escape') setEditingSummaryId(null)
+                                            }}
+                                            style={{
+                                              flex: 1, minWidth: 0, padding: '5px 8px',
+                                              border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm, 8px)',
+                                              fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-ink)', background: 'var(--paper)',
+                                            }}
+                                          />
+                                          <button onClick={() => saveSummary(ins.id)} style={summaryBtn}>Save</button>
+                                          <button
+                                            onClick={() => { setEditingSummaryId(null); requestSummary(ins.id, { regenerate: true }) }}
+                                            title="Have the AI write it again from the site notes"
+                                            style={summaryBtn}
+                                          >
+                                            Rewrite with AI
+                                          </button>
+                                          <button onClick={() => setEditingSummaryId(null)} style={{ ...summaryBtn, color: 'var(--text-mid)' }}>Cancel</button>
+                                        </div>
+                                      ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, minWidth: 0 }}>
+                                          <span style={{
+                                            fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--text-ink)', opacity: 0.85,
+                                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                            fontStyle: reportSummaries[ins.id] ? 'normal' : 'italic',
+                                          }}>
+                                            {summaryWriting[ins.id]
+                                              ? 'Writing a description…'
+                                              : reportSummaries[ins.id] || 'No description'}
+                                          </span>
+                                          {!summaryWriting[ins.id] && (
+                                            <button
+                                              onClick={() => { setSummaryDraft(reportSummaries[ins.id] ?? ''); setEditingSummaryId(ins.id) }}
+                                              title="Edit the description"
+                                              aria-label="Edit the description"
+                                              style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', color: 'var(--text-mid)', flexShrink: 0, display: 'flex' }}
+                                            >
+                                              <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                                            </button>
+                                          )}
+                                        </div>
+                                      ))}
                                       <div style={{ fontFamily: 'var(--f-mono)', fontSize: 12, color: 'var(--text-mid)', marginTop: 2 }}>{ins.date ?? '—'}</div>
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>

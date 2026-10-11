@@ -27,6 +27,52 @@ export async function captureDrawingWithMarkup(
   zones: Zone[],
   pageNumber = 1
 ): Promise<DrawingCapture> {
+  const page = await renderPage(pdfUrl, pageNumber)
+  drawZones(page.canvas, zones, page.pdfWidth, page.pdfHeight, page.scale)
+  return { blob: await exportWithinBudget(page.canvas), pdfWidth: page.pdfWidth, pdfHeight: page.pdfHeight }
+}
+
+/** Longest side of a one-note copy. It is printed a few centimetres wide in
+ *  a note's block, so it doesn't need the full capture's resolution. */
+const ZONE_COPY_MAX_DIM = 2000
+
+/**
+ * The drawing with every markup, plus one copy per markup showing only that
+ * one — for reports laid out a block per site note, where each note shows
+ * its own markup. The page is rendered once and each copy drawn from it.
+ */
+export async function captureDrawingAndEachZone(
+  pdfUrl: string,
+  zones: Zone[],
+  pageNumber = 1
+): Promise<DrawingCapture & { zones: Map<string, Blob> }> {
+  const page = await renderPage(pdfUrl, pageNumber)
+  const perZone = new Map<string, Blob>()
+  const fit = Math.min(1, ZONE_COPY_MAX_DIM / Math.max(page.canvas.width, page.canvas.height))
+  for (const zone of zones) {
+    const copy = document.createElement('canvas')
+    copy.width = page.canvas.width
+    copy.height = page.canvas.height
+    copy.getContext('2d')!.drawImage(page.canvas, 0, 0)
+    drawZones(copy, [zone], page.pdfWidth, page.pdfHeight, page.scale)
+    let out = copy
+    if (fit < 1) {
+      out = document.createElement('canvas')
+      out.width = Math.round(copy.width * fit)
+      out.height = Math.round(copy.height * fit)
+      const octx = out.getContext('2d')!
+      octx.imageSmoothingEnabled = true
+      octx.imageSmoothingQuality = 'high'
+      octx.drawImage(copy, 0, 0, out.width, out.height)
+    }
+    perZone.set(zone.id, await exportWithinBudget(out))
+  }
+  drawZones(page.canvas, zones, page.pdfWidth, page.pdfHeight, page.scale)
+  return { blob: await exportWithinBudget(page.canvas), pdfWidth: page.pdfWidth, pdfHeight: page.pdfHeight, zones: perZone }
+}
+
+/** The drawing's page rendered at twice its natural size, with nothing on it. */
+async function renderPage(pdfUrl: string, pageNumber: number) {
   // Load PDF
   const response    = await fetch(pdfUrl)
   const arrayBuffer = await response.arrayBuffer()
@@ -49,6 +95,12 @@ export async function captureDrawingWithMarkup(
   const pdfWidth        = naturalViewport.width
   const pdfHeight       = naturalViewport.height
 
+  return { canvas, pdfWidth, pdfHeight, scale }
+}
+
+/** Draws markups onto a rendered page. */
+function drawZones(canvas: HTMLCanvasElement, zones: Zone[], pdfWidth: number, pdfHeight: number, scale: number) {
+  const ctx = canvas.getContext('2d')!
   ctx.lineCap   = 'round'
   ctx.lineJoin  = 'round'
 
@@ -117,8 +169,6 @@ export async function captureDrawingWithMarkup(
       } catch { /* ignore parse errors */ }
     }
   })
-
-  return { blob: await exportWithinBudget(canvas), pdfWidth, pdfHeight }
 }
 
 /** Largest capture we'll hand to the upload route. A dense structural

@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/apiFetch'
 import { useRouter, useParams } from 'next/navigation'
-import { captureDrawingWithMarkup } from '@/lib/captureDrawing'
+import { captureDrawingAndEachZone, captureDrawingWithMarkup } from '@/lib/captureDrawing'
 import { reportFileName, reportDisplayName, reportNoLabel } from '@/lib/reportFileName'
 import { buildMarkupPdf, type MarkupDrawing } from '@/lib/markupPdf'
 import dynamic from 'next/dynamic'
@@ -13,6 +13,7 @@ import ReportSketchesPanel, { type ReportSketchItem, type ReportNote } from '@/c
 import type { StagedSketch } from '@/components/SketchDropZone'
 import { addSketch, deleteSketch, loadReportSketchRows, moveSketch, renameSketch } from '@/lib/sketches'
 import { isNewSketch, sketchesHeldByDefault } from '@/lib/sketchSelection'
+import { DEFAULT_CARRY_FORWARD, parseCarryForward, type CarryForward } from '@/lib/observationBlocks'
 
 const OnlyOfficeEditor = dynamic(() => import('@/components/OnlyOfficeEditor'), { ssr: false })
 
@@ -22,6 +23,16 @@ type Inspection = {
   site_contact: string; contact_phone: string; purpose: string
   // Optional: only present once the report_file_name column exists.
   report_file_name?: string | null
+  // Likewise once web/sql/note_closed_at.sql has run.
+  carry_forward?: string | null
+}
+
+/** The report page's choice of which earlier reports' items the report
+ *  lists (lib/observationBlocks, CarryForward). */
+const CARRY_FORWARD_LABELS: Record<CarryForward, string> = {
+  open: 'Open items only',
+  open_recent: 'Open + closed since last inspection',
+  all: 'All open and closed items',
 }
 type PageData = {
   inspection: Inspection
@@ -38,6 +49,9 @@ type DrawingInfo = {
   file_url: string; zone_count: number
   selected: boolean; captured: boolean; capturing: boolean
   capturedBlob: Blob | null; previewUrl: string | null
+  /** For a report laid out a block per site note: a copy of the drawing
+   *  per markup, showing only that one, by zone id. */
+  zoneBlobs?: Map<string, Blob>
   /** The image already stored for a markup the report holds, so it can go
    *  back in without being captured again. Superseded by capturedBlob once
    *  the markup is re-captured. */
@@ -52,6 +66,10 @@ type RecordedSelection = {
   drawings: { stem: string; url: string }[] | null
   sketches: string[] | null
   sketchesSeen: string[] | null
+  /** The report's template lays it out a block per site note. */
+  inBlocks: boolean
+  /** The template lists earlier reports' items ({{#open_items}}). */
+  openItems: boolean
 }
 
 async function fetchRecordedSelection(inspectionId: string): Promise<RecordedSelection> {
@@ -64,9 +82,11 @@ async function fetchRecordedSelection(inspectionId: string): Promise<RecordedSel
       drawings: Array.isArray(d?.drawings) ? d.drawings : null,
       sketches: ids(d?.sketches),
       sketchesSeen: ids(d?.sketchesSeen),
+      inBlocks: d?.inBlocks === true,
+      openItems: d?.openItems === true,
     }
   } catch {
-    return { photos: null, drawings: null, sketches: null, sketchesSeen: null }
+    return { photos: null, drawings: null, sketches: null, sketchesSeen: null, inBlocks: false, openItems: false }
   }
 }
 
@@ -78,6 +98,8 @@ export default function ReportPage() {
   const inspectionId = id
 
   const [pageData,           setPageData]           = useState<PageData | null>(null)
+  // Laid out a block per site note: markups are also captured one per note.
+  const reportInBlocks = useRef(false)
   const [loading,            setLoading]             = useState(true)
   const [reportStatus,       setReportStatus]        = useState('pending')
   const [finalisingReport,   setFinalisingReport]    = useState(false)
@@ -86,6 +108,14 @@ export default function ReportPage() {
   const [generatingAI,       setGeneratingAI]        = useState(false)
   const [generatingPlain,    setGeneratingPlain]     = useState(false)
   const [textVersionResult,  setTextVersionResult]   = useState('')
+  // Which earlier reports' items the next rewrite lists; offered only when
+  // the template has {{#open_items}} rows to put them in.
+  const [carryForward,       setCarryForward]        = useState<CarryForward>(DEFAULT_CARRY_FORWARD)
+  const [templateOpenItems,  setTemplateOpenItems]   = useState(false)
+  const [updatingOpenItems,  setUpdatingOpenItems]   = useState(false)
+  // Why the table couldn't be updated on its own, kept on screen under the
+  // button until the next attempt or rewrite.
+  const [openItemsProblem,   setOpenItemsProblem]    = useState('')
   const [editorKey,          setEditorKey]           = useState(0)
   // The Document Server's identity for the *stored content* — fetched from
   // the file itself, never counted locally. See refreshDocKey below.
@@ -176,6 +206,7 @@ export default function ReportPage() {
       // "use the derived name".
       setCustomFileName((inspRes.data as any)?.report_file_name ?? null)
       setReportNoValue((inspRes.data as any)?.report_no ?? null)
+      setCarryForward(parseCarryForward((inspRes.data as any)?.carry_forward) ?? DEFAULT_CARRY_FORWARD)
       setLoading(false)
 
       loadAttachments(id)
@@ -383,10 +414,18 @@ export default function ReportPage() {
     const k = tickedSketchIds().length
     if (k > 0) parts.push(`the ${k} ticked sketch${k === 1 ? '' : 'es'}`)
     else if (reportSketches.length > 0) parts.push('no sketches (none are ticked)')
-    if (parts.length === 0) return ''
+    const items = carryForwardNote()
+    if (parts.length === 0) return items
     const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]
-    return `The report will include ${list}.`
+    return `The report will include ${list}.` + (items ? ` ${items}` : '')
   }
+
+  /** The dropdown's choice, sent with a rewrite only when it is offered —
+   *  otherwise the report's kept choice stands. */
+  const carryForwardBody = () => (templateOpenItems ? { carryForward } : {})
+
+  const carryForwardNote = () =>
+    templateOpenItems ? `Earlier reports' items: ${CARRY_FORWARD_LABELS[carryForward].toLowerCase()}.` : ''
 
   const generateAIReport = async () => {
     if (!confirm(
@@ -403,12 +442,13 @@ export default function ReportPage() {
         const res = await apiFetch('/api/docs/ai-generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ inspectionId, docKey: closedKey, selectedPhotoUrls, selectedMarkups, selectedSketches }),
+          body:    JSON.stringify({ inspectionId, docKey: closedKey, selectedPhotoUrls, selectedMarkups, selectedSketches, ...carryForwardBody() }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'AI generation failed')
         console.log('[ai-generate] Success:', data)
         sketchesWritten(selectedSketches)
+        setOpenItemsProblem('')
         setTextVersionResult(
           'Report text rewritten by AI' +
           (data.carried?.length ? ' — photos and markups put back after it.' : '.')
@@ -442,12 +482,13 @@ export default function ReportPage() {
         const res = await apiFetch('/api/docs/generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ inspectionId, force: true, docKey: closedKey, selectedPhotoUrls, selectedMarkups, selectedSketches }),
+          body:    JSON.stringify({ inspectionId, force: true, docKey: closedKey, selectedPhotoUrls, selectedMarkups, selectedSketches, ...carryForwardBody() }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'Could not rebuild the text from your notes')
         console.log('[plain-generate] Success:', data)
         sketchesWritten(selectedSketches)
+        setOpenItemsProblem('')
         setTextVersionResult(
           'Report text rebuilt from your site notes' +
           (data.carried?.length ? ' — photos and markups put back after it.' : '.')
@@ -459,6 +500,40 @@ export default function ReportPage() {
       alert('Could not use the notes text: ' + err.message)
     } finally {
       setGeneratingPlain(false)
+    }
+  }
+
+  /** Refills only the earlier reports' items table and its counts with what
+   *  the dropdown picks, leaving the rest of the report — AI text, edits,
+   *  photos — as it is (api/docs/update-open-items). */
+  const updateOpenItemsTable = async () => {
+    setUpdatingOpenItems(true)
+    setOpenItemsProblem('')
+    let problem = ''
+    try {
+      await runDocumentRewrite(async (closedKey) => {
+        const res = await apiFetch('/api/docs/update-open-items', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ inspectionId, docKey: closedKey, carryForward }),
+        })
+        const data = await res.json().catch(() => ({}))
+        // The report has no marked table (made before the button existed):
+        // nothing changed, and the reason stays under the button.
+        if (res.status === 422) { problem = data.error || 'The table could not be found in this report.'; return }
+        if (!res.ok) throw new Error(data.error || 'Could not update the table')
+        const n = Number(data.items ?? 0)
+        setTextVersionResult(
+          `Earlier items table updated — ${n} item${n === 1 ? '' : 's'} (${CARRY_FORWARD_LABELS[carryForward].toLowerCase()}). The rest of the report is unchanged.`
+        )
+        setTimeout(() => setTextVersionResult(''), 8000)
+      }, { step: 'Updating the earlier items table' })
+    } catch (err: any) {
+      console.error('[updateOpenItemsTable] error:', err)
+      alert(err.message)
+    } finally {
+      setUpdatingOpenItems(false)
+      setOpenItemsProblem(problem)
     }
   }
 
@@ -1023,6 +1098,14 @@ export default function ReportPage() {
         throw new Error(`Could not add drawing ${d.number}: ${detail}`)
       }
       const { url } = await res.json()
+      // Each note's own copy, for a report laid out a block per note.
+      for (const [zoneId, zoneBlob] of d.zoneBlobs ?? []) {
+        const zr = await apiFetch(
+          `/api/docs/drawing-asset?inspectionId=${inspectionId}&zone=${encodeURIComponent(zoneId)}`,
+          { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: zoneBlob }
+        )
+        if (!zr.ok) console.warn('[insert] one markup copy did not upload; that note shows the whole drawing', zoneId)
+      }
       out.push({ title: d.title, number: d.number, revision: d.revision || 'A', url })
     }
     return out
@@ -1133,9 +1216,15 @@ export default function ReportPage() {
         if (data.photosAdded)   parts.push(`${data.photosAdded} photo${data.photosAdded === 1 ? '' : 's'}`)
         if (data.drawingsAdded) parts.push(`${data.drawingsAdded} markup${data.drawingsAdded === 1 ? '' : 's'}`)
         setInsertResult(
-          parts.length
-            ? `${parts.join(' and ')} added at the end of the report — scroll to the last pages.`
-            : `${label[0].toUpperCase()}${label.slice(1)} removed from the report.`
+          data.inBlocks
+            ? (data.missingSlots?.length
+                ? `Updated in each site note’s block, except ${data.missingSlots.join(', ')} — its space for photos or markups was deleted in the editor. Regenerate the report text to put it back.`
+                : parts.length
+                  ? `${parts.join(' and ')} placed in each site note’s block.`
+                  : `${label[0].toUpperCase()}${label.slice(1)} removed from the report.`)
+            : parts.length
+              ? `${parts.join(' and ')} added at the end of the report — scroll to the last pages.`
+              : `${label[0].toUpperCase()}${label.slice(1)} removed from the report.`
         )
         setTimeout(() => setInsertResult(''), 8000)
         setMobileTab('document')
@@ -1403,6 +1492,8 @@ export default function ReportPage() {
       // describe the report. Nothing is ticked for a report with no recorded
       // selection: photos are chosen by hand, never all by default.
       const recorded = await recordedSelection
+      reportInBlocks.current = recorded.inBlocks
+      setTemplateOpenItems(recorded.openItems)
       const inReport = new Set(recorded.photos ?? [])
       const allPhotos: SelectedPhoto[] = []
       ;(obsData ?? []).forEach((ob: any) => {
@@ -1479,11 +1570,14 @@ export default function ReportPage() {
         .from('zones').select('*')
         .eq('drawing_id', drawingId).eq('inspection_id', id)
 
-      const { blob }   = await captureDrawingWithMarkup(drawing.file_url, (zonesData ?? []) as any[], 1)
+      const zones = (zonesData ?? []) as any[]
+      const { blob, zones: zoneBlobs } = reportInBlocks.current
+        ? await captureDrawingAndEachZone(drawing.file_url, zones, 1)
+        : { ...(await captureDrawingWithMarkup(drawing.file_url, zones, 1)), zones: undefined }
       const previewUrl = URL.createObjectURL(blob)
       setDrawings(prev => prev.map(d =>
         d.id === drawingId
-          ? { ...d, capturing: false, captured: true, selected: true, capturedBlob: blob, previewUrl }
+          ? { ...d, capturing: false, captured: true, selected: true, capturedBlob: blob, previewUrl, zoneBlobs }
           : d
       ))
     } catch (err) {
@@ -2011,6 +2105,97 @@ export default function ReportPage() {
                   </>
                 )}
               </button>
+
+              {/* Which earlier reports' items the template's {{#open_items}}
+                  rows list. "Update table" refills just that table; the
+                  rewrites above use the choice too. It is kept for the report
+                  whenever either runs. */}
+              {templateOpenItems && (
+                <div style={{ marginTop: 10 }}>
+                  <label htmlFor="carry-forward" style={{
+                    display: 'block', marginBottom: 4,
+                    fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700,
+                    color: 'var(--text-mid)',
+                  }}>
+                    Earlier reports' items
+                  </label>
+                  <select
+                    id="carry-forward"
+                    value={carryForward}
+                    onChange={e => setCarryForward(parseCarryForward(e.target.value) ?? DEFAULT_CARRY_FORWARD)}
+                    disabled={generatingPlain || generatingAI || updatingOpenItems || reportStatus === 'finalised'}
+                    style={{
+                      width: '100%',
+                      padding: '7px 10px',
+                      border: '1px solid var(--border-line)',
+                      borderRadius: 'var(--radius-sm, 8px)',
+                      background: 'var(--paper)',
+                      color: 'var(--text-ink)',
+                      fontFamily: 'var(--f-text)', fontSize: 12.5,
+                    }}
+                  >
+                    {(Object.keys(CARRY_FORWARD_LABELS) as CarryForward[]).map(mode => (
+                      <option key={mode} value={mode}>{CARRY_FORWARD_LABELS[mode]}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={updateOpenItemsTable}
+                    disabled={updatingOpenItems || generatingPlain || generatingAI || !docReady || reportStatus === 'finalised'}
+                    title="Refills only the earlier items table and its counts — the rest of the report stays as it is"
+                    style={{
+                      width: '100%',
+                      marginTop: 6,
+                      background: 'transparent',
+                      color: 'var(--indigo-deep)',
+                      border: '1px solid var(--border-line)',
+                      borderRadius: 'var(--radius-pill)',
+                      padding: '7px 14px',
+                      fontFamily: 'var(--f-heading)',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: updatingOpenItems || generatingPlain || generatingAI || !docReady || reportStatus === 'finalised' ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 7,
+                      opacity: !docReady || reportStatus === 'finalised' ? 0.5 : 1,
+                    }}
+                  >
+                    {updatingOpenItems ? (
+                      <>
+                        <div style={{
+                          width: 12, height: 12,
+                          border: '2px solid var(--border-line)',
+                          borderTopColor: 'var(--text-mid)',
+                          borderRadius: '50%',
+                          animation: 'spin 0.7s linear infinite',
+                        }} />
+                        Updating...
+                      </>
+                    ) : 'Update Table Only'}
+                  </button>
+                  <span style={{
+                    display: 'block', marginTop: 4,
+                    fontFamily: 'var(--f-text)', fontSize: 11, lineHeight: 1.4,
+                    color: 'var(--text-mid)',
+                  }}>
+                    Changes only this table and its counts. Edits typed into the table itself are replaced.
+                  </span>
+                  {openItemsProblem && (
+                    <div style={{
+                      marginTop: 6, padding: '8px 10px',
+                      background: 'var(--amber2, #fef9e7)',
+                      border: '1px solid var(--amber, #b8860b)',
+                      borderRadius: 'var(--radius-sm, 8px)',
+                      fontSize: 11.5, lineHeight: 1.5,
+                      fontFamily: 'var(--f-text)', color: 'var(--text-ink)',
+                    }}>
+                      <strong>Table not updated.</strong> {openItemsProblem}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {textVersionResult && (
                 <div style={{

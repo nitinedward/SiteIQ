@@ -7,7 +7,7 @@
  * library — into the browser bundle.
  */
 
-export type PlaceholderKind = 'ai' | 'data'
+export type PlaceholderKind = 'ai' | 'data' | 'block'
 
 export type PlaceholderDef = {
   name: string
@@ -42,9 +42,58 @@ export const PLACEHOLDERS: PlaceholderDef[] = [
   { name: 'contact_phone', kind: 'data', description: 'Site contact’s phone number' },
   { name: 'weather', kind: 'data', description: 'Weather, recorded when starting the inspection' },
   { name: 'drawings', kind: 'data', description: 'Drawing numbers chosen for the visit' },
+  { name: 'items_count', kind: 'data', description: 'How many site notes the report lists' },
+  { name: 'open_count', kind: 'data', description: 'How many of them are open' },
+  { name: 'closed_count', kind: 'data', description: 'How many of them are closed' },
+
+  // One block per site note: put {{#observations}} before the part that
+  // repeats and {{/observations}} after it (lib/observationBlocks). These
+  // are filled only inside such a block.
+  { name: 'ref', kind: 'block', description: 'The note’s number: 01, 02…' },
+  { name: 'title', kind: 'block', description: 'The site note’s title' },
+  { name: 'location', kind: 'block', description: 'The drawing the note was marked on, e.g. S-202 · Ground floor plan' },
+  { name: 'status', kind: 'block', description: 'Open or Closed' },
+  { name: 'finding', kind: 'block', description: 'The note’s wording — needs a line of its own' },
+  { name: 'action', kind: 'block', description: 'What the contractor is to do for this note — needs a line of its own' },
+  { name: 'drawing_ref', kind: 'block', description: 'The drawing’s number and revision, e.g. S-202 Rev B' },
+  { name: 'markup', kind: 'block', description: 'The marked-up drawing the note is on — needs a line of its own' },
+  { name: 'photos', kind: 'block', description: 'The note’s ticked photos, captioned with its title — needs a line of its own' },
+
+  // Items from the project's earlier reports: {{#open_items}} …
+  // {{/open_items}} around a table row repeats it for each one the report
+  // page's choice lists (open only, open plus closed since the last report,
+  // or all). The note placeholders above work there
+  // too (Ref is the item's original one), plus these.
+  // Links: the Ref or title as a link to the top of that note's page (the
+  // block with its photos or markup), and a link back to the summary.
+  { name: 'brief', kind: 'block', description: 'The note’s finding in one short line (about 12 words) — for the summary table, where {{finding}} is too long' },
+  { name: 'ref_link', kind: 'block', description: 'The note’s Ref as a link to its observation page — for the summary table' },
+  { name: 'title_link', kind: 'block', description: 'The note’s title as a link to its observation page — for the summary table' },
+  { name: 'back_link', kind: 'block', description: '“↑ Back to summary”, a link to the summary table — for each observation page' },
+
+  { name: 'from_report', kind: 'block', description: 'In {{#open_items}} rows: the report the item was raised in, e.g. SR 002' },
+  { name: 'closed_on', kind: 'block', description: 'In {{#open_items}} rows: when it was closed, e.g. 12 Oct 2026 — blank while open' },
+  { name: 'update', kind: 'block', description: 'In {{#open_items}} rows: the latest response on the item' },
+  { name: 'carried_count', kind: 'data', description: 'How many items from earlier reports are listed — which ones is chosen on the report page' },
+  { name: 'carried_open_count', kind: 'data', description: 'How many items from earlier reports are still open' },
+  { name: 'carried_closed_count', kind: 'data', description: 'How many of the listed items from earlier reports are closed' },
 ]
 
+/** One thing the checker noticed, in the words Settings shows.
+ *  - fix:   the report comes out wrong, or a part of it is destroyed
+ *  - typed: harmless to the report's structure, but something is printed
+ *           exactly as typed instead of being filled in
+ *  - info:  worth knowing, nothing to change */
+export type TemplateIssue = {
+  severity: 'fix' | 'typed' | 'info'
+  message: string
+  /** The words around it, so it can be found in Word. */
+  context?: string
+}
+
 export type TemplateCheck = {
+  /** Everything worth telling the firm, most serious first. */
+  issues: TemplateIssue[]
   found: string[]
   /** Looks like a placeholder, but nothing fills it — printed as typed. */
   unknown: string[]

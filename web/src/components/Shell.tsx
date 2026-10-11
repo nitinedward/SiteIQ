@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { loadReportTemplates, defaultTemplateLabel, type ReportTemplate } from '@/lib/reportTemplates'
+import type { Recipient } from '@/lib/reportRecipients'
 
 // ── DESIGN TOKENS (kept for backward compat) ──────────────────────────────────
 export const DS = {
@@ -621,6 +622,8 @@ export function NewProjectModal({ firmId, userId, onClose, onCreated }: {
   const [status, setStatus]   = useState('ACTIVE')
   const [templateId, setTemplateId] = useState('')
   const [templates, setTemplates]   = useState<ReportTemplate[]>([])
+  // Everyone the project's reports are issued to, as on Edit Project.
+  const [recipients, setRecipients] = useState<Recipient[]>([{ name: '', email: '' }])
   const [saving, setSaving]   = useState(false)
 
   useEffect(() => { loadReportTemplates(firmId).then(setTemplates) }, [firmId])
@@ -628,6 +631,9 @@ export function NewProjectModal({ firmId, userId, onClose, onCreated }: {
   const create = async () => {
     if (!name.trim()) { alert('Project name is required'); return }
     setSaving(true)
+    const issuedTo = recipients
+      .map(r => ({ name: r.name.trim(), email: r.email.trim() }))
+      .filter(r => r.name || r.email)
     const { data: newProj } = await supabase.from('projects').insert({
       name: name.trim(), project_number: number.trim() || `PRJ-${Date.now().toString().slice(-6)}`,
       address: address.trim(), client_name: client.trim(),
@@ -636,6 +642,8 @@ export function NewProjectModal({ firmId, userId, onClose, onCreated }: {
       ...(clientEmail.trim() ? { client_email: clientEmail.trim() } : {}),
       // Only sent when chosen, so creating projects still works before the templates migration.
       ...(templateId ? { report_template_id: templateId } : {}),
+      // Likewise only when given (sql/project_report_recipients.sql).
+      ...(issuedTo.length > 0 ? { report_recipients: issuedTo } : {}),
     }).select().single()
     if (newProj) {
       await supabase.from('project_members').insert({ project_id: newProj.id, user_id: userId, added_by: userId })
@@ -654,7 +662,7 @@ export function NewProjectModal({ firmId, userId, onClose, onCreated }: {
         zIndex: 1000, padding: 20,
       }}
     >
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 440 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 520, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }}>
         <Card style={{ padding: 24 }}>
           <div style={{ fontFamily: 'var(--f-heading)', fontSize: 19, fontWeight: 800, color: 'var(--text-ink)', marginBottom: 18 }}>New Project</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -676,7 +684,29 @@ export function NewProjectModal({ firmId, userId, onClose, onCreated }: {
             </div>
             <NPMField label="Address"><NPMInput value={address} onChange={setAddress} placeholder="123 Queen St, Auckland" /></NPMField>
             <NPMField label="Client"><NPMInput value={client} onChange={setClient} placeholder="e.g. Auckland Council" /></NPMField>
-            <NPMField label="Client Email"><NPMInput value={clientEmail} onChange={setClientEmail} placeholder="Shown under “Issued To” on reports" /></NPMField>
+            <NPMField label="Client Email"><NPMInput value={clientEmail} onChange={setClientEmail} placeholder="e.g. jo@client.co.nz" /></NPMField>
+            <NPMField label="Issued To">
+              <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginBottom: 8, lineHeight: 1.5 }}>
+                Everyone this project’s reports are issued to — filled into every report. Can be changed later under Edit Project.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {recipients.map((r, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr) auto', gap: 8, alignItems: 'center' }}>
+                    <NPMInput value={r.name} onChange={v => setRecipients(curr => curr.map((x, j) => j === i ? { ...x, name: v } : x))} placeholder="Name" />
+                    <NPMInput value={r.email} onChange={v => setRecipients(curr => curr.map((x, j) => j === i ? { ...x, email: v } : x))} placeholder="Email" />
+                    <button
+                      onClick={() => setRecipients(curr => curr.filter((_, j) => j !== i))}
+                      title="Remove"
+                      aria-label="Remove this person"
+                      style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--text-mid)', fontSize: 18, lineHeight: 1 }}
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+              <Btn variant="outline" small onClick={() => setRecipients(curr => [...curr, { name: '', email: '' }])} style={{ marginTop: 8 }}>
+                {recipients.length === 0 ? 'Add a person' : 'Add another person'}
+              </Btn>
+            </NPMField>
             {templates.length > 1 && (
               <NPMField label="Report Template">
                 <select

@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import AdmZip from 'adm-zip'
 import { loadDoc } from './docStorage'
-import { docxParagraphTexts, matchNoteWording, noteLabel } from './reportNotes'
+import { blockNoteWording, docxParagraphTexts, matchNoteWording, noteLabel } from './reportNotes'
+import { findingBookmark } from './observationBlocks'
 
 const getSupabase = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',
@@ -29,7 +30,13 @@ export async function syncReportWordingToNotes(inspectionId: string): Promise<Wo
 
   const zip = new AdmZip(await loadDoc(inspectionId))
   const xml = zip.getEntry('word/document.xml')?.getData().toString('utf-8') ?? ''
-  const wording = matchNoteWording(docxParagraphTexts(xml), notes)
+  // A report laid out a block per note marks each finding; any note whose
+  // mark is gone falls back to the "<label>:" bullet other reports use.
+  const wording = blockNoteWording(xml, notes, findingBookmark)
+  const rest = notes.filter(n => !wording.has(n.id))
+  if (rest.length > 0) {
+    for (const [id, text] of matchNoteWording(docxParagraphTexts(xml), rest)) wording.set(id, text)
+  }
 
   const now = new Date().toISOString()
   let updated = 0

@@ -9,13 +9,14 @@ import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRe
 import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
 import { parseSelected } from '@/lib/attachmentSelection'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
+import { buildObservationBlocks, chooseCarryForward, earlierNoteCount, loadPreviousItems } from '@/lib/observationBlocks'
 
 export const dynamic = 'force-dynamic'
 
 /** The structured reply the AI is constrained to (output_config.format). */
 type AiReport = {
   purpose: string
-  notes: { ref: string; text: string }[]
+  notes: { ref: string; text: string; brief: string }[]
   contractor_to_provide: { ref: string; item: string }[]
 }
 
@@ -37,13 +38,16 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { inspectionId, docKey, selectedPhotoUrls, selectedMarkups: markupStems, selectedSketches: sketchIds } = await request.json()
+    const { inspectionId, docKey, selectedPhotoUrls, selectedMarkups: markupStems, selectedSketches: sketchIds, carryForward } = await request.json()
     // The photos, markups (stems) and sketches (ids) ticked on the report
     // page, which the rebuilt sections hold; absent (the mobile app) means
     // the selection last recorded — see lib/attachmentSelection.
     const selectedUrls = parseSelected(selectedPhotoUrls)
     const selectedMarkups = parseSelected(markupStems)
     const selectedSketches = parseSelected(sketchIds)
+    // carryForward: which earlier reports' items the report lists, as chosen
+    // on the report page; absent (the mobile app) means the report's kept
+    // choice (see chooseCarryForward in lib/observationBlocks).
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
     }
@@ -128,7 +132,7 @@ ${notesForPrompt || '(no site notes recorded)'}
 
 Return:
 - purpose: one or two formal sentences stating the purpose of the inspection, based on the recorded purpose and the notes.
-- notes: one entry per site note, using its reference. Rewrite what was recorded as formal structural engineering wording. Keep every fact, location, grid line, member and requirement, including a record that something was absent or not built; add nothing that wasn't recorded. Don't repeat the label and don't mention open/closed status. Only where a note's recorded text is exactly "(nothing dictated; photos only)", write "Observation recorded; refer to site photographs." — never use that sentence in place of text the engineer recorded.
+- notes: one entry per site note, using its reference. Rewrite what was recorded as formal structural engineering wording. Keep every fact, location, grid line, member and requirement, including a record that something was absent or not built; add nothing that wasn't recorded. Don't repeat the label and don't mention open/closed status. Only where a note's recorded text is exactly "(nothing dictated; photos only)", write "Observation recorded; refer to site photographs." — never use that sentence in place of text the engineer recorded. Also give each note a brief: the same observation in at most 12 words, for a summary table — what was found, no full stop, e.g. "Grout missing behind angles at GL Tv/Vv".
 - contractor_to_provide: at most one item per note, with that note's reference. Where a note asks the contractor to provide or do anything, gather all of that note's requests into a single formal item naming the location it relates to. Skip notes that ask for nothing; if no note asks for anything, return an empty list.`
 
     const noteRefSchema = refs.length > 0 ? { type: 'string', enum: refs } : { type: 'string' }
@@ -156,8 +160,8 @@ Return:
                   type: 'array',
                   items: {
                     type: 'object',
-                    properties: { ref: noteRefSchema, text: { type: 'string' } },
-                    required: ['ref', 'text'],
+                    properties: { ref: noteRefSchema, text: { type: 'string' }, brief: { type: 'string' } },
+                    required: ['ref', 'text', 'brief'],
                     additionalProperties: false,
                   },
                 },
@@ -203,6 +207,18 @@ Return:
     // Built from the notes, not from the AI's list: a note the AI skipped
     // falls back to its dictated text rather than disappearing.
     const wordingByRef = new Map(ai.notes.map(n => [n.ref, n.text.trim()]))
+    const briefByRef = new Map(ai.notes.map(n => [n.ref, String(n.brief ?? '').trim().replace(/\.$/, '')]))
+    // Kept on each note (web/sql/note_brief.sql), so a rebuild from the
+    // plain notes and later reports' earlier-items rows use the same line.
+    // Best-effort: without the column the brief is only in this report.
+    await Promise.all(observations.map((ob: any, i: number) => {
+      const brief = briefByRef.get(refs[i])
+      return brief
+        ? supabase.from('observations').update({ brief }).eq('id', ob.id).then(({ error }) => {
+            if (error) console.warn('[ai-generate] could not keep the brief:', error.message)
+          })
+        : null
+    }))
     const findingLines = observations.map((ob: any, i: number) =>
       noteBulletLine(ob, wordingByRef.get(refs[i]) || noteDictation(ob) || 'Observation recorded; refer to site photographs.')
     )
@@ -233,6 +249,13 @@ Return:
     let carried: string[] = []
 
     if (firmId) {
+      // For templates laid out a block per note: the same wording, kept per
+      // note rather than gathered into two lists.
+      const observationBlocks = await buildObservationBlocks(supabase, observations, (ob: any, i: number) => ({
+        finding: wordingByRef.get(refs[i]) || noteDictation(ob) || 'Observation recorded; refer to site photographs.',
+        action: itemByRef.get(refs[i]) ?? '',
+        brief: briefByRef.get(refs[i]),
+      }), await earlierNoteCount(supabase, inspection as any))
       const templateData: TemplateData = {
         engineer_name:   engineer.name,
         engineer_user:   engineer.user,
@@ -255,6 +278,8 @@ Return:
         other_activity:  buildParagraphXml(''),
         date:            inspection.date            ?? '',
         time:            inspectionTime(inspection as any),
+        observations:    observationBlocks,
+        previousItems:   await loadPreviousItems(supabase, inspection as any, await chooseCarryForward(supabase, inspection as any, carryForward)),
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined
