@@ -574,22 +574,39 @@ function AdminPageInner() {
   const handleSignOut = async () => { await supabase.auth.signOut(); router.push('/') }
 
   // ── new functions ─────────────────────────────────────────────────────────
-  const saveJoinCode = async () => {
-    if (!editingJoinCode.trim() || editingJoinCode.length < 4) {
-      alert('Join code must be at least 4 characters')
-      return
-    }
-    if (editingJoinCode.includes(' ')) {
-      alert('Join code cannot contain spaces')
+  // Through the server (admins only, and never a code another firm uses).
+  // Saving straight from the browser reported success even when the
+  // database refused it, so the old code came back on reload.
+  // No code: the server makes a new random one.
+  const saveJoinCode = async (generate = false) => {
+    const code = editingJoinCode.trim().toUpperCase()
+    if (!generate) {
+      if (code.length < 4 || code.length > 12 || !/^[A-Z0-9]+$/.test(code)) {
+        alert('Use 4–12 letters and numbers, with no spaces.')
+        return
+      }
+      if (code === joinCode) return
+    } else if (!confirm('Make a new join code? The current code stops working for new signups.')) {
       return
     }
     setSavingJoinCode(true)
-    await supabase.from('firms')
-      .update({ join_code: editingJoinCode.trim().toUpperCase() })
-      .eq('id', firmId)
-    setJoinCode(editingJoinCode.trim().toUpperCase())
-    setSavingJoinCode(false)
-    alert('Join code updated successfully')
+    try {
+      const res = await apiFetch('/api/firms/join-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(generate ? {} : { code }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.code) throw new Error(data.error ?? 'Could not change the join code.')
+      setJoinCode(data.code)
+      setEditingJoinCode(data.code)
+      alert(`Join code is now ${data.code}. The old code no longer works for new signups.`)
+    } catch (err: any) {
+      setEditingJoinCode(joinCode)
+      alert(err?.message ?? 'Could not change the join code.')
+    } finally {
+      setSavingJoinCode(false)
+    }
   }
 
   const removeMember = async (memberId: string, userId: string, memberName: string) => {
@@ -2100,11 +2117,18 @@ function AdminPageInner() {
                 {copiedCode ? 'Copied!' : 'Copy'}
               </button>
               <button
-                onClick={saveJoinCode}
+                onClick={() => saveJoinCode()}
                 disabled={savingJoinCode}
                 style={{ padding: '10px 18px', background: 'var(--indigo)', color: '#fff', border: 'none', borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, cursor: savingJoinCode ? 'not-allowed' : 'pointer', opacity: savingJoinCode ? 0.7 : 1 }}
               >
                 {savingJoinCode ? 'Saving…' : 'Save Code'}
+              </button>
+              <button
+                onClick={() => saveJoinCode(true)}
+                disabled={savingJoinCode}
+                style={{ padding: '10px 18px', background: 'none', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-pill)', fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)', cursor: savingJoinCode ? 'not-allowed' : 'pointer' }}
+              >
+                Generate new code
               </button>
             </div>
             <div style={{ marginTop: 16, background: 'var(--indigo-soft)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)', padding: '14px 18px', fontFamily: 'var(--f-text)', fontSize: 13, color: 'var(--indigo)' }}>
