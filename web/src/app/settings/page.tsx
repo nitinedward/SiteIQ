@@ -46,6 +46,10 @@ export default function SettingsPage() {
   const [emailDomainEdit, setEmailDomainEdit]     = useState('')
   const [savingEmailDomain, setSavingEmailDomain] = useState(false)
 
+  // The code engineers enter at signup to join the firm.
+  const [joinCodeEdit, setJoinCodeEdit]     = useState('')
+  const [savingJoinCode, setSavingJoinCode] = useState(false)
+
   // What each uploaded template does with the placeholders it contains.
   const [checks, setChecks]           = useState<Record<string, TemplateCheck>>({})
   const [checkingId, setCheckingId]   = useState<string | null>(null)
@@ -110,6 +114,7 @@ export default function SettingsPage() {
       setFirmId(firmData?.id ?? '')
       setFirmNameEdit(firmData?.name ?? '')
       setEmailDomainEdit(firmData?.report_email_domain ?? '')
+      setJoinCodeEdit(firmData?.join_code ?? '')
       setTemplates(await loadReportTemplates(firmData?.id ?? ''))
 
       const { data: proj } = await supabase
@@ -183,8 +188,39 @@ export default function SettingsPage() {
     flash(domain ? 'Report email domain saved' : 'Report email domain cleared')
   }
 
+  // ── JOIN CODE ──────────────────────────────────────────
+  // Through the server: admins only, and never a code another firm uses
+  // (/api/firms/join-code). No code: the server makes a new random one.
+  const saveJoinCode = async (generate = false) => {
+    if (!firm) return
+    const code = joinCodeEdit.trim().toUpperCase()
+    if (!generate && !/^[A-Z0-9]{4,12}$/.test(code)) {
+      alert('Use 4–12 letters and numbers, with no spaces.')
+      return
+    }
+    if (generate && !confirm('Make a new join code? The current code stops working for new signups.')) return
+    setSavingJoinCode(true)
+    try {
+      const res = await apiFetch('/api/firms/join-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(generate ? {} : { code }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.code) throw new Error(data.error ?? 'Could not change the join code.')
+      setFirm(prev => prev ? { ...prev, join_code: data.code } : prev)
+      setJoinCodeEdit(data.code)
+      flash(`Join code is now ${data.code}`)
+    } catch (err: any) {
+      setJoinCodeEdit(firm.join_code ?? '')
+      alert(err?.message ?? 'Could not change the join code.')
+    } finally {
+      setSavingJoinCode(false)
+    }
+  }
+
   // ── REPORT TEMPLATES ───────────────────────────────────
-  const flash = (msg: string) => { setUploadSuccess(msg); setTimeout(() => setUploadSuccess(''), 3000) }
+  const flash =(msg: string) => { setUploadSuccess(msg); setTimeout(() => setUploadSuccess(''), 3000) }
 
   /** Reads an uploaded template back and reports what it will fill in. */
   const checkTemplateFile = async (t: ReportTemplate, quiet = false) => {
@@ -471,16 +507,27 @@ export default function SettingsPage() {
               <p style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginBottom: 8, lineHeight: 1.5 }}>
                 Share this with engineers — they enter it when signing up on the mobile app.
               </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ background: 'var(--indigo-soft)', border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)', padding: '10px 18px', flex: 1 }}>
-                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 19, fontWeight: 600, color: 'var(--indigo)', letterSpacing: '0.22em' }}>
-                    {firm?.join_code ?? '—'}
-                  </span>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <input
+                  value={joinCodeEdit}
+                  onChange={e => setJoinCodeEdit(e.target.value.toUpperCase().replace(/\s/g, ''))}
+                  maxLength={12}
+                  aria-label="Join code"
+                  style={{ ...inputStyle, flex: 1, minWidth: 140, fontFamily: 'var(--f-mono)', fontSize: 19, fontWeight: 600, color: 'var(--indigo)', letterSpacing: '0.22em' }}
+                />
+                <Btn variant="primary" onClick={() => saveJoinCode()} disabled={savingJoinCode || !joinCodeEdit || joinCodeEdit === (firm?.join_code ?? '')}>
+                  {savingJoinCode ? 'Saving…' : 'Save'}
+                </Btn>
+                <Btn variant="outline" onClick={() => saveJoinCode(true)} disabled={savingJoinCode}>
+                  New code
+                </Btn>
                 <Btn variant="outline" onClick={() => navigator.clipboard.writeText(firm?.join_code ?? '').then(() => alert('Copied!'))}>
                   Copy
                 </Btn>
               </div>
+              <p style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 8, lineHeight: 1.5 }}>
+                Changing it stops anyone with the old code joining. Engineers already in the firm aren't affected.
+              </p>
             </div>
           </div>
         </Card>
