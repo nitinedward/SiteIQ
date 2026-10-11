@@ -9,7 +9,7 @@ import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRe
 import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
 import { parseSelected } from '@/lib/attachmentSelection'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
-import { buildObservationBlocks, earlierNoteCount, loadPreviousItems } from '@/lib/observationBlocks'
+import { buildObservationBlocks, chooseCarryForward, earlierNoteCount, loadPreviousItems } from '@/lib/observationBlocks'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,13 +38,16 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { inspectionId, docKey, selectedPhotoUrls, selectedMarkups: markupStems, selectedSketches: sketchIds } = await request.json()
+    const { inspectionId, docKey, selectedPhotoUrls, selectedMarkups: markupStems, selectedSketches: sketchIds, carryForward } = await request.json()
     // The photos, markups (stems) and sketches (ids) ticked on the report
     // page, which the rebuilt sections hold; absent (the mobile app) means
     // the selection last recorded — see lib/attachmentSelection.
     const selectedUrls = parseSelected(selectedPhotoUrls)
     const selectedMarkups = parseSelected(markupStems)
     const selectedSketches = parseSelected(sketchIds)
+    // carryForward: which earlier reports' items the report lists, as chosen
+    // on the report page; absent (the mobile app) means the report's kept
+    // choice (see chooseCarryForward in lib/observationBlocks).
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
     }
@@ -263,7 +266,7 @@ Return:
         date:            inspection.date            ?? '',
         time:            inspectionTime(inspection as any),
         observations:    observationBlocks,
-        previousItems:   await loadPreviousItems(supabase, inspection as any),
+        previousItems:   await loadPreviousItems(supabase, inspection as any, await chooseCarryForward(supabase, inspection as any, carryForward)),
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined

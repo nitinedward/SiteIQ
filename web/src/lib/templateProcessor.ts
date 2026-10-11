@@ -432,6 +432,14 @@ export function fillTemplateBuffer(templateBuffer: Buffer, data: TemplateData): 
  * report getting photo pages as other reports do.
  */
 export async function templateUsesObservationBlocks(inspectionId: string): Promise<boolean> {
+  return (await reportTemplateLayout(inspectionId)).blocks
+}
+
+/** Which repeating parts a report's template has: note blocks, and
+ *  {{#open_items}} rows for earlier reports' items — the report page only
+ *  offers its choice of those items when the template has somewhere to put
+ *  them. Both false on any doubt. */
+export async function reportTemplateLayout(inspectionId: string): Promise<{ blocks: boolean; openItems: boolean }> {
   try {
     const { data: inspection } = await getSupabase()
       .from('inspections')
@@ -439,17 +447,17 @@ export async function templateUsesObservationBlocks(inspectionId: string): Promi
       .eq('id', inspectionId)
       .single()
     const firmId = (inspection?.projects as any)?.firm_id as string | undefined
-    if (!inspection || !firmId) return false
+    if (!inspection || !firmId) return { blocks: false, openItems: false }
     const template = await resolveTemplate(firmId, {
       pinnedTemplateId: (inspection as any).report_template_id,
       projectId: (inspection as any).project_id,
     })
     const zip = new AdmZip(await fetchTemplateBuffer(template))
-    const xml = zip.getEntry('word/document.xml')?.getData().toString('utf-8') ?? ''
-    return mergeRunsContainingPlaceholders(xml).includes(BLOCK_START)
+    const xml = mergeRunsContainingPlaceholders(zip.getEntry('word/document.xml')?.getData().toString('utf-8') ?? '')
+    return { blocks: xml.includes(BLOCK_START), openItems: xml.includes(OPEN_ITEMS_START) }
   } catch (err) {
     console.warn('[template] could not tell whether the report uses observation blocks:', err)
-    return false
+    return { blocks: false, openItems: false }
   }
 }
 

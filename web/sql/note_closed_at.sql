@@ -40,3 +40,16 @@ drop trigger if exists observations_closed_at on public.observations;
 create trigger observations_closed_at
   before insert or update of severity on public.observations
   for each row execute function public.stamp_observation_closed_at();
+
+-- Which earlier items each report lists, chosen on the report page:
+-- 'open' (still open), 'open_recent' (still open, plus closed since the
+-- previous report) or 'all'. Null means 'open_recent'. Without this column
+-- the choice still applies to each rewrite, but isn't kept for the next.
+alter table public.inspections
+  add column if not exists carry_forward text;
+
+alter table public.inspections
+  drop constraint if exists inspections_carry_forward_check;
+alter table public.inspections
+  add constraint inspections_carry_forward_check
+  check (carry_forward is null or carry_forward in ('open', 'open_recent', 'all'));

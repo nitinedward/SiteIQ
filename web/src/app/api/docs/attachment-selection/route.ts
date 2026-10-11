@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { readAttachmentSelection } from '@/lib/attachmentSelection'
 import { drawingAssetStem } from '@/lib/drawingAssetName'
 import { requireInspectionAccess } from '@/lib/apiAuth'
-import { templateUsesObservationBlocks } from '@/lib/templateProcessor'
+import { reportTemplateLayout } from '@/lib/templateProcessor'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,14 +50,17 @@ export async function GET(request: NextRequest) {
     drawings = signed.filter((d): d is { stem: string; url: string } => d !== null)
   }
 
+  const layout = asked === null ? await reportTemplateLayout(inspectionId) : null
   return NextResponse.json(
     // sketches/sketchesSeen: ids, for what the page ticks and marks as new
     // (lib/sketchSelection); null when nothing is recorded yet.
     // inBlocks: the report's template lays it out a block per site note, so
     // the page also captures each markup on its own (lib/observationBlocks).
+    // openItems: the template lists earlier reports' items, so the page
+    // offers the choice of which.
     {
       photos: selection.photos, drawings, sketches: selection.sketches, sketchesSeen: selection.sketchesSeen,
-      inBlocks: asked === null ? await templateUsesObservationBlocks(inspectionId) : undefined,
+      inBlocks: layout?.blocks, openItems: layout?.openItems,
     },
     { headers: { 'Cache-Control': 'no-store' } }
   )

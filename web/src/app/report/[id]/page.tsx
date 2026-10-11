@@ -13,6 +13,7 @@ import ReportSketchesPanel, { type ReportSketchItem, type ReportNote } from '@/c
 import type { StagedSketch } from '@/components/SketchDropZone'
 import { addSketch, deleteSketch, loadReportSketchRows, moveSketch, renameSketch } from '@/lib/sketches'
 import { isNewSketch, sketchesHeldByDefault } from '@/lib/sketchSelection'
+import { DEFAULT_CARRY_FORWARD, parseCarryForward, type CarryForward } from '@/lib/observationBlocks'
 
 const OnlyOfficeEditor = dynamic(() => import('@/components/OnlyOfficeEditor'), { ssr: false })
 
@@ -22,6 +23,16 @@ type Inspection = {
   site_contact: string; contact_phone: string; purpose: string
   // Optional: only present once the report_file_name column exists.
   report_file_name?: string | null
+  // Likewise once web/sql/note_closed_at.sql has run.
+  carry_forward?: string | null
+}
+
+/** The report page's choice of which earlier reports' items the report
+ *  lists (lib/observationBlocks, CarryForward). */
+const CARRY_FORWARD_LABELS: Record<CarryForward, string> = {
+  open: 'Open items only',
+  open_recent: 'Open + closed since last inspection',
+  all: 'All open and closed items',
 }
 type PageData = {
   inspection: Inspection
@@ -57,6 +68,8 @@ type RecordedSelection = {
   sketchesSeen: string[] | null
   /** The report's template lays it out a block per site note. */
   inBlocks: boolean
+  /** The template lists earlier reports' items ({{#open_items}}). */
+  openItems: boolean
 }
 
 async function fetchRecordedSelection(inspectionId: string): Promise<RecordedSelection> {
@@ -70,9 +83,10 @@ async function fetchRecordedSelection(inspectionId: string): Promise<RecordedSel
       sketches: ids(d?.sketches),
       sketchesSeen: ids(d?.sketchesSeen),
       inBlocks: d?.inBlocks === true,
+      openItems: d?.openItems === true,
     }
   } catch {
-    return { photos: null, drawings: null, sketches: null, sketchesSeen: null, inBlocks: false }
+    return { photos: null, drawings: null, sketches: null, sketchesSeen: null, inBlocks: false, openItems: false }
   }
 }
 
@@ -94,6 +108,10 @@ export default function ReportPage() {
   const [generatingAI,       setGeneratingAI]        = useState(false)
   const [generatingPlain,    setGeneratingPlain]     = useState(false)
   const [textVersionResult,  setTextVersionResult]   = useState('')
+  // Which earlier reports' items the next rewrite lists; offered only when
+  // the template has {{#open_items}} rows to put them in.
+  const [carryForward,       setCarryForward]        = useState<CarryForward>(DEFAULT_CARRY_FORWARD)
+  const [templateOpenItems,  setTemplateOpenItems]   = useState(false)
   const [editorKey,          setEditorKey]           = useState(0)
   // The Document Server's identity for the *stored content* — fetched from
   // the file itself, never counted locally. See refreshDocKey below.
@@ -184,6 +202,7 @@ export default function ReportPage() {
       // "use the derived name".
       setCustomFileName((inspRes.data as any)?.report_file_name ?? null)
       setReportNoValue((inspRes.data as any)?.report_no ?? null)
+      setCarryForward(parseCarryForward((inspRes.data as any)?.carry_forward) ?? DEFAULT_CARRY_FORWARD)
       setLoading(false)
 
       loadAttachments(id)
@@ -391,10 +410,18 @@ export default function ReportPage() {
     const k = tickedSketchIds().length
     if (k > 0) parts.push(`the ${k} ticked sketch${k === 1 ? '' : 'es'}`)
     else if (reportSketches.length > 0) parts.push('no sketches (none are ticked)')
-    if (parts.length === 0) return ''
+    const items = carryForwardNote()
+    if (parts.length === 0) return items
     const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]
-    return `The report will include ${list}.`
+    return `The report will include ${list}.` + (items ? ` ${items}` : '')
   }
+
+  /** The dropdown's choice, sent with a rewrite only when it is offered —
+   *  otherwise the report's kept choice stands. */
+  const carryForwardBody = () => (templateOpenItems ? { carryForward } : {})
+
+  const carryForwardNote = () =>
+    templateOpenItems ? `Earlier reports' items: ${CARRY_FORWARD_LABELS[carryForward].toLowerCase()}.` : ''
 
   const generateAIReport = async () => {
     if (!confirm(
@@ -411,7 +438,7 @@ export default function ReportPage() {
         const res = await apiFetch('/api/docs/ai-generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ inspectionId, docKey: closedKey, selectedPhotoUrls, selectedMarkups, selectedSketches }),
+          body:    JSON.stringify({ inspectionId, docKey: closedKey, selectedPhotoUrls, selectedMarkups, selectedSketches, ...carryForwardBody() }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'AI generation failed')
@@ -450,7 +477,7 @@ export default function ReportPage() {
         const res = await apiFetch('/api/docs/generate', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ inspectionId, force: true, docKey: closedKey, selectedPhotoUrls, selectedMarkups, selectedSketches }),
+          body:    JSON.stringify({ inspectionId, force: true, docKey: closedKey, selectedPhotoUrls, selectedMarkups, selectedSketches, ...carryForwardBody() }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'Could not rebuild the text from your notes')
@@ -1426,6 +1453,7 @@ export default function ReportPage() {
       // selection: photos are chosen by hand, never all by default.
       const recorded = await recordedSelection
       reportInBlocks.current = recorded.inBlocks
+      setTemplateOpenItems(recorded.openItems)
       const inReport = new Set(recorded.photos ?? [])
       const allPhotos: SelectedPhoto[] = []
       ;(obsData ?? []).forEach((ob: any) => {
@@ -2037,6 +2065,47 @@ export default function ReportPage() {
                   </>
                 )}
               </button>
+
+              {/* Which earlier reports' items the template's {{#open_items}}
+                  rows list. Those rows are filled when the text is written,
+                  so a change applies at the next rewrite, and is kept for the
+                  report then. */}
+              {templateOpenItems && (
+                <label style={{ display: 'block', marginTop: 10 }}>
+                  <span style={{
+                    display: 'block', marginBottom: 4,
+                    fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700,
+                    color: 'var(--text-mid)',
+                  }}>
+                    Earlier reports' items
+                  </span>
+                  <select
+                    value={carryForward}
+                    onChange={e => setCarryForward(parseCarryForward(e.target.value) ?? DEFAULT_CARRY_FORWARD)}
+                    disabled={generatingPlain || generatingAI || reportStatus === 'finalised'}
+                    style={{
+                      width: '100%',
+                      padding: '7px 10px',
+                      border: '1px solid var(--border-line)',
+                      borderRadius: 'var(--radius-sm, 8px)',
+                      background: 'var(--paper)',
+                      color: 'var(--text-ink)',
+                      fontFamily: 'var(--f-text)', fontSize: 12.5,
+                    }}
+                  >
+                    {(Object.keys(CARRY_FORWARD_LABELS) as CarryForward[]).map(mode => (
+                      <option key={mode} value={mode}>{CARRY_FORWARD_LABELS[mode]}</option>
+                    ))}
+                  </select>
+                  <span style={{
+                    display: 'block', marginTop: 4,
+                    fontFamily: 'var(--f-text)', fontSize: 11, lineHeight: 1.4,
+                    color: 'var(--text-mid)',
+                  }}>
+                    Applies the next time the report text is generated.
+                  </span>
+                </label>
+              )}
 
               {textVersionResult && (
                 <div style={{

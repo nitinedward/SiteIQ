@@ -60,8 +60,9 @@ export const PLACEHOLDERS: PlaceholderDef[] = [
   { name: 'photos', kind: 'block', description: 'The note’s ticked photos, captioned with its title — needs a line of its own' },
 
   // Items from the project's earlier reports: {{#open_items}} …
-  // {{/open_items}} around a table row repeats it for each one still open or
-  // closed since the last report. The note placeholders above work there
+  // {{/open_items}} around a table row repeats it for each one the report
+  // page's choice lists (open only, open plus closed since the last report,
+  // or all). The note placeholders above work there
   // too (Ref is the item's original one), plus these.
   // Links: the Ref or title as a link to the top of that note's page (the
   // block with its photos or markup), and a link back to the summary.
@@ -72,9 +73,9 @@ export const PLACEHOLDERS: PlaceholderDef[] = [
   { name: 'from_report', kind: 'block', description: 'In {{#open_items}} rows: the report the item was raised in, e.g. SR 002' },
   { name: 'closed_on', kind: 'block', description: 'In {{#open_items}} rows: when it was closed, e.g. 12 Oct 2026 — blank while open' },
   { name: 'update', kind: 'block', description: 'In {{#open_items}} rows: the latest response on the item' },
-  { name: 'carried_count', kind: 'data', description: 'How many items from earlier reports are listed — still open plus closed since the last report' },
+  { name: 'carried_count', kind: 'data', description: 'How many items from earlier reports are listed — which ones is chosen on the report page' },
   { name: 'carried_open_count', kind: 'data', description: 'How many items from earlier reports are still open' },
-  { name: 'carried_closed_count', kind: 'data', description: 'How many items from earlier reports were closed since the last report' },
+  { name: 'carried_closed_count', kind: 'data', description: 'How many of the listed items from earlier reports are closed' },
 ]
 
 /** One thing the checker noticed, in the words Settings shows.

@@ -10,7 +10,7 @@ import { noteBulletLine, noteDictation } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
-import { buildObservationBlocks, earlierNoteCount, loadPreviousItems } from '@/lib/observationBlocks'
+import { buildObservationBlocks, chooseCarryForward, earlierNoteCount, loadPreviousItems } from '@/lib/observationBlocks'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,13 +24,16 @@ export async function POST(request: NextRequest) {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { inspectionId, photos: photoList, drawingIds: _drawingIds, force, docKey, selectedPhotoUrls, selectedMarkups: markupStems, selectedSketches: sketchIds } = await request.json()
+    const { inspectionId, photos: photoList, drawingIds: _drawingIds, force, docKey, selectedPhotoUrls, selectedMarkups: markupStems, selectedSketches: sketchIds, carryForward } = await request.json()
     // The photos, markups (stems) and sketches (ids) ticked on the report
     // page, which a forced rewrite's sections hold; absent means the
     // selection last recorded — see lib/attachmentSelection.
     const selectedUrls = parseSelected(selectedPhotoUrls)
     const selectedMarkups = parseSelected(markupStems)
     const selectedSketches = parseSelected(sketchIds)
+    // carryForward: which earlier reports' items the report lists, as chosen
+    // on the report page; absent means the report's kept choice (see
+    // chooseCarryForward in lib/observationBlocks).
 
     if (!inspectionId) {
       return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
@@ -153,7 +156,7 @@ export async function POST(request: NextRequest) {
         date:            inspection.date            ?? '',
         time:            inspectionTime(inspection as any),
         observations:    observationBlocks,
-        previousItems:   await loadPreviousItems(supabase, inspection as any),
+        previousItems:   await loadPreviousItems(supabase, inspection as any, await chooseCarryForward(supabase, inspection as any, carryForward)),
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined

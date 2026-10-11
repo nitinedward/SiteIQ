@@ -199,16 +199,57 @@ export async function earlierNoteCount(
 }
 
 /**
+ * Which of the earlier reports' items fill the {{#open_items}} rows, chosen
+ * per report on the report page and kept in inspections.carry_forward
+ * (web/sql/note_closed_at.sql), so the template never has to say:
+ *  - open:        only those still open
+ *  - open_recent: those still open, and those closed since the previous
+ *                 report's visit — the default
+ *  - all:         every item, open or closed
+ */
+export const CARRY_FORWARD_MODES = ['open', 'open_recent', 'all'] as const
+export type CarryForward = typeof CARRY_FORWARD_MODES[number]
+export const DEFAULT_CARRY_FORWARD: CarryForward = 'open_recent'
+
+/** A stored or requested choice, or null when it isn't one of the three. */
+export function parseCarryForward(raw: unknown): CarryForward | null {
+  return (CARRY_FORWARD_MODES as readonly unknown[]).includes(raw) ? raw as CarryForward : null
+}
+
+/** The choice a generation uses: the one sent with it, which is then kept
+ *  for the report, else the one kept, else the default. Callers that don't
+ *  send one (the phone app, a first generation) get what the report page
+ *  last chose. Keeping it is best-effort: without the column it applies to
+ *  this generation only. */
+export async function chooseCarryForward(
+  supabase: SupabaseClient,
+  inspection: { id: string; carry_forward?: unknown },
+  requested: unknown,
+): Promise<CarryForward> {
+  const asked = parseCarryForward(requested)
+  if (asked && asked !== inspection.carry_forward) {
+    const { error } = await supabase.from('inspections').update({ carry_forward: asked }).eq('id', inspection.id)
+    if (error) console.warn('[blocks] could not keep the earlier-items choice:', error.message)
+  }
+  return asked ?? parseCarryForward(inspection.carry_forward) ?? DEFAULT_CARRY_FORWARD
+}
+
+/**
  * Items from the project's earlier reports to carry into this one's
- * {{#open_items}} rows: every one still open, and those closed since the
- * previous report's visit. Each keeps the Ref it had in its own report.
+ * {{#open_items}} rows, as `mode` picks them (see CarryForward). Each keeps
+ * the Ref it had in its own report.
  *
  * When an item was closed comes from observations.closed_at, stamped by the
  * database (web/sql/note_closed_at.sql). Until that has been run — and for
- * items closed before it was — nothing counts as recently closed.
+ * items closed before it was — nothing counts as recently closed; under
+ * `all` those items are still listed, without a closing date.
  * An empty list on any failure: the rows are left out, nothing else changes.
  */
-export async function loadPreviousItems(supabase: SupabaseClient, inspection: ThisReport): Promise<ObservationBlock[]> {
+export async function loadPreviousItems(
+  supabase: SupabaseClient,
+  inspection: ThisReport,
+  mode: CarryForward = DEFAULT_CARRY_FORWARD,
+): Promise<ObservationBlock[]> {
   try {
     const reports = await earlierReports(supabase, inspection)
     if (reports.length === 0) return []
@@ -239,7 +280,8 @@ export async function loadPreviousItems(supabase: SupabaseClient, inspection: Th
     const previousVisit = visitTime(reports[reports.length - 1])
     const keep = rows.filter(n => {
       if (statusOf(n.severity) === 'Open') return true
-      if (!closedDates || !n.closed_at) return false
+      if (mode === 'all') return true
+      if (mode === 'open' || !closedDates || !n.closed_at) return false
       return Date.parse(n.closed_at) > previousVisit
     })
     if (keep.length === 0) return []
