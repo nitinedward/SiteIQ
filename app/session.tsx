@@ -7,12 +7,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as SecureStore from 'expo-secure-store';
-import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { theme } from '../lib/theme'
 import { latestRevisions } from '../lib/drawingRevisions';
-import { transcribeAudio } from '../lib/transcribe';
+import { startDictation, deleteRecording, type Dictation } from '../lib/dictation';
 import { consumePendingDrawingSelection } from '../lib/pendingSelection';
 import { deleteSiteNote } from '../lib/siteNotes';
 
@@ -102,7 +101,8 @@ export default function SessionScreen() {
   const [generalObservations, setGeneralObservations] = useState<GeneralObservation[]>([]);
   const [isRecording, setIsRecording]       = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const recordingRef                         = useRef<Audio.Recording | null>(null);
+  const [level, setLevel]                   = useState(-60);
+  const dictationRef                         = useRef<Dictation | null>(null);
 
   const today      = new Date().toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const todayShort = new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -113,9 +113,7 @@ export default function SessionScreen() {
     generateReportNumber();
     fetchDrawings();
     return () => {
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => {});
-      }
+      dictationRef.current?.cancel().catch(() => {});
     };
   }, []);
 
@@ -152,96 +150,35 @@ export default function SessionScreen() {
     if (inspectionId) fetchGeneralObservations(inspectionId);
   }, [inspectionId]));
 
+  // The visit's purpose, dictated: transcribed on the phone (lib/dictation).
+  // Its recording isn't kept — only site notes keep theirs.
   const startRecording = async () => {
     try {
-      console.log('[dictate] Requesting permission...')
-
-      const { granted } = await Audio.requestPermissionsAsync()
-
-      if (!granted) {
-        Alert.alert(
-          'Permission Required',
-          'Please allow microphone access in Settings to use dictation.'
-        )
-        return
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      })
-
-      console.log('[dictate] Starting recording...')
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      )
-
-      recordingRef.current = recording
+      dictationRef.current = await startDictation({ onLevel: setLevel })
       setIsRecording(true)
-
-      console.log('[dictate] Recording started')
-
     } catch (err: any) {
       console.error('[dictate] Start error:', err)
       setIsRecording(false)
-      Alert.alert(
-        'Recording Failed',
-        err.message || 'Could not start recording.'
-      )
+      Alert.alert('Recording Failed', err.message || 'Could not start recording.')
     }
   };
 
   const stopRecording = async () => {
+    const dictation = dictationRef.current
+    dictationRef.current = null
+    setIsRecording(false)
+    setLevel(-60)
+    if (!dictation) return
+    setIsTranscribing(true)
     try {
-      setIsRecording(false)
-      setIsTranscribing(true)
-
-      if (!recordingRef.current) {
-        setIsTranscribing(false)
-        return
-      }
-
-      await recordingRef.current.stopAndUnloadAsync()
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-      })
-
-      const uri = recordingRef.current.getURI()
-      recordingRef.current = null
-
-      if (!uri) {
-        setIsTranscribing(false)
-        Alert.alert(
-          'No Audio',
-          'No audio was recorded. Please try again.'
-        )
-        return
-      }
-
-      console.log('[dictate] Audio saved:', uri)
-
-      const transcript = await transcribeAudio(uri)
-
-      if (transcript) {
-        setPurpose(prev =>
-          prev ? prev + ' ' + transcript : transcript
-        )
-        console.log('[dictate] Purpose updated')
-      } else {
-        Alert.alert(
-          'No Speech Detected',
-          'Could not detect speech. Please speak clearly and try again.'
-        )
-      }
-
+      const { text, audioUri, error } = await dictation.stop()
+      await deleteRecording(audioUri)
+      if (error) Alert.alert('Transcription Failed', 'Could not transcribe the recording. Please try again, or type the purpose.')
+      else if (text) setPurpose(prev => prev ? prev + ' ' + text : text)
+      else Alert.alert('No Speech Detected', 'Could not detect speech. Please speak clearly and try again.')
     } catch (err: any) {
       console.error('[dictate] Stop error:', err)
-      Alert.alert(
-        'Transcription Failed',
-        err.message || 'Please try again.'
-      )
+      Alert.alert('Transcription Failed', err.message || 'Please try again.')
     } finally {
       setIsTranscribing(false)
     }
@@ -360,7 +297,7 @@ export default function SessionScreen() {
             </View>
             {(isRecording || isTranscribing) && (
               <View style={S.waveBox}>
-                <WaveformVisualiser isRecording={isRecording} metering={isRecording ? -20 : -60} />
+                <WaveformVisualiser isRecording={isRecording} metering={isRecording ? level : -60} />
                 <Text style={S.recordHint}>{isRecording ? '🔴 Listening — tap Stop when finished' : '⏳ Processing...'}</Text>
               </View>
             )}

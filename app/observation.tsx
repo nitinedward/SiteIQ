@@ -7,10 +7,10 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../lib/theme';
-import { transcribeAudio } from '../lib/transcribe';
+import { startDictation, deleteRecording, type Dictation } from '../lib/dictation';
+import { uploadRecording, isMissingAudioColumn } from '../lib/recordingUpload';
 import { consumePendingMeasurement } from '../lib/pendingMeasurement';
 
 const T = theme.colors;
@@ -121,14 +121,15 @@ export default function ObservationScreen() {
   const [customUnit, setCustomUnit]     = useState('mm');
   const [isRecording, setIsRecording]       = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const recordingRef                         = useRef<Audio.Recording | null>(null);
+  const [level, setLevel]                   = useState(-60);
+  const dictationRef                         = useRef<Dictation | null>(null);
+  // Recordings already on the note (edit mode), and those made on this
+  // screen, still on the phone until the note is saved (lib/dictation).
+  const [savedAudio, setSavedAudio]         = useState<string[]>([]);
+  const [newRecordings, setNewRecordings]   = useState<string[]>([]);
 
   useEffect(() => {
-    return () => {
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => {});
-      }
-    };
+    return () => { dictationRef.current?.cancel().catch(() => {}); };
   }, []);
 
   useFocusEffect(useCallback(() => {
@@ -160,6 +161,7 @@ export default function ObservationScreen() {
       if (data.zone_label) setZoneLabel(data.zone_label);
       setPhotos(Array.isArray(data.photos) ? data.photos : JSON.parse(data.photos || '[]'));
       setTranscript(data.transcript || '');
+      setSavedAudio(Array.isArray(data.audio) ? data.audio : []);
       setReportText((data.report_text || '').trim());
       loadReportRef(data.inspection_id);
       setStatus(toStatus(data.severity));
@@ -212,32 +214,8 @@ export default function ObservationScreen() {
 
   const startRecording = async () => {
     try {
-      console.log('[voice] Requesting permission...')
-
-      const { granted } = await Audio.requestPermissionsAsync()
-
-      if (!granted) {
-        Alert.alert(
-          'Permission Required',
-          'Please allow microphone access in Settings to record voice notes.'
-        )
-        return
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      })
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      )
-
-      recordingRef.current = recording
+      dictationRef.current = await startDictation({ onLevel: setLevel, context: [zoneLabel] })
       setIsRecording(true)
-
-      console.log('[voice] Recording started')
-
     } catch (err: any) {
       console.error('[voice] Start error:', err)
       setIsRecording(false)
@@ -246,52 +224,29 @@ export default function ObservationScreen() {
   };
 
   const stopRecording = async () => {
+    const dictation = dictationRef.current
+    dictationRef.current = null
+    setIsRecording(false)
+    setLevel(-60)
+    if (!dictation) return
+    setIsTranscribing(true)
     try {
-      setIsRecording(false)
-      setIsTranscribing(true)
-
-      if (!recordingRef.current) {
-        setIsTranscribing(false)
-        return
-      }
-
-      await recordingRef.current.stopAndUnloadAsync()
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-      })
-
-      const uri = recordingRef.current.getURI()
-      recordingRef.current = null
-
-      if (!uri) {
-        setIsTranscribing(false)
-        Alert.alert('No Audio', 'No audio was recorded. Please try again.')
-        return
-      }
-
-      console.log('[voice] Audio saved:', uri)
-
-      const transcribed = await transcribeAudio(uri)
-
-      if (transcribed) {
-        setTranscript(prev =>
-          prev ? prev + ' ' + transcribed : transcribed
-        )
-        console.log('[voice] Transcript updated')
+      const { text, audioUri, seconds, engine, error } = await dictation.stop()
+      console.log(`[voice] ${seconds.toFixed(1)}s, transcribed on the ${engine}${error ? ' — failed' : ''}`)
+      if (error) {
+        // Kept, so what was said isn't lost; the note can be typed meanwhile.
+        setNewRecordings(curr => [...curr, audioUri])
+        Alert.alert('Transcription Failed', error)
+      } else if (text) {
+        setTranscript(prev => prev ? prev + ' ' + text : text)
+        setNewRecordings(curr => [...curr, audioUri])
       } else {
-        Alert.alert(
-          'No Speech Detected',
-          'Could not detect speech. Please speak clearly and try again.'
-        )
+        await deleteRecording(audioUri)
+        Alert.alert('No Speech Detected', 'Could not detect speech. Please speak clearly and try again.')
       }
-
     } catch (err: any) {
       console.error('[voice] Stop error:', err)
-      Alert.alert(
-        'Transcription Failed',
-        err.message || 'Please try again.'
-      )
+      Alert.alert('Transcription Failed', err.message || 'Please try again.')
     } finally {
       setIsTranscribing(false)
     }
@@ -307,18 +262,31 @@ export default function ObservationScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!transcript.trim() && photos.length === 0 && measurements.length === 0) {
+    if (!transcript.trim() && photos.length === 0 && measurements.length === 0 && newRecordings.length === 0) {
       Alert.alert('Nothing to Save', 'Please add a note, photo, or measurement.'); return;
     }
     setIsSubmitting(true);
+    // This note's recordings go up with it. One that fails to upload stays on
+    // the phone and doesn't hold the note back.
+    const uploaded: { local: string; url: string }[] = [];
+    for (const local of newRecordings) {
+      try { uploaded.push({ local, url: await uploadRecording(local) }); }
+      catch (err) { console.warn('[voice] recording not uploaded:', err); }
+    }
     const label = zoneLabel.trim() || 'General Site Observation';
     // Stored under the original column name — see the Status type above.
     const payload = { severity: status, transcript: transcript.trim(), notes: '', photos, measurements, zone_label: label };
-    const { error } = isEditMode
-      ? await supabase.from('observations').update(payload).eq('id', observationId)
-      : await supabase.from('observations').insert({ ...payload, zone_id: zoneId !== 'general' ? zoneId : null, project_id: projectId, inspection_id: inspectionId || null });
+    const audio = [...savedAudio, ...uploaded.map(u => u.url)];
+    const save = (fields: object) => isEditMode
+      ? supabase.from('observations').update(fields).eq('id', observationId)
+      : supabase.from('observations').insert({ ...fields, zone_id: zoneId !== 'general' ? zoneId : null, project_id: projectId, inspection_id: inspectionId || null });
+    let { error } = await save({ ...payload, audio });
+    // Before observation_audio.sql has run there is no audio column.
+    if (isMissingAudioColumn(error)) ({ error } = await save(payload));
     setIsSubmitting(false);
     if (error) { Alert.alert('Save Failed', error.message); return; }
+    for (const u of uploaded) await deleteRecording(u.local);
+    setNewRecordings(curr => curr.filter(l => !uploaded.some(u => u.local === l)));
     Alert.alert(isEditMode ? 'Updated' : 'Saved', `Observation for "${zoneLabel}" has been ${isEditMode ? 'updated' : 'recorded'}.`, [{ text: 'OK', onPress: () => router.back() }]);
   };
 
@@ -395,7 +363,7 @@ export default function ObservationScreen() {
           </View>
           {(isRecording || isTranscribing) && (
             <View style={S.waveBox}>
-              <WaveformVisualiser isRecording={isRecording} metering={isRecording ? -20 : -60} />
+              <WaveformVisualiser isRecording={isRecording} metering={isRecording ? level : -60} />
               <Text style={S.waveHint}>{isRecording ? 'Listening...' : 'Processing...'}</Text>
             </View>
           )}

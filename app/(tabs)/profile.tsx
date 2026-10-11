@@ -4,6 +4,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { supabase } from '../../lib/supabase'
 import { Ionicons } from '@expo/vector-icons'
 import { theme } from '../../lib/theme'
+import OfflineTranscriptionCard from '../../components/OfflineTranscriptionCard'
 
 const T = theme.colors
 const R = theme.radius
@@ -61,6 +62,9 @@ export default function ProfileScreen() {
             <Text style={S.cardValue}>{profile.firmName}</Text>
           </View>
         </View>
+
+        {/* Dictation without signal */}
+        <OfflineTranscriptionCard />
 
         {/* Menu */}
         <View style={S.card}>

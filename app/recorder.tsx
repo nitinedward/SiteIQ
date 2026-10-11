@@ -12,7 +12,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Audio } from 'expo-av';
 import { router } from 'expo-router';
 import { theme } from '../lib/theme';
-import { transcribeAudio } from '../lib/transcribe';
+import { startDictation, deleteRecording, type Dictation } from '../lib/dictation';
 
 const T = theme.colors;
 const R = theme.radius;
@@ -20,7 +20,7 @@ const R = theme.radius;
 export default function RecorderScreen() {
   const [permission, setPermission] = useState<boolean | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recording, setRecording] = useState<Dictation | null>(null);
   const [duration, setDuration] = useState(0);
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string>('');
@@ -105,14 +105,7 @@ export default function RecorderScreen() {
     }
 
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      const newRecording = await startDictation();
 
       setRecording(newRecording);
       setIsRecording(true);
@@ -140,32 +133,31 @@ export default function RecorderScreen() {
         clearInterval(timerRef.current);
       }
 
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-
       setRecording(null);
       setIsRecording(false);
       stopPulse();
       stopWaveform();
 
-      if (uri) {
+      setIsTranscribing(true);
+      try {
+        // This screen only shows the text, so the recording isn't kept.
+        const { text, audioUri: uri, error } = await recording.stop();
+        await deleteRecording(uri);
         setAudioUri(uri);
-        setIsTranscribing(true);
-        try {
-          const result = await transcribeAudio(uri);
-          if (result) {
-            setTranscript(result);
-          } else {
-            Alert.alert(
-              'No Speech Detected',
-              'Could not detect speech. Please speak clearly and try again.'
-            );
-          }
-        } catch (err: any) {
-          Alert.alert('Transcription Failed', err.message || 'Please try again.');
-        } finally {
-          setIsTranscribing(false);
+        if (error) {
+          Alert.alert('Transcription Failed', 'Could not transcribe the recording. Please try again.');
+        } else if (text) {
+          setTranscript(text);
+        } else {
+          Alert.alert(
+            'No Speech Detected',
+            'Could not detect speech. Please speak clearly and try again.'
+          );
         }
+      } catch (err: any) {
+        Alert.alert('Transcription Failed', err.message || 'Please try again.');
+      } finally {
+        setIsTranscribing(false);
       }
 
     } catch (error) {
@@ -182,6 +174,8 @@ export default function RecorderScreen() {
       }
     };
   }, []);
+
+  useEffect(() => () => { recording?.cancel().catch(() => {}); }, [recording]);
 
   if (permission === false) {
     return (

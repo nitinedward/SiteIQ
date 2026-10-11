@@ -22,14 +22,14 @@ function apiBase(): string {
 
 /** Transcribes a recorded audio file and returns the text, or '' if nothing
  *  could be made out. Throws with a readable message if the request fails. */
-export async function transcribeAudio(uri: string): Promise<string> {
+export async function transcribeAudio(uri: string, type: 'audio/m4a' | 'audio/wav' = 'audio/m4a'): Promise<string> {
   console.log('[transcribe] Starting:', uri)
 
   const formData = new FormData()
   formData.append('file', {
     uri,
-    type: 'audio/m4a',
-    name: 'recording.m4a',
+    type,
+    name: type === 'audio/wav' ? 'recording.wav' : 'recording.m4a',
   } as any)
 
   let response: Response

@@ -1,8 +1,14 @@
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useEffect } from 'react';
+import { downloadModelOnWifi } from '../lib/whisperModel';
 
 export default function RootLayout() {
+  // Offline transcription's model downloads itself the first time the app
+  // is opened on Wi-Fi (lib/whisperModel), so it's there before site.
+  useEffect(() => { downloadModelOnWifi() }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
