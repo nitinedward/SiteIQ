@@ -93,7 +93,7 @@ export async function ensureUploaded(local: string, token: string, apikey: strin
   if (row.uploaded) return row.remote
 
   const info = await FileSystem.getInfoAsync(local)
-  if (!info.exists) throw new PermanentError('A photo or recording on this note is missing from the phone.')
+  if (!info.exists) throw new PermanentError(`The ${row.kind === 'audio' ? 'recording' : 'photo'} file is missing from the phone.`)
 
   const path = row.remote.split(`/public/${BUCKET}/`)[1]
   const result = await FileSystem.uploadAsync(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, local, {
@@ -109,11 +109,11 @@ export async function ensureUploaded(local: string, token: string, apikey: strin
     },
   })
   if (result.status < 200 || result.status >= 300) {
-    const err = new Error(`Upload failed (${result.status})`)
+    const message = `${row.kind === 'audio' ? 'Recording' : 'Photo'} upload failed (${result.status}): ${result.body?.slice(0, 200) || 'no reply'}`
     if (result.status >= 400 && result.status < 500 && result.status !== 401 && result.status !== 408 && result.status !== 429) {
-      throw new PermanentError(`${err.message}: ${result.body?.slice(0, 200) ?? ''}`)
+      throw new PermanentError(message)
     }
-    throw err
+    throw new Error(message)
   }
   await d.runAsync('UPDATE files SET uploaded = 1, uploaded_at = ? WHERE local = ?', Date.now(), local)
   return row.remote

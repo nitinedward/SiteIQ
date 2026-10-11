@@ -57,6 +57,11 @@ async function open(): Promise<SQLite.SQLiteDatabase> {
     );
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
   `)
+  // Columns added since the first offline build; already there is fine.
+  for (const sql of [
+    "ALTER TABLE files ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE files ADD COLUMN last_error TEXT",
+  ]) await d.execAsync(sql).catch(() => {})
   return d
 }
 

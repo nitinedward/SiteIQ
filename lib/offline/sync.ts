@@ -1,34 +1,59 @@
-/** Uploads the changes made on the phone (lib/offline/outbox), one at a
- *  time and in order, whenever there's a connection: when the app opens,
- *  when the signal comes back, after each change, and every minute while
- *  anything is waiting.
+/** Uploads what was saved on the phone, whenever the engineer's upload
+ *  setting allows (lib/offline/uploadMode): when the app opens, when the
+ *  signal comes back, after each change, and every minute while anything
+ *  is waiting.
  *
- *  A change that fails for want of signal waits for the next try. One the
- *  server refuses is tried a few times more and then set aside as failed,
- *  so it can't hold up everything behind it; Profile lists those. */
+ *  Two queues:
+ *  - changes (lib/offline/outbox) — visits, mark-ups, note text — sent one
+ *    at a time, in order;
+ *  - files (lib/offline/files) — photos and recordings — each uploaded on
+ *    its own and attached to its note as soon as it's up, so one that fails
+ *    never holds back the others or the note itself.
+ *
+ *  Something that fails for want of signal waits for the next try (with a
+ *  growing pause, so a dead connection isn't hammered). Something the
+ *  server refuses is tried a few times and then set aside; Profile lists
+ *  those with the reason. */
 
 import { AppState } from 'react-native'
 import { supabase } from '../supabase'
 import { db, getRow, putRow, type Table } from './db'
-import { ensureUploaded, isLocal, PermanentError } from './files'
-import { isConnectionError, isOnline, markReachable, markUnreachable, onConnectivity, startNetworkWatch, withTimeout } from './net'
+import { discardFile, ensureUploaded, isLocal, PermanentError } from './files'
 import {
-  completeOp, hasPending, nextOp, onOutboxChange, queueCounts, recordFailure, setInFlight,
-  type Op, type QueueCounts,
+  isConnectionError, isOnline, isWifi, markReachable, markUnreachable, onConnectivity, startNetworkWatch, withTimeout,
+} from './net'
+import {
+  completeOp, hasPending, nextOp, onOutboxChange, outboxChanged, queueCounts, recordFailure, setInFlight, type Op,
 } from './outbox'
+import { allowed, onUploadModeChange, uploadMode, type UploadMode } from './uploadMode'
 
 const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''
 const DEFAULT_APP_URL = 'https://www.site-iq.co.nz'
 const REQUEST_MS = 30_000
+/** Tries before a photo or recording the server refuses is set aside. */
+const FILE_TRIES = 3
 
-export type SyncStatus = QueueCounts & {
+export type SyncStatus = {
+  /** Visits, mark-ups and note changes waiting. */
+  changes: number
+  /** Photos and recordings waiting. */
+  files: number
+  /** changes + files. */
+  waiting: number
+  /** Changes and files the server refused, set aside. */
+  failed: number
+  /** Why waiting things aren't going up: the setting holds them. */
+  held: 'manual' | 'wifi' | null
+  mode: UploadMode
   online: boolean
   uploading: boolean
   /** Why the last attempt stopped, readable; null when all is well. */
   problem: string | null
 }
 
-let status: SyncStatus = { waiting: 0, failed: 0, inspections: [], online: true, uploading: false, problem: null }
+let status: SyncStatus = {
+  changes: 0, files: 0, waiting: 0, failed: 0, held: null, mode: 'auto', online: true, uploading: false, problem: null,
+}
 const listeners = new Set<(s: SyncStatus) => void>()
 
 function setStatus(patch: Partial<SyncStatus>) {
@@ -51,20 +76,38 @@ async function currentUserId(): Promise<string | null> {
 
 async function refreshCounts() {
   const counts = await queueCounts(await currentUserId())
-  setStatus({ ...counts, online: isOnline() })
+  const d = await db()
+  const f = await d.getFirstAsync<{ waiting: number; failed: number }>(
+    `SELECT SUM(CASE WHEN attempts < ? THEN 1 ELSE 0 END) AS waiting,
+            SUM(CASE WHEN attempts >= ? THEN 1 ELSE 0 END) AS failed
+       FROM files WHERE uploaded = 0 AND kind != 'drawing'`, FILE_TRIES, FILE_TRIES)
+  const files = f?.waiting ?? 0
+  const mode = await uploadMode()
+  const may = allowed(mode, isWifi(), false)
+  const heldChanges = counts.waiting > 0 && !may.changes
+  const heldFiles = files > 0 && !may.files
+  setStatus({
+    changes: counts.waiting, files, waiting: counts.waiting + files,
+    failed: counts.failed + (f?.failed ?? 0),
+    held: heldChanges || heldFiles ? (mode === 'manual' ? 'manual' : 'wifi') : null,
+    mode, online: isOnline(),
+  })
 }
 
 let running: Promise<void> | null = null
 let again = false
 let timer: ReturnType<typeof setTimeout> | null = null
-/** After a failed attempt, the next waits longer: 30 s, doubling to 5 min,
- *  so a dead connection isn't hammered (and the battery isn't drained).
- *  A new connection, the app coming back to the front, or "Upload now"
- *  tries straight away. */
+/** After a failed attempt, the next waits longer: 30 s, doubling to 5 min.
+ *  A new connection, the app returning to the front, or Upload now tries
+ *  straight away. */
 let backoffMs = 0
 let notBefore = 0
+/** Upload now tapped while a pass was running: the next pass is manual too. */
+let manualAgain = false
 const BACKOFF_MIN = 30_000
 const BACKOFF_MAX = 300_000
+
+function resetBackoff() { backoffMs = 0; notBefore = 0 }
 
 function failedAttempt() {
   backoffMs = backoffMs ? Math.min(BACKOFF_MAX, backoffMs * 2) : BACKOFF_MIN
@@ -73,14 +116,16 @@ function failedAttempt() {
 }
 
 /** Starts an upload pass, or queues one after the pass already running.
- *  `force` ignores the wait after a failure. */
-export function syncNow(force = false): Promise<void> {
-  if (force) { backoffMs = 0; notBefore = 0 }
-  if (!force && Date.now() < notBefore) return Promise.resolve()
-  if (running) { again = true; return running }
+ *  `manual` is the engineer tapping Upload now: everything goes, whatever
+ *  the setting, and any pause after a failure is skipped. */
+export function syncNow({ manual = false }: { manual?: boolean } = {}): Promise<void> {
+  if (manual) resetBackoff()
+  if (!manual && Date.now() < notBefore) return Promise.resolve()
+  if (running) { again = true; if (manual) manualAgain = true; return running }
   running = (async () => {
     try {
-      do { again = false; await pass() } while (again && isOnline())
+      let m = manual
+      do { again = false; await pass(m); m = manualAgain; manualAgain = false } while (again && isOnline())
     } finally {
       running = null
       setInFlight(null)
@@ -96,16 +141,23 @@ function syncSoon(ms = 800) {
 }
 
 let started = false
-/** Wires the queue to the app's life: call once, at the root. */
+/** Wires the queues to the app's life: call once, at the root. */
 export function startSync(): void {
   if (started) return
   started = true
   startNetworkWatch()
-  onConnectivity(online => { setStatus({ online }); if (online) { backoffMs = 0; notBefore = 0; syncSoon(1500) } })
+  onConnectivity(online => {
+    refreshCounts().catch(() => {})
+    if (online) { resetBackoff(); syncSoon(1500) }
+  })
   onOutboxChange(() => { refreshCounts().catch(() => {}); if (Date.now() >= notBefore) syncSoon() })
-  AppState.addEventListener('change', s => { if (s === 'active') { backoffMs = 0; notBefore = 0; syncSoon(500) } })
-  setInterval(() => { if (status.waiting > 0 && isOnline()) syncNow() }, 60_000)
-  // Signing in (or the token refreshing) can unblock waiting changes.
+  onUploadModeChange(() => { refreshCounts().catch(() => {}); resetBackoff(); syncSoon(300) })
+  AppState.addEventListener('change', s => { if (s === 'active') { resetBackoff(); syncSoon(500) } })
+  setInterval(() => {
+    refreshCounts().catch(() => {})
+    if (status.waiting > 0 && isOnline()) syncNow()
+  }, 60_000)
+  // Signing in (or the token refreshing) can unblock waiting uploads.
   supabase.auth.onAuthStateChange(event => {
     if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') syncSoon(1000)
     if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') refreshCounts().catch(() => {})
@@ -114,38 +166,136 @@ export function startSync(): void {
   syncSoon(2000)
 }
 
-async function pass(): Promise<void> {
+/** Lets the file queue know a photo or recording was added. */
+export function filesChanged(): void {
+  refreshCounts().catch(() => {})
+  if (Date.now() >= notBefore) syncSoon()
+}
+
+async function pass(manual: boolean): Promise<void> {
   const owner = await currentUserId()
   if (!owner || !isOnline()) return
+  const may = allowed(await uploadMode(), isWifi(), manual)
+  if (!may.changes && !may.files) return
   setStatus({ uploading: true })
   try {
-    for (;;) {
-      if (!isOnline()) break
-      const op = await nextOp(owner)
-      if (!op) { setStatus({ problem: null }); break }
-      setInFlight(op.seq)
-      try {
-        await run(op)
-        await completeOp(op.seq)
-        await markSynced(op)
-        markReachable()
-        backoffMs = 0
-        setStatus({ problem: null })
-      } catch (err: any) {
-        const permanent = err instanceof PermanentError
-        console.warn(`[sync] ${op.kind} ${op.target}:`, err?.message ?? err)
-        if (!permanent && isConnectionError(err)) markUnreachable()
-        await recordFailure(op.seq, err?.message ?? String(err), permanent)
-        setStatus({ problem: permanent ? `Couldn't upload a change: ${err?.message}` : 'Waiting for a better signal…' })
-        failedAttempt()
-        break
-      } finally {
-        setInFlight(null)
-      }
-    }
+    if (may.changes && !(await sendChanges(owner))) return
+    if (may.files) await sendFiles()
   } finally {
     setStatus({ uploading: false })
   }
+}
+
+/** Sends waiting changes in order. False if it stopped on a failure. */
+async function sendChanges(owner: string): Promise<boolean> {
+  for (;;) {
+    if (!isOnline()) return false
+    const op = await nextOp(owner)
+    if (!op) { setStatus({ problem: null }); return true }
+    setInFlight(op.seq)
+    try {
+      await run(op)
+      await completeOp(op.seq)
+      await markSynced(op)
+      markReachable()
+      backoffMs = 0
+      setStatus({ problem: null })
+    } catch (err: any) {
+      const permanent = err instanceof PermanentError
+      console.warn(`[sync] ${op.kind} ${op.target}:`, err?.message ?? err)
+      if (!permanent && isConnectionError(err)) markUnreachable()
+      await recordFailure(op.seq, err?.message ?? String(err), permanent)
+      setStatus({ problem: permanent ? `Couldn't upload a change: ${err?.message}` : 'Waiting for a better signal…' })
+      failedAttempt()
+      return false
+    } finally {
+      setInFlight(null)
+    }
+  }
+}
+
+/** Notes (on the phone) listing a photo or recording. */
+async function notesUsing(local: string): Promise<{ id: string }[]> {
+  const d = await db()
+  return d.getAllAsync<{ id: string }>(
+    "SELECT id FROM rows WHERE tbl = 'observations' AND data LIKE ?", `%${JSON.stringify(local).slice(1, -1)}%`)
+}
+
+/** Uploads waiting photos and recordings, each attached to its note as
+ *  soon as it's up. */
+async function sendFiles(): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) return
+  const d = await db()
+  const files = await d.getAllAsync<{ local: string; created_at: number }>(
+    `SELECT local, created_at FROM files WHERE uploaded = 0 AND kind != 'drawing' AND attempts < ? ORDER BY created_at`, FILE_TRIES)
+  for (const f of files) {
+    if (!isOnline()) return
+    const notes = await notesUsing(f.local)
+    if (!notes.length) {
+      // On no note (it was deleted), and not in a waiting change either:
+      // nothing will ever use it. Kept a day in case.
+      const queued = await d.getFirstAsync('SELECT seq FROM outbox WHERE payload LIKE ?', `%${JSON.stringify(f.local).slice(1, -1)}%`)
+      if (!queued && Date.now() - f.created_at > 86400_000) await discardFile(f.local)
+      continue
+    }
+    try {
+      await ensureUploaded(f.local, token, SUPABASE_KEY)
+      markReachable()
+    } catch (err: any) {
+      const permanent = err instanceof PermanentError
+      console.warn('[sync] file', f.local, err?.message ?? err)
+      if (!permanent) {
+        if (isConnectionError(err)) markUnreachable()
+        setStatus({ problem: 'Waiting for a better signal…' })
+        failedAttempt()
+        return
+      }
+      await d.runAsync('UPDATE files SET attempts = attempts + 1, last_error = ? WHERE local = ?',
+        String(err?.message ?? err).slice(0, 500), f.local)
+      continue
+    }
+    for (const n of notes) {
+      try { await attachUploads(n.id) }
+      catch (err: any) {
+        console.warn('[sync] attach', n.id, err?.message ?? err)
+        if (!(err instanceof PermanentError)) { failedAttempt(); return }
+      }
+    }
+    refreshCounts().catch(() => {})
+  }
+}
+
+/** Puts a note's uploaded photos and recordings on the server's copy, and
+ *  swaps their local paths for web addresses on the phone's. A note whose
+ *  first save hasn't gone up yet is left: that save takes them along. */
+async function attachUploads(id: string): Promise<void> {
+  const d = await db()
+  const insertWaiting = await d.getFirstAsync('SELECT seq FROM outbox WHERE target = ? AND kind = ?', id, 'observation.insert')
+  if (insertWaiting) return
+  const row = await getRow('observations', id)
+  if (!row) return
+  const lists = (['photos', 'audio'] as const).filter(k => Array.isArray(row[k]))
+  const swapped: Record<string, string[]> = {}
+  for (const k of lists) swapped[k] = await Promise.all(row[k].map(uploadedOr))
+  const server: Record<string, string[]> = {}
+  for (const k of lists) server[k] = swapped[k].filter(u => !isLocal(u))
+  await saveRow('observation.update', id, server)
+  const fresh = await getRow('observations', id)
+  if (fresh) {
+    const next = { ...fresh }
+    for (const k of lists) if (Array.isArray(fresh[k])) next[k] = await Promise.all(fresh[k].map(uploadedOr))
+    await putRow('observations', next)
+  }
+}
+
+/** A file's web address if it's uploaded, otherwise its local path. */
+async function uploadedOr(uri: string): Promise<string> {
+  if (!isLocal(uri)) return uri
+  const d = await db()
+  const r = await d.getFirstAsync<{ remote: string; uploaded: number }>('SELECT remote, uploaded FROM files WHERE local = ?', uri)
+  return r?.uploaded ? r.remote : uri
 }
 
 const TABLE: Record<string, Table> = { inspection: 'inspections', zone: 'zones', observation: 'observations' }
@@ -214,7 +364,13 @@ async function run(op: Op): Promise<void> {
     }
     case 'observation.insert':
     case 'observation.update': {
-      await sendObservation(op)
+      // Photos and recordings already uploaded go along; the rest are
+      // attached by the file queue as each one goes up.
+      const fields = { ...p }
+      for (const k of ['photos', 'audio']) {
+        if (Array.isArray(fields[k])) fields[k] = (await Promise.all(fields[k].map(uploadedOr))).filter((u: string) => !isLocal(u))
+      }
+      await saveRow(op.kind, op.target, fields)
       return
     }
     case 'observation.delete': {
@@ -224,64 +380,15 @@ async function run(op: Op): Promise<void> {
   }
 }
 
-/** A note goes up in two steps so the office sees it soon: first its text
- *  (with any photos already uploaded), then its remaining photos and
- *  recordings, then the full lists. Cut short anywhere, it's simply sent
- *  again — the insert becomes an update and finished uploads are skipped. */
-async function sendObservation(op: Op) {
-  const p = { ...op.payload }
-  const { data: { session } } = await supabase.auth.getSession()
-  const token = session?.access_token
-  if (!token) throw new Error('Not signed in')
-
-  const d = await db()
-  const uploadedUrl = async (uri: string) => {
-    if (!isLocal(uri)) return uri
-    const r = await d.getFirstAsync<{ remote: string; uploaded: number }>('SELECT remote, uploaded FROM files WHERE local = ?', uri)
-    return r?.uploaded ? r.remote : null
-  }
-  const lists = ['photos', 'audio'].filter(k => Array.isArray(p[k])) as ('photos' | 'audio')[]
-  const firstStep: Record<string, any> = { ...p }
-  for (const k of lists) {
-    firstStep[k] = (await Promise.all(p[k].map(uploadedUrl))).filter(Boolean)
-  }
-  await saveRow(op, firstStep)
-
-  const needsFiles = lists.some(k => p[k].some(isLocal))
-  if (!needsFiles) return
-
-  const full: Record<string, any> = {}
-  const uploaded = new Map<string, string>()
-  for (const k of lists) {
-    full[k] = []
-    for (const uri of p[k]) {
-      const url = isLocal(uri) ? await ensureUploaded(uri, token, SUPABASE_KEY) : uri
-      if (url !== uri) uploaded.set(uri, url)
-      full[k].push(url)
-    }
-  }
-  await saveRow({ ...op, kind: 'observation.update' }, full)
-
-  // The phone's copy lists the web addresses from now on (the files stay on
-  // the phone a while, and localFor() still finds them). Swapped one by
-  // one, so a photo added since this change was queued isn't lost.
-  const local = await getRow('observations', op.target)
-  if (local) {
-    const swapped = { ...local }
-    for (const k of lists) if (Array.isArray(local[k])) swapped[k] = local[k].map((u: string) => uploaded.get(u) ?? u)
-    await putRow('observations', swapped)
-  }
-}
-
-async function saveRow(op: Op, fields: Record<string, any>) {
+async function saveRow(kind: string, id: string, fields: Record<string, any>) {
   const attempt = async (f: Record<string, any>) => {
-    if (op.kind === 'observation.insert') {
+    if (kind === 'observation.insert') {
       const res = await withTimeout(supabase.from('observations').insert(f), REQUEST_MS)
       if (!isDuplicate(res)) return res
-      const { id, ...rest } = f
-      return withTimeout(supabase.from('observations').update(rest).eq('id', op.target), REQUEST_MS)
+      const { id: _id, ...rest } = f
+      return withTimeout(supabase.from('observations').update(rest).eq('id', id), REQUEST_MS)
     }
-    return withTimeout(supabase.from('observations').update(f).eq('id', op.target), REQUEST_MS)
+    return withTimeout(supabase.from('observations').update(f).eq('id', id), REQUEST_MS)
   }
   let res = await attempt(fields)
   // Before web/sql/observation_audio.sql has run there's no audio column.
@@ -326,3 +433,15 @@ async function callApi(path: string, body: object, notFoundIsDone = false) {
   throw new Error(message)
 }
 
+/** Photos and recordings the server refused, with the reason. */
+export async function failedFiles(): Promise<{ local: string; kind: string; last_error: string | null }[]> {
+  const d = await db()
+  return d.getAllAsync('SELECT local, kind, last_error FROM files WHERE uploaded = 0 AND kind != ? AND attempts >= ?', 'drawing', FILE_TRIES)
+}
+
+/** Gives refused photos and recordings another go. */
+export async function retryFailedFiles(): Promise<void> {
+  const d = await db()
+  await d.runAsync('UPDATE files SET attempts = 0 WHERE uploaded = 0')
+  outboxChanged()
+}

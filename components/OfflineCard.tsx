@@ -1,5 +1,6 @@
-/** Profile → Offline & uploads: what's waiting to upload (and anything that
- *  couldn't), and the projects kept on this phone. */
+/** Profile → Offline & uploads: when to upload (the engineer's choice, to
+ *  save mobile data), what's waiting and anything that couldn't upload,
+ *  and the projects kept on this phone. */
 
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native'
 import { useCallback, useEffect, useState } from 'react'
@@ -7,11 +8,12 @@ import { useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { theme } from '../lib/theme'
 import { SyncStatus } from './SyncStatus'
-import { getSyncStatus, onSyncStatus, syncNow } from '../lib/offline/sync'
-import { failedOps, retryFailed, type Op } from '../lib/offline/outbox'
+import { failedFiles, getSyncStatus, onSyncStatus, retryFailedFiles, syncNow } from '../lib/offline/sync'
+import { failedOps, retryFailed } from '../lib/offline/outbox'
 import { offlineProjects, onOfflineProjectsChange, removeOfflineProject } from '../lib/offline/download'
 import { getRow } from '../lib/offline/db'
 import { myId } from '../lib/offline/store'
+import { setUploadMode, uploadMode, UPLOAD_MODES, type UploadMode } from '../lib/offline/uploadMode'
 
 const T = theme.colors
 const R = theme.radius
@@ -20,15 +22,23 @@ const WHAT: Record<string, string> = {
   'inspection.insert': 'New site visit', 'inspection.update': 'Site visit details', 'inspection.delete': 'Discarded visit',
   'zone.insert': 'Drawing mark-up', 'zone.delete': 'Deleted mark-up',
   'observation.insert': 'New site note', 'observation.update': 'Site note changes', 'observation.delete': 'Deleted site note',
+  photo: 'Photo', audio: 'Recording',
 }
 
 export default function OfflineCard() {
   const [status, setStatus] = useState(getSyncStatus())
-  const [failed, setFailed] = useState<Op[]>([])
+  const [mode, setMode] = useState<UploadMode>('auto')
+  const [failed, setFailed] = useState<{ key: string; what: string; why: string }[]>([])
   const [projects, setProjects] = useState<{ id: string; name: string; mb: number }[]>([])
 
   const load = async () => {
-    setFailed(await failedOps(await myId()))
+    setMode(await uploadMode())
+    const ops = await failedOps(await myId())
+    const files = await failedFiles()
+    setFailed([
+      ...ops.map(o => ({ key: `op${o.seq}`, what: WHAT[o.kind] ?? o.kind, why: o.last_error ?? '' })),
+      ...files.map(f => ({ key: f.local, what: WHAT[f.kind] ?? f.kind, why: f.last_error ?? '' })),
+    ])
     const rows = await offlineProjects()
     setProjects(await Promise.all(rows.map(async r => ({
       id: r.project_id,
@@ -40,6 +50,14 @@ export default function OfflineCard() {
   useEffect(() => onSyncStatus(s => { setStatus(s); load().catch(() => {}) }), [])
   useEffect(() => onOfflineProjectsChange(() => { load() }), [])
   useFocusEffect(useCallback(() => { load() }, []))
+
+  const choose = (m: UploadMode) => { setMode(m); setUploadMode(m) }
+
+  const retry = async () => {
+    await retryFailed()
+    await retryFailedFiles()
+    syncNow({ manual: true })
+  }
 
   const remove = (p: { id: string; name: string }) => Alert.alert(
     'Remove from this phone?', `${p.name}'s drawings are removed from the phone. Anything not yet uploaded stays and still uploads.`,
@@ -57,7 +75,7 @@ export default function OfflineCard() {
       <SyncStatus always />
 
       {status.waiting > 0 && status.online && !status.uploading && (
-        <TouchableOpacity style={S.button} onPress={() => syncNow(true)} activeOpacity={0.8}>
+        <TouchableOpacity style={S.button} onPress={() => syncNow({ manual: true })} activeOpacity={0.8}>
           <Text style={S.buttonText}>Upload now</Text>
         </TouchableOpacity>
       )}
@@ -65,14 +83,25 @@ export default function OfflineCard() {
       {failed.length > 0 && (
         <View style={S.failBox}>
           <Text style={S.failTitle}>Couldn't upload</Text>
-          {failed.slice(0, 5).map(op => (
-            <Text key={op.seq} style={S.failLine} numberOfLines={2}>• {WHAT[op.kind] ?? op.kind}: {op.last_error}</Text>
+          {failed.slice(0, 6).map(f => (
+            <Text key={f.key} style={S.failLine} numberOfLines={3}>• {f.what}: {f.why}</Text>
           ))}
-          <TouchableOpacity onPress={() => retryFailed().then(() => syncNow(true))} activeOpacity={0.7}>
+          <TouchableOpacity onPress={retry} activeOpacity={0.7}>
             <Text style={S.retry}>Try again</Text>
           </TouchableOpacity>
         </View>
       )}
+
+      <Text style={S.section}>Upload</Text>
+      {UPLOAD_MODES.map(m => (
+        <TouchableOpacity key={m.key} style={S.modeRow} onPress={() => choose(m.key)} activeOpacity={0.7}>
+          <Ionicons name={mode === m.key ? 'radio-button-on' : 'radio-button-off'} size={20} color={mode === m.key ? T.indigo : T.mid} />
+          <View style={{ flex: 1 }}>
+            <Text style={[S.modeLabel, mode === m.key && { color: T.indigo }]}>{m.label}</Text>
+            <Text style={S.modeDetail}>{m.detail}</Text>
+          </View>
+        </TouchableOpacity>
+      ))}
 
       <Text style={S.section}>Kept on this phone</Text>
       {projects.length === 0 ? (
@@ -108,6 +137,9 @@ const S = StyleSheet.create({
   failTitle: { fontSize: 13, fontWeight: '700', color: T.clay },
   failLine:  { fontSize: 12, color: T.ink },
   retry:     { fontSize: 13, fontWeight: '700', color: T.indigo, marginTop: 4 },
+  modeRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  modeLabel: { fontSize: 14, fontWeight: '600', color: T.ink },
+  modeDetail:{ fontSize: 12, color: T.mid, marginTop: 1 },
   projectRow:{ flexDirection: 'row', alignItems: 'center', gap: 8 },
   projectName:{ flex: 1, fontSize: 14, color: T.ink, fontWeight: '500' },
 })
