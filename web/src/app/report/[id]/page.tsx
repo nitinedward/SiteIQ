@@ -112,6 +112,7 @@ export default function ReportPage() {
   // the template has {{#open_items}} rows to put them in.
   const [carryForward,       setCarryForward]        = useState<CarryForward>(DEFAULT_CARRY_FORWARD)
   const [templateOpenItems,  setTemplateOpenItems]   = useState(false)
+  const [updatingOpenItems,  setUpdatingOpenItems]   = useState(false)
   const [editorKey,          setEditorKey]           = useState(0)
   // The Document Server's identity for the *stored content* — fetched from
   // the file itself, never counted locally. See refreshDocKey below.
@@ -494,6 +495,34 @@ export default function ReportPage() {
       alert('Could not use the notes text: ' + err.message)
     } finally {
       setGeneratingPlain(false)
+    }
+  }
+
+  /** Refills only the earlier reports' items table and its counts with what
+   *  the dropdown picks, leaving the rest of the report — AI text, edits,
+   *  photos — as it is (api/docs/update-open-items). */
+  const updateOpenItemsTable = async () => {
+    setUpdatingOpenItems(true)
+    try {
+      await runDocumentRewrite(async (closedKey) => {
+        const res = await apiFetch('/api/docs/update-open-items', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ inspectionId, docKey: closedKey, carryForward }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'Could not update the table')
+        const n = Number(data.items ?? 0)
+        setTextVersionResult(
+          `Earlier items table updated — ${n} item${n === 1 ? '' : 's'} (${CARRY_FORWARD_LABELS[carryForward].toLowerCase()}). The rest of the report is unchanged.`
+        )
+        setTimeout(() => setTextVersionResult(''), 8000)
+      }, { step: 'Updating the earlier items table' })
+    } catch (err: any) {
+      console.error('[updateOpenItemsTable] error:', err)
+      alert(err.message)
+    } finally {
+      setUpdatingOpenItems(false)
     }
   }
 
@@ -2067,22 +2096,23 @@ export default function ReportPage() {
               </button>
 
               {/* Which earlier reports' items the template's {{#open_items}}
-                  rows list. Those rows are filled when the text is written,
-                  so a change applies at the next rewrite, and is kept for the
-                  report then. */}
+                  rows list. "Update table" refills just that table; the
+                  rewrites above use the choice too. It is kept for the report
+                  whenever either runs. */}
               {templateOpenItems && (
-                <label style={{ display: 'block', marginTop: 10 }}>
-                  <span style={{
+                <div style={{ marginTop: 10 }}>
+                  <label htmlFor="carry-forward" style={{
                     display: 'block', marginBottom: 4,
                     fontFamily: 'var(--f-heading)', fontSize: 11, fontWeight: 700,
                     color: 'var(--text-mid)',
                   }}>
                     Earlier reports' items
-                  </span>
+                  </label>
                   <select
+                    id="carry-forward"
                     value={carryForward}
                     onChange={e => setCarryForward(parseCarryForward(e.target.value) ?? DEFAULT_CARRY_FORWARD)}
-                    disabled={generatingPlain || generatingAI || reportStatus === 'finalised'}
+                    disabled={generatingPlain || generatingAI || updatingOpenItems || reportStatus === 'finalised'}
                     style={{
                       width: '100%',
                       padding: '7px 10px',
@@ -2097,14 +2127,51 @@ export default function ReportPage() {
                       <option key={mode} value={mode}>{CARRY_FORWARD_LABELS[mode]}</option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    onClick={updateOpenItemsTable}
+                    disabled={updatingOpenItems || generatingPlain || generatingAI || !docReady || reportStatus === 'finalised'}
+                    title="Refills only the earlier items table and its counts — the rest of the report stays as it is"
+                    style={{
+                      width: '100%',
+                      marginTop: 6,
+                      background: 'transparent',
+                      color: 'var(--indigo-deep)',
+                      border: '1px solid var(--border-line)',
+                      borderRadius: 'var(--radius-pill)',
+                      padding: '7px 14px',
+                      fontFamily: 'var(--f-heading)',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: updatingOpenItems || generatingPlain || generatingAI || !docReady || reportStatus === 'finalised' ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 7,
+                      opacity: !docReady || reportStatus === 'finalised' ? 0.5 : 1,
+                    }}
+                  >
+                    {updatingOpenItems ? (
+                      <>
+                        <div style={{
+                          width: 12, height: 12,
+                          border: '2px solid var(--border-line)',
+                          borderTopColor: 'var(--text-mid)',
+                          borderRadius: '50%',
+                          animation: 'spin 0.7s linear infinite',
+                        }} />
+                        Updating...
+                      </>
+                    ) : 'Update Table Only'}
+                  </button>
                   <span style={{
                     display: 'block', marginTop: 4,
                     fontFamily: 'var(--f-text)', fontSize: 11, lineHeight: 1.4,
                     color: 'var(--text-mid)',
                   }}>
-                    Applies the next time the report text is generated.
+                    Changes only this table and its counts. Edits typed into the table itself are replaced.
                   </span>
-                </label>
+                </div>
               )}
 
               {textVersionResult && (

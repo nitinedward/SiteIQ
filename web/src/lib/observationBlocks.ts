@@ -557,7 +557,7 @@ export function noteAnchor(noteId: string): string {
 const isNotePage = (block: string) => /\{\{(photos|markup|back_link)\}\}/.test(block)
 const hasLinks = (block: string) => /\{\{(ref_link|title_link)\}\}/.test(block)
 
-type LinkState = { anchors: Set<string>; summaryPlaced: boolean }
+type LinkState = { anchors: Set<string>; summaryPlaced: boolean; openTables: number }
 
 /** Run properties made blue and underlined, keeping Word's element order
  *  (color before the size/spacing group, u after it). */
@@ -664,10 +664,129 @@ export function expandObservationBlocks(xml: string, notes: ObservationBlock[], 
   let id = 990000
   const nextId = () => id++
   const pageWidth = pageTextWidth(xml)
-  const links: LinkState = { anchors: new Set(), summaryPlaced: false }
+  const links: LinkState = { anchors: new Set(), summaryPlaced: false, openTables: 0 }
   xml = expandBlocks(xml, BLOCK_START, BLOCK_END, notes, nextId, pageWidth, links)
   // Items carried forward from earlier reports ({{#open_items}}).
-  return expandBlocks(xml, OPEN_ITEMS_START, OPEN_ITEMS_END, previous, nextId, pageWidth, links)
+  xml = expandBlocks(xml, OPEN_ITEMS_START, OPEN_ITEMS_END, previous, nextId, pageWidth, links)
+  return markCarriedCounts(xml, observationCounts(notes, previous), nextId)
+}
+
+// ── Updating the earlier items on their own ─────────────────────────────────
+// The report page can change which earlier items a report lists without
+// rewriting the rest of it. Generation marks what that changes: the table
+// the {{#open_items}} rows are in, and the {{carried_…}} counts, each with a
+// bookmark inside a paragraph, where the editor keeps it. replaceOpenItems
+// then swaps those for a freshly filled copy's.
+
+const OPEN_ITEMS_TABLE = 'siteiq_oi_'
+const CARRIED_COUNT = 'siteiq_cc_'
+const CARRIED_FIELDS = ['carried_count', 'carried_open_count', 'carried_closed_count'] as const
+
+/** Each {{carried_…}} count, as its value wrapped in a bookmark. */
+function markCarriedCounts(xml: string, counts: Record<string, string>, nextId: () => number): string {
+  const seen = new Map<string, number>()
+  for (const field of CARRIED_FIELDS) {
+    const ph = `{{${field}}}`
+    if (!xml.includes(ph)) continue
+    xml = xml.replace(/<w:r(?:\s[^>]*)?>[\s\S]*?<\/w:r>/g, run => {
+      if (!run.includes(ph)) return run
+      const rPr = run.match(/<w:rPr>[\s\S]*?<\/w:rPr>/)?.[0] ?? ''
+      const runText = [...run.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g)].map(t => t[1]).join('')
+      const plain = (s: string) => (s ? `<w:r>${rPr}<w:t xml:space="preserve">${s}</w:t></w:r>` : '')
+      return runText.split(ph).map(plain).reduce((out, part) => {
+        const n = (seen.get(field) ?? 0) + 1
+        seen.set(field, n)
+        const id = nextId()
+        return out + `<w:bookmarkStart w:id="${id}" w:name="${CARRIED_COUNT}${field}_${n}"/>`
+          + plain(esc(counts[ph] ?? '')) + `<w:bookmarkEnd w:id="${id}"/>` + part
+      })
+    })
+  }
+  return xml
+}
+
+/** The innermost table holding `at`. */
+const tableAround = (xml: string, at: number): El | undefined =>
+  ancestors(structure(xml), at).filter(e => e.tag === 'w:tbl').pop()
+
+/** Bookmark starts by name, with where each is and its id. */
+function bookmarks(xml: string, prefix: string): Map<string, { at: number; id: string }> {
+  const out = new Map<string, { at: number; id: string }>()
+  for (const m of xml.matchAll(/<w:bookmarkStart\b[^>]*>/g)) {
+    const name = m[0].match(/\bw:name="([^"]*)"/)?.[1] ?? ''
+    const id = m[0].match(/\bw:id="([^"]*)"/)?.[1] ?? ''
+    if (name.startsWith(prefix) && !out.has(name)) out.set(name, { at: m.index!, id })
+  }
+  return out
+}
+
+/** What a bookmark wraps, as [start, end) just inside its two ends; null
+ *  when its end is missing. */
+function bookmarkSpan(xml: string, at: number, id: string): [number, number] | null {
+  const startEnd = xml.indexOf('>', at) + 1
+  const endTag = new RegExp(`<w:bookmarkEnd\\b[^>]*\\bw:id="${id}"[^>]*/>`, 'g')
+  endTag.lastIndex = startEnd
+  const m = endTag.exec(xml)
+  return m ? [startEnd, m.index] : null
+}
+
+/** Gives a fragment's bookmarks ids from `next` on, so none repeats one
+ *  already in the report the fragment goes into. */
+function renumberBookmarks(fragment: string, next: () => number): string {
+  const ids = new Map<string, number>()
+  return fragment.replace(/<w:bookmark(Start|End)\b[^>]*\/>/g, tag =>
+    tag.replace(/\bw:id="([^"]*)"/, (_, id: string) => {
+      if (!ids.has(id)) ids.set(id, next())
+      return `w:id="${ids.get(id)}"`
+    }))
+}
+
+/**
+ * Swaps a report's earlier-items tables and {{carried_…}} counts for those
+ * of `fresh`, a copy of its template just filled with the items now wanted.
+ * Everything else in the report is left exactly as it is.
+ *
+ * `tables` is how many tables were swapped: 0 when the report has none
+ * marked — generated before this existed, or the editor dropped the mark —
+ * in which case the report is returned unchanged and needs one full rewrite.
+ */
+export function replaceOpenItems(reportXml: string, freshXml: string): { xml: string; tables: number; counts: number } {
+  let xml = reportXml
+  let maxId = 0
+  for (const m of xml.matchAll(/\bw:id="(\d+)"/g)) maxId = Math.max(maxId, Number(m[1]))
+  const next = () => ++maxId
+
+  let tables = 0
+  for (const [name, fresh] of bookmarks(freshXml, OPEN_ITEMS_TABLE)) {
+    const freshTable = tableAround(freshXml, fresh.at)
+    const marked = bookmarks(xml, OPEN_ITEMS_TABLE).get(name)
+    const table = marked && tableAround(xml, marked.at)
+    if (!freshTable || !table) continue
+    xml = xml.slice(0, table.start) + renumberBookmarks(freshXml.slice(freshTable.start, freshTable.end), next) + xml.slice(table.end)
+    tables++
+  }
+  if (tables === 0) return { xml: reportXml, tables: 0, counts: 0 }
+
+  let counts = 0
+  for (const [name, fresh] of bookmarks(freshXml, CARRIED_COUNT)) {
+    const freshSpan = bookmarkSpan(freshXml, fresh.at, fresh.id)
+    const marked = bookmarks(xml, CARRIED_COUNT).get(name)
+    const span = marked && bookmarkSpan(xml, marked.at, marked.id)
+    if (!freshSpan || !span) continue
+    const inner = xml.slice(span[0], span[1])
+    // Only a count still within one paragraph, with text to set.
+    if (/<\/?w:p[\s>]/.test(inner) || !/<w:t[\s>]/.test(inner)) continue
+    const value = textOf(freshXml.slice(freshSpan[0], freshSpan[1]))
+    let first = true
+    const updated = inner.replace(/(<w:t(?:\s[^>]*)?>)[^<]*(<\/w:t>)/g, (_, open: string, close: string) => {
+      const text = first ? value : ''
+      first = false
+      return `${open}${text}${close}`
+    })
+    xml = xml.slice(0, span[0]) + updated + xml.slice(span[1])
+    counts++
+  }
+  return { xml, tables, counts }
 }
 
 function expandBlocks(xml: string, start: string, end: string, notes: ObservationBlock[], nextId: () => number, pageWidth: number, links: LinkState): string {
@@ -700,10 +819,18 @@ function expandBlocks(xml: string, start: string, end: string, notes: Observatio
     const summaryAt = !links.summaryPlaced && hasLinks(block)
       ? (ancestors(structure(xml), range.start).filter(e => e.tag === 'w:tbl').pop()?.start ?? range.start)
       : null
+    // Earlier items as some rows of a table: the table is marked, so the
+    // report page can refill it on its own (replaceOpenItems). Its other
+    // rows — the header — keep it there when no items are listed.
+    const table = start === OPEN_ITEMS_START ? tableAround(xml, range.start) : undefined
+    const openTableAt = table && table.start < range.start ? table.start : null
     xml = xml.slice(0, range.start) + copies.join(apart ? '<w:p/>' : '') + xml.slice(range.end)
     if (summaryAt !== null) {
       xml = anchorAtTop(xml, summaryAt, SUMMARY_ANCHOR, nextId())
       links.summaryPlaced = true
+    }
+    if (openTableAt !== null) {
+      xml = anchorAtTop(xml, openTableAt, `${OPEN_ITEMS_TABLE}${++links.openTables}`, nextId())
     }
   }
   return xml
