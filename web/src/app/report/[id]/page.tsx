@@ -113,6 +113,9 @@ export default function ReportPage() {
   const [carryForward,       setCarryForward]        = useState<CarryForward>(DEFAULT_CARRY_FORWARD)
   const [templateOpenItems,  setTemplateOpenItems]   = useState(false)
   const [updatingOpenItems,  setUpdatingOpenItems]   = useState(false)
+  // Why the table couldn't be updated on its own, kept on screen under the
+  // button until the next attempt or rewrite.
+  const [openItemsProblem,   setOpenItemsProblem]    = useState('')
   const [editorKey,          setEditorKey]           = useState(0)
   // The Document Server's identity for the *stored content* — fetched from
   // the file itself, never counted locally. See refreshDocKey below.
@@ -445,6 +448,7 @@ export default function ReportPage() {
         if (!res.ok) throw new Error(data.error || 'AI generation failed')
         console.log('[ai-generate] Success:', data)
         sketchesWritten(selectedSketches)
+        setOpenItemsProblem('')
         setTextVersionResult(
           'Report text rewritten by AI' +
           (data.carried?.length ? ' — photos and markups put back after it.' : '.')
@@ -484,6 +488,7 @@ export default function ReportPage() {
         if (!res.ok) throw new Error(data.error || 'Could not rebuild the text from your notes')
         console.log('[plain-generate] Success:', data)
         sketchesWritten(selectedSketches)
+        setOpenItemsProblem('')
         setTextVersionResult(
           'Report text rebuilt from your site notes' +
           (data.carried?.length ? ' — photos and markups put back after it.' : '.')
@@ -503,6 +508,8 @@ export default function ReportPage() {
    *  photos — as it is (api/docs/update-open-items). */
   const updateOpenItemsTable = async () => {
     setUpdatingOpenItems(true)
+    setOpenItemsProblem('')
+    let problem = ''
     try {
       await runDocumentRewrite(async (closedKey) => {
         const res = await apiFetch('/api/docs/update-open-items', {
@@ -511,6 +518,9 @@ export default function ReportPage() {
           body:    JSON.stringify({ inspectionId, docKey: closedKey, carryForward }),
         })
         const data = await res.json().catch(() => ({}))
+        // The report has no marked table (made before the button existed):
+        // nothing changed, and the reason stays under the button.
+        if (res.status === 422) { problem = data.error || 'The table could not be found in this report.'; return }
         if (!res.ok) throw new Error(data.error || 'Could not update the table')
         const n = Number(data.items ?? 0)
         setTextVersionResult(
@@ -523,6 +533,7 @@ export default function ReportPage() {
       alert(err.message)
     } finally {
       setUpdatingOpenItems(false)
+      setOpenItemsProblem(problem)
     }
   }
 
@@ -2171,6 +2182,18 @@ export default function ReportPage() {
                   }}>
                     Changes only this table and its counts. Edits typed into the table itself are replaced.
                   </span>
+                  {openItemsProblem && (
+                    <div style={{
+                      marginTop: 6, padding: '8px 10px',
+                      background: 'var(--amber2, #fef9e7)',
+                      border: '1px solid var(--amber, #b8860b)',
+                      borderRadius: 'var(--radius-sm, 8px)',
+                      fontSize: 11.5, lineHeight: 1.5,
+                      fontFamily: 'var(--f-text)', color: 'var(--text-ink)',
+                    }}>
+                      <strong>Table not updated.</strong> {openItemsProblem}
+                    </div>
+                  )}
                 </div>
               )}
 
