@@ -56,9 +56,22 @@ type Options = {
 
 let active: Dictation | null = null
 
+/** The microphone's native reader stops a moment after it is told to (it
+ *  finishes the read it is in, then lets go of the microphone). Starting
+ *  again before then hands the new recording to the old reader, which then
+ *  releases the microphone mid-recording — so a new dictation waits for it. */
+let released: Promise<void> = Promise.resolve()
+const RELEASE_MS = 400
+
+/** Below this peak the recording is turned up before transcription: some
+ *  Android phones give the speech-recognition microphone very little gain. */
+const QUIET_PEAK = 0.5
+const MAX_GAIN = 8
+
 /** Starts recording. One dictation at a time: starting another cancels it. */
 export async function startDictation({ onLevel, context = [] }: Options = {}): Promise<Dictation> {
   if (active) await active.cancel().catch(() => {})
+  await released
 
   const { granted } = await Audio.requestPermissionsAsync()
   if (!granted) throw new Error('Please allow microphone access in Settings to record voice notes.')
@@ -67,7 +80,10 @@ export async function startDictation({ onLevel, context = [] }: Options = {}): P
   let bytes = 0
   let lastLevelAt = 0
 
-  LiveAudioStream.init({
+  let finished = false
+  // Native init returns a promise (it fails if the microphone is busy);
+  // start and stop return nothing.
+  await LiveAudioStream.init({
     sampleRate: SAMPLE_RATE,
     channels: 1,
     bitsPerSample: 16,
@@ -76,28 +92,29 @@ export async function startDictation({ onLevel, context = [] }: Options = {}): P
     wavFile: '',
   })
   LiveAudioStream.on('data', (base64: string) => {
+    if (finished) return
     const chunk = base64ToBytes(base64)
     chunks.push(chunk)
     bytes += chunk.length
     const now = Date.now()
-    if (onLevel && now - lastLevelAt > 80) {
+    if (onLevel && now - lastLevelAt > 150) {
       lastLevelAt = now
       onLevel(levelDb(chunk))
     }
   })
   LiveAudioStream.start()
 
-  let finished = false
-  const finish = async () => {
+  const finish = () => {
     if (finished) return
     finished = true
     active = null
-    await LiveAudioStream.stop().catch(() => {})
+    try { LiveAudioStream.stop() } catch {}
+    released = new Promise(resolve => setTimeout(resolve, RELEASE_MS))
   }
 
   const dictation: Dictation = {
     stop: async () => {
-      await finish()
+      finish()
       const seconds = bytes / BYTES_PER_SECOND
       const audioUri = await writeWav(chunks, bytes)
       if (seconds < 0.5) return { text: '', audioUri, seconds, engine: 'phone' }
@@ -137,7 +154,7 @@ export async function startDictation({ onLevel, context = [] }: Options = {}): P
       }
     },
     cancel: async () => {
-      await finish()
+      finish()
     },
   }
   active = dictation
@@ -174,11 +191,27 @@ async function writeWav(chunks: Uint8Array[], dataBytes: number): Promise<string
   view.setUint32(40, dataBytes, true)
   let at = 44
   for (const chunk of chunks) { wav.set(chunk, at); at += chunk.length }
+  turnUpIfQuiet(new DataView(wav.buffer, 44, dataBytes - (dataBytes % 2)))
 
   await FileSystem.makeDirectoryAsync(DIR, { intermediates: true }).catch(() => {})
   const uri = `${DIR}dictation-${Date.now()}.wav`
   await FileSystem.writeAsStringAsync(uri, bytesToBase64(wav), { encoding: FileSystem.EncodingType.Base64 })
   return uri
+}
+
+/** Scales quiet audio up so its loudest moment is near full volume — but
+ *  never more than MAX_GAIN, so silence isn't turned into hiss. */
+function turnUpIfQuiet(samples: DataView) {
+  let peak = 0
+  for (let i = 0; i < samples.byteLength; i += 2) {
+    const v = Math.abs(samples.getInt16(i, true))
+    if (v > peak) peak = v
+  }
+  if (peak === 0 || peak >= QUIET_PEAK * 32767) return
+  const gain = Math.min(MAX_GAIN, (0.9 * 32767) / peak)
+  for (let i = 0; i < samples.byteLength; i += 2) {
+    samples.setInt16(i, Math.round(samples.getInt16(i, true) * gain), true)
+  }
 }
 
 /** Loudness of a chunk of 16-bit audio, in dB below full scale. */

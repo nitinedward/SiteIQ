@@ -40,6 +40,9 @@ function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; m
   const barAnims = useRef(Array.from({ length: BAR_COUNT }, () => new Animated.Value(0.05))).current;
   const timeRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Read by the running animation, so a new level doesn't restart it.
+  const meteringRef = useRef(metering);
+  meteringRef.current = metering;
 
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -48,7 +51,7 @@ function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; m
       barAnims.forEach((anim, index) => {
         let targetValue: number;
         if (isRecording) {
-          const normalised = Math.max(0, Math.min(1, (metering + 60) / 60));
+          const normalised = Math.max(0, Math.min(1, (meteringRef.current + 50) / 40));
           const wave = Math.sin(timeRef.current * 0.4 + index * 0.6) * 0.15;
           const centreBoost = 1 - Math.abs(index - BAR_COUNT / 2) / (BAR_COUNT / 2) * 0.4;
           targetValue = Math.max(0.05, (normalised + wave) * centreBoost);
@@ -60,7 +63,7 @@ function WaveformVisualiser({ isRecording, metering }: { isRecording: boolean; m
       });
     }, 80);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [isRecording, metering]);
+  }, [isRecording]);
 
   return (
     <View style={waveStyles.container}>
@@ -103,6 +106,7 @@ export default function SessionScreen() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [level, setLevel]                   = useState(-60);
   const dictationRef                         = useRef<Dictation | null>(null);
+  const startingRef                          = useRef(false);
 
   const today      = new Date().toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const todayShort = new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -153,6 +157,8 @@ export default function SessionScreen() {
   // The visit's purpose, dictated: transcribed on the phone (lib/dictation).
   // Its recording isn't kept — only site notes keep theirs.
   const startRecording = async () => {
+    if (startingRef.current) return
+    startingRef.current = true
     try {
       dictationRef.current = await startDictation({ onLevel: setLevel })
       setIsRecording(true)
@@ -160,6 +166,8 @@ export default function SessionScreen() {
       console.error('[dictate] Start error:', err)
       setIsRecording(false)
       Alert.alert('Recording Failed', err.message || 'Could not start recording.')
+    } finally {
+      startingRef.current = false
     }
   };
 

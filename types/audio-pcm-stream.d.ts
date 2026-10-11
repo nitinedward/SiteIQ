@@ -13,9 +13,12 @@ declare module '@fugood/react-native-audio-pcm-stream' {
     wavFile: string
   }
   const LiveAudioStream: {
-    init: (options: Options) => void
+    /** Android: a promise, rejected when the microphone can't be opened
+     *  (e.g. in use). iOS: nothing. */
+    init: (options: Options) => Promise<void> | void
     start: () => void
-    stop: () => Promise<string | null>
+    /** Returns nothing (the package's own types wrongly say a promise). */
+    stop: () => void
     /** Base64 chunks of raw PCM. Replaces any earlier listener. */
     on: (event: 'data', callback: (data: string) => void) => { remove: () => void }
   }
