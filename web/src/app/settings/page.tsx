@@ -49,6 +49,9 @@ export default function SettingsPage() {
   // The code engineers enter at signup to join the firm.
   const [joinCodeEdit, setJoinCodeEdit]     = useState('')
   const [savingJoinCode, setSavingJoinCode] = useState(false)
+  // Shown under the box: the page's own banner is at the top, out of
+  // sight when the join code is scrolled to.
+  const [joinCodeSaved, setJoinCodeSaved]   = useState('')
 
   // What each uploaded template does with the placeholders it contains.
   const [checks, setChecks]           = useState<Record<string, TemplateCheck>>({})
@@ -210,7 +213,8 @@ export default function SettingsPage() {
       if (!res.ok || !data.code) throw new Error(data.error ?? 'Could not change the join code.')
       setFirm(prev => prev ? { ...prev, join_code: data.code } : prev)
       setJoinCodeEdit(data.code)
-      flash(`Join code is now ${data.code}`)
+      setJoinCodeSaved(`Saved — the join code is now ${data.code}.`)
+      setTimeout(() => setJoinCodeSaved(''), 6000)
     } catch (err: any) {
       setJoinCodeEdit(firm.join_code ?? '')
       alert(err?.message ?? 'Could not change the join code.')
@@ -525,8 +529,13 @@ export default function SettingsPage() {
                   Copy
                 </Btn>
               </div>
+              {joinCodeSaved && (
+                <p role="status" style={{ fontFamily: 'var(--f-text)', fontSize: 13, fontWeight: 600, color: 'var(--green)', marginTop: 8 }}>
+                  ✓ {joinCodeSaved}
+                </p>
+              )}
               <p style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginTop: 8, lineHeight: 1.5 }}>
-                Changing it stops anyone with the old code joining. Engineers already in the firm aren't affected.
+                Type a new code and press Save, or press New code for a random one. Changing it stops anyone with the old code joining; engineers already in the firm aren't affected.
               </p>
             </div>
           </div>
