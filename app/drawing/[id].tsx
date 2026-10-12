@@ -10,6 +10,7 @@ import {
   createZone, deleteZone as removeZone, listZones, observationForZone, photoList, zoneNotes,
 } from '../../lib/offline/store';
 import { localFor } from '../../lib/offline/files';
+import { shapeSpace, trueImageSize } from '../../lib/markupSpace';
 import Svg, { Circle, Ellipse, Rect, Path, G } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -116,8 +117,11 @@ export default function DrawingViewerScreen() {
     return { x: (p.x / SW) * pdfDims.current.pdfWidth, y: (p.y / naturalH.current) * pdfDims.current.pdfHeight };
   };
   const pctToPage = (xPct: number, yPct: number): Pt => ({ x: (xPct / 100) * SW, y: (yPct / 100) * naturalH.current });
-  const pdfRectToPage = (r: PdfRect): PdfRect => {
-    const { pdfWidth, pdfHeight } = pdfDims.current; const h = naturalH.current;
+  // A stored shape in the space it was drawn in (lib/markupSpace) — which
+  // differs between phones — never assumed to be this one's.
+  const spaceOf = (zone: Zone): [number, number] => shapeSpace(zone, [pdfDims.current.pdfWidth, pdfDims.current.pdfHeight]);
+  const pdfRectToPage = (r: PdfRect, space?: [number, number]): PdfRect => {
+    const [pdfWidth, pdfHeight] = space ?? [pdfDims.current.pdfWidth, pdfDims.current.pdfHeight]; const h = naturalH.current;
     return { x: (r.x / pdfWidth) * SW, y: (r.y / pdfHeight) * h, width: (r.width / pdfWidth) * SW, height: (r.height / pdfHeight) * h };
   };
 
@@ -139,11 +143,15 @@ export default function DrawingViewerScreen() {
     setIsLoading(true); setPdfError('');
     Image.getSize(
       previewUrl,
-      (imgW, imgH) => {
+      async (imgW, imgH) => {
         // Full-width display height (maintains aspect ratio)
         const fullH = SW * (imgH / imgW);
         naturalH.current = fullH;
-        pdfDims.current  = { pdfWidth: imgW, pdfHeight: imgH };
+        // New shapes are stored in the image's real pixels: Android reports a
+        // large image's size as loaded (shrunk), not its own (lib/markupSpace).
+        const real = await trueImageSize(previewUrl);
+        const sameShape = real && Math.abs(real.width / real.height - imgW / imgH) < 0.01;
+        pdfDims.current  = sameShape ? { pdfWidth: real!.width, pdfHeight: real!.height } : { pdfWidth: imgW, pdfHeight: imgH };
         setPdfH(fullH);
 
         const containerH = pdfWrapH.current > 50 ? pdfWrapH.current : SH - 220;
@@ -271,7 +279,7 @@ export default function DrawingViewerScreen() {
             if (zone.markup_type === 'rectangle' && zone.shape_data) {
               try {
                 const r  = JSON.parse(zone.shape_data);
-                const pr = pdfRectToPage(r);
+                const pr = pdfRectToPage(r, spaceOf(zone));
                 return tapLx >= pr.x && tapLx <= pr.x + pr.width && tapLy >= pr.y && tapLy <= pr.y + pr.height;
               } catch { return false; }
             }
@@ -407,14 +415,15 @@ export default function DrawingViewerScreen() {
         }
         if (zone.markup_type === 'rectangle' && zone.shape_data) {
           try {
-            const pr = pdfRectToPage(JSON.parse(zone.shape_data));
+            const pr = pdfRectToPage(JSON.parse(zone.shape_data), spaceOf(zone));
             return <Rect key={zone.id} x={pr.x} y={pr.y} width={pr.width} height={pr.height} fill={T.indigo} fillOpacity={0.16} stroke={T.indigo} strokeWidth={1.5} />;
           } catch { return null; }
         }
         if (zone.markup_type === 'freehand' && zone.shape_data) {
           try {
             const pts: Pt[] = JSON.parse(zone.shape_data);
-            const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${(p.x / pdfDims.current.pdfWidth) * SW} ${(p.y / pdfDims.current.pdfHeight) * h}`).join(' ');
+            const [sw, sh] = spaceOf(zone);
+            const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${(p.x / sw) * SW} ${(p.y / sh) * h}`).join(' ');
             return <Path key={zone.id} d={d} stroke="#F59E0B" strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
           } catch { return null; }
         }
