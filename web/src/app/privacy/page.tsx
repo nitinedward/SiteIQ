@@ -12,8 +12,8 @@ export const metadata: Metadata = {
  * bracketed items, and have it checked, before publishing.
  */
 
-const CONTACT = '[CONTACT EMAIL]'
-const OPERATOR = '[BUSINESS LEGAL NAME]'
+const CONTACT = 'info@siteiq.com'
+const OPERATOR = 'Site IQ'
 const UPDATED = '12 October 2026'
 
 const h2: React.CSSProperties = { fontFamily: 'var(--f-heading)', fontSize: 20, fontWeight: 800, color: 'var(--indigo-deep)', margin: '36px 0 10px' }
