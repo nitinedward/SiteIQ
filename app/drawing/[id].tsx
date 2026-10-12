@@ -59,7 +59,8 @@ export default function DrawingViewerScreen() {
   const [zones, setZones]         = useState<Zone[]>([]);
   const zonesRef                  = useRef<Zone[]>([]);
   const setZonesAndRef = (z: Zone[]) => { zonesRef.current = z; setZones(z); };
-  const [showPdf, setShowPdf]     = useState(viewOnly);
+  // Straight to the drawing: the list of its zones is a tap away ("Zones").
+  const [showPdf, setShowPdf]     = useState(true);
   const [returnToCanvas, setReturnToCanvas] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [pdfError, setPdfError]   = useState('');
@@ -453,10 +454,10 @@ export default function DrawingViewerScreen() {
     <View style={S.container}>
       <View style={S.header}>
         <TouchableOpacity style={S.backBtn} onPress={() => {
-          if (viewOnly) { router.back(); return; }
-          if (showPdf) { setReturnToCanvas(false); setShowPdf(false); }
-          else if (returnToCanvas) { setReturnToCanvas(false); setShowPdf(true); }
-          else { router.back(); }
+          // The drawing opens straight away; from it, back leaves. From the
+          // list of zones ("Zones"), back returns to the drawing.
+          if (viewOnly || showPdf) { router.back(); return; }
+          setReturnToCanvas(false); setIsLoading(true); setPdfError(''); setShowPdf(true);
         }}>
           <Ionicons name="arrow-back" size={22} color={T.indigo} />
         </TouchableOpacity>
