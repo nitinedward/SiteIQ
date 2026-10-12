@@ -1,4 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist'
+import { shapeSpace } from './zoneHotspots'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
@@ -136,10 +137,12 @@ function drawZones(canvas: HTMLCanvasElement, zones: Zone[], pdfWidth: number, p
     else if (zone.markup_type === 'rectangle' && zone.shape_data) {
       try {
         const r  = JSON.parse(zone.shape_data)
-        const rx = (r.x / pdfWidth) * canvas.width
-        const ry = (r.y / pdfHeight) * canvas.height
-        const rw = (r.width / pdfWidth) * canvas.width
-        const rh = (r.height / pdfHeight) * canvas.height
+        // The space the app drew it in, not assumed PDF units (zoneHotspots).
+        const [sw, sh] = shapeSpace(zone, pdfWidth, pdfHeight)
+        const rx = (r.x / sw) * canvas.width
+        const ry = (r.y / sh) * canvas.height
+        const rw = (r.width / sw) * canvas.width
+        const rh = (r.height / sh) * canvas.height
 
         ctx.fillStyle = 'rgba(37,99,235,0.15)'
         ctx.fillRect(rx, ry, rw, rh)
@@ -154,11 +157,12 @@ function drawZones(canvas: HTMLCanvasElement, zones: Zone[], pdfWidth: number, p
       try {
         const pts: { x: number; y: number }[] = JSON.parse(zone.shape_data)
         if (pts.length < 2) return
+        const [sw, sh] = shapeSpace(zone, pdfWidth, pdfHeight)
 
         ctx.beginPath()
         pts.forEach((pt, i) => {
-          const px = (pt.x / pdfWidth) * canvas.width
-          const py = (pt.y / pdfHeight) * canvas.height
+          const px = (pt.x / sw) * canvas.width
+          const py = (pt.y / sh) * canvas.height
           if (i === 0) ctx.moveTo(px, py)
           else         ctx.lineTo(px, py)
         })
