@@ -43,7 +43,6 @@ export default function RootLayout() {
           <Stack.Screen name="can/[id]" />
           <Stack.Screen name="drawings" options={{ presentation: 'modal' }} />
           <Stack.Screen name="reports" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="select-drawings" options={{ presentation: 'modal' }} />
           <Stack.Screen name="camera" />
           <Stack.Screen name="ar-measure" />
           <Stack.Screen name="recorder" />

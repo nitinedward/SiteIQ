@@ -9,9 +9,8 @@ import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { theme } from '../lib/theme'
-import { latestRevisions } from '../lib/drawingRevisions';
+import { latestRevisions, revisionsOf } from '../lib/drawingRevisions';
 import { startDictation, deleteRecording, type Dictation, type Stage } from '../lib/dictation';
-import { consumePendingDrawingSelection } from '../lib/pendingSelection';
 import {
   createInspection, deleteObservation, getInspection, listDrawings, listObservations,
   myId, nextReportNo, updateInspection,
@@ -19,6 +18,8 @@ import {
 import { Waveform, useLevel } from '../components/Waveform';
 import { SyncStatus } from '../components/SyncStatus';
 import { DrawingThumb } from '../components/DrawingThumb';
+import { PickRow, RowTile, type PickItem } from '../components/PickRow';
+import { loadProjectDocs, sketchSource, type CanItem, type SketchItem, type DrawingRow } from '../lib/projectDocs';
 
 const T = theme.colors;
 const R = theme.radius;
@@ -59,6 +60,13 @@ export default function SessionScreen() {
   const [reportNo, setReportNo]         = useState('');
   const [allDrawings, setAllDrawings]         = useState<Drawing[]>([]);
   const [selectedDrawings, setSelectedDrawings] = useState<string[]>([]);
+  // Sketches (from CANs, or added in the office), chosen like drawings but
+  // listed apart from them.
+  const [sketchItems, setSketchItems] = useState<SketchItem[]>([]);
+  const [cans, setCans]               = useState<CanItem[]>([]);
+  const [showOlder, setShowOlder]     = useState(false);
+  // While capturing: which row of further drawings or sketches is open to add from.
+  const [adding, setAdding]           = useState<'drawings' | 'sketches' | null>(null);
   const [generalObservations, setGeneralObservations] = useState<GeneralObservation[]>([]);
   const [isRecording, setIsRecording]       = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -114,25 +122,20 @@ export default function SessionScreen() {
   };
 
   const fetchDrawings = async () => {
-    const byNumber = (rows: Drawing[]) => setAllDrawings([...rows].sort((a, b) => String(a.number ?? '').localeCompare(String(b.number ?? ''), undefined, { numeric: true })));
-    byNumber(await listDrawings(String(project_id), byNumber));
+    const show = (rows: Drawing[]) => {
+      setAllDrawings([...rows].sort((a, b) => String(a.number ?? '').localeCompare(String(b.number ?? ''), undefined, { numeric: true })));
+      loadProjectDocs(String(project_id), rows as DrawingRow[])
+        .then(docs => { setSketchItems(docs.sketches); setCans(docs.cans); })
+        .catch(err => {
+          console.warn('[session] sketches:', err);
+          setSketchItems((rows as DrawingRow[]).filter(r => (r.kind ?? 'drawing') === 'sketch')
+            .map(d => ({ drawing: d, title: d.title, canId: null, canPage: null, observationId: null })));
+        });
+    };
+    show(await listDrawings(String(project_id), show));
   };
 
   const toggleDrawing = (id: string) => setSelectedDrawings(curr => curr.includes(id) ? curr.filter(d => d !== id) : [...curr, id]);
-
-  // While capturing, the picker only adds: a drawing or sketch already in
-  // the inspection may carry markups, so it is removed deliberately (swipe),
-  // never by an untick in the picker. Before capturing, the picker's choice
-  // is the selection.
-  const stepRef = useRef(step);
-  stepRef.current = step;
-  useFocusEffect(useCallback(() => {
-    const pending = consumePendingDrawingSelection();
-    if (!pending) return;
-    setSelectedDrawings(curr => stepRef.current === 'capture'
-      ? [...curr, ...pending.filter(id => !curr.includes(id))]
-      : pending);
-  }, []));
 
   // The visit remembers its drawings on the phone, so continuing it later
   // reopens them.
@@ -241,13 +244,42 @@ export default function SessionScreen() {
     ]);
   };
 
-  const openPicker = () =>
-    router.push({ pathname: '/select-drawings', params: { project_id: String(project_id), selected: selectedDrawings.join(',') } });
+  // Drawings: each sheet's current revision; superseded ones behind "Show
+  // older revisions" (one already chosen always shows).
+  const sheetRows = allDrawings.filter(d => !isSketch(d));
+  const currentSheets = latestRevisions(sheetRows);
+  const currentSheetIds = new Set(currentSheets.map(d => d.id));
+  const olderCount = sheetRows.length - currentSheets.length;
+  const sheetItem = (d: Drawing, older: boolean): PickItem => ({
+    id: d.id, heading: d.number || 'Drawing', title: d.title,
+    meta: `Rev ${d.revision}${older ? ' · superseded' : ''}`, previewUrl: d.preview_url, older,
+  });
+  const drawingItems: PickItem[] = currentSheets.flatMap(d => [
+    sheetItem(d, false),
+    ...revisionsOf(sheetRows, d).slice(1)
+      .filter(o => showOlder || selectedDrawings.includes(o.id))
+      .map(o => sheetItem(o as Drawing, true)),
+  ]);
+  // Sketches: a superseded CAN's stay out, unless already chosen.
+  const supersededCans = new Set(cans.filter(c => c.status === 'superseded').map(c => c.id));
+  const sketchById = new Map(sketchItems.map(sk => [sk.drawing.id, sk]));
+  const sketchPickItems: PickItem[] = sketchItems
+    .filter(sk => !sk.canId || !supersededCans.has(sk.canId) || selectedDrawings.includes(sk.drawing.id))
+    .map(sk => ({ id: sk.drawing.id, heading: 'Sketch', title: sk.title, meta: sketchSource(sk, cans), previewUrl: sk.drawing.preview_url }));
   // In the order they were chosen.
   const chosenDrawings = selectedDrawings
     .map(id => allDrawings.find(d => d.id === id))
     .filter((d): d is Drawing => !!d);
-  const currentSheetIds = new Set(latestRevisions(allDrawings.filter(d => !isSketch(d))).map(d => d.id));
+  const chosenSheets   = chosenDrawings.filter(d => !isSketch(d));
+  const chosenSketches = chosenDrawings.filter(isSketch);
+  const titleOf = (d: Drawing) => sketchById.get(d.id)?.title ?? d.title;
+  const olderTile = olderCount > 0 ? (
+    <RowTile
+      icon={showOlder ? 'chevron-back' : 'time-outline'}
+      label={showOlder ? 'Hide older revisions' : `Show ${olderCount} older revision${olderCount === 1 ? '' : 's'}`}
+      onPress={() => setShowOlder(v => !v)}
+    />
+  ) : null;
 
   // ── STEP 1: DETAILS ─────────────────────────────────
   if (step === 'details') {
@@ -293,56 +325,24 @@ export default function SessionScreen() {
             <TextInput style={S.input} placeholder="14:00" placeholderTextColor={T.mid} value={startTime} onChangeText={setStartTime} keyboardType="numbers-and-punctuation" maxLength={5} />
           </View>
 
-          {/* Drawings: the ones chosen are shown here, so there's no need to
-              open the picker again to check. */}
+          {/* Drawings and sketches, chosen right here: tap to select, tap
+              again to deselect. */}
           <View style={S.section}>
-            <View style={S.sectionRow}>
-              <Text style={[S.sectionTitle, { marginBottom: 0 }]}>
-                Drawings & sketches{chosenDrawings.length > 0 ? ` (${chosenDrawings.length})` : ''}
-              </Text>
-              {chosenDrawings.length > 0 && (
-                <TouchableOpacity onPress={openPicker} hitSlop={8}>
-                  <Text style={S.addDrawText}>Change</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {allDrawings.length === 0 ? (
+            <Text style={S.sectionTitle}>Drawings{chosenSheets.length > 0 ? ` · ${chosenSheets.length} selected` : ''}</Text>
+            <Text style={S.hint}>Tap to select, tap again to deselect · magnifier to look first</Text>
+            {currentSheets.length === 0 ? (
               <View style={S.emptyBox}><Text style={S.emptyText}>No drawings uploaded yet</Text></View>
-            ) : chosenDrawings.length === 0 ? (
-              <TouchableOpacity style={S.checkRow} onPress={openPicker} activeOpacity={0.7}>
-                <View style={S.pickerBadge}>
-                  <Ionicons name="images-outline" size={22} color={T.indigo} />
-                </View>
-                <View style={S.checkInfo}>
-                  <Text style={S.checkTitle}>Select drawings & sketches</Text>
-                  <Text style={S.checkMeta}>Tap to choose the drawings and sketches for today's inspection</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={T.mid} />
-              </TouchableOpacity>
             ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>
-                {chosenDrawings.map(d => (
-                  <View key={d.id} style={S.stripCard}>
-                    <DrawingThumb previewUrl={d.preview_url} style={S.stripThumb} />
-                    <View style={S.stripBody}>
-                      <Text style={S.stripLabel} numberOfLines={1}>{drawingLabel(d)}</Text>
-                      <Text style={S.stripTitle} numberOfLines={1}>{d.title}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={S.stripRemove}
-                      onPress={() => setSelectedDrawings(curr => curr.filter(id => id !== d.id))}
-                      accessibilityLabel={`Remove ${drawingLabel(d)} ${d.title}`}
-                      hitSlop={6}
-                    >
-                      <Ionicons name="close" size={14} color="#FFFFFF" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-                <TouchableOpacity style={S.stripAdd} onPress={openPicker} activeOpacity={0.7}>
-                  <Ionicons name="add" size={24} color={T.indigo} />
-                  <Text style={S.stripAddText}>Add drawings</Text>
-                </TouchableOpacity>
-              </ScrollView>
+              <PickRow items={drawingItems} selected={selectedDrawings} onToggle={toggleDrawing} trailing={olderTile} />
+            )}
+          </View>
+
+          <View style={S.section}>
+            <Text style={S.sectionTitle}>Sketches{chosenSketches.length > 0 ? ` · ${chosenSketches.length} selected` : ''}</Text>
+            {sketchPickItems.length === 0 ? (
+              <View style={S.emptyBox}><Text style={S.emptyText}>No sketches on this project — they come from CANs and sketches added on the web portal</Text></View>
+            ) : (
+              <PickRow items={sketchPickItems} selected={selectedDrawings} onToggle={toggleDrawing} />
             )}
           </View>
 
@@ -395,7 +395,43 @@ export default function SessionScreen() {
   }
 
   // ── STEP 2: CAPTURE ─────────────────────────────────
-  const inspDrawings = chosenDrawings;
+  // A chosen drawing or sketch, opened to mark up; swipe to take it out.
+  const renderChosen = (drawing: Drawing) => (
+    <Swipeable
+      key={drawing.id}
+      overshootRight={false}
+      renderRightActions={() => (
+        <TouchableOpacity
+          style={S.swipeDeleteBtn}
+          onPress={() => Alert.alert('Remove from this inspection', `Remove "${titleOf(drawing)}" from today's inspection? Any zones already marked on it are kept.`, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Remove', style: 'destructive', onPress: () => setSelectedDrawings(curr => curr.filter(id => id !== drawing.id)) },
+          ])}>
+          <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}>
+      <TouchableOpacity style={S.drawingRow}
+        onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: drawing.id, title: titleOf(drawing), file_url: drawing.file_url, preview_url: drawing.preview_url ?? '', project_id: String(project_id), inspection_id: inspectionId, view_only: 'false' } })}
+        activeOpacity={0.7}>
+        <DrawingThumb previewUrl={drawing.preview_url} style={S.rowThumb} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={S.drawTitle} numberOfLines={2}>{isSketch(drawing) ? titleOf(drawing) : `${drawingLabel(drawing)} · ${drawing.title}`}</Text>
+          <Text style={S.drawMeta} numberOfLines={1}>
+            {isSketch(drawing)
+              ? (sketchById.get(drawing.id) ? sketchSource(sketchById.get(drawing.id)!, cans) : 'Sketch')
+              : `Rev ${drawing.revision}${!currentSheetIds.has(drawing.id) ? ' · superseded' : ''}`}
+            {' · Tap to inspect'}
+          </Text>
+        </View>
+        <Text style={S.arrow}>{'→'}</Text>
+      </TouchableOpacity>
+    </Swipeable>
+  );
+  // While capturing, a row only adds: one already in the inspection may
+  // carry markups, so it is taken out deliberately (swipe), never by a tap.
+  const addFrom = (items: PickItem[]) => items.filter(i => !selectedDrawings.includes(i.id));
+  const addOne = (id: string) => setSelectedDrawings(curr => curr.includes(id) ? curr : [...curr, id]);
+
   return (
     <View style={S.container}>
       <View style={S.header}>
@@ -419,44 +455,50 @@ export default function SessionScreen() {
 
         <View style={S.section}>
           <View style={S.sectionRow}>
-            <Text style={[S.sectionTitle, { marginBottom: 0 }]}>Drawings & sketches ({inspDrawings.length})</Text>
-            {/* The same picker as before capturing: drawings, and sketches
-                (from CANs or the office) in their own section. */}
-            <TouchableOpacity onPress={openPicker} hitSlop={8}>
-              <Text style={S.addDrawText}>+ Add</Text>
+            <Text style={[S.sectionTitle, { marginBottom: 0 }]}>Drawings ({chosenSheets.length})</Text>
+            <TouchableOpacity onPress={() => setAdding(a => a === 'drawings' ? null : 'drawings')} hitSlop={8}>
+              <Text style={S.addDrawText}>{adding === 'drawings' ? 'Done' : '+ Add'}</Text>
             </TouchableOpacity>
           </View>
-          <Text style={S.hint}>Tap a drawing to open the PDF and mark inspection zones</Text>
-          {inspDrawings.map(drawing => (
-            <Swipeable
-              key={drawing.id}
-              overshootRight={false}
-              renderRightActions={() => (
-                <TouchableOpacity
-                  style={S.swipeDeleteBtn}
-                  onPress={() => Alert.alert('Remove Drawing', `Remove "${drawing.title}" from today's inspection? Any zones already marked on it are kept.`, [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Remove', style: 'destructive', onPress: () => setSelectedDrawings(curr => curr.filter(id => id !== drawing.id)) },
-                  ])}>
-                  <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
-                </TouchableOpacity>
-              )}>
-              <TouchableOpacity style={S.drawingRow}
-                onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: drawing.id, title: drawing.title, file_url: drawing.file_url, preview_url: drawing.preview_url ?? '', project_id: String(project_id), inspection_id: inspectionId, view_only: 'false' } })}
-                activeOpacity={0.7}>
-                <DrawingThumb previewUrl={drawing.preview_url} style={S.rowThumb} />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={S.drawTitle} numberOfLines={2}>{drawingLabel(drawing)} · {drawing.title}</Text>
-                  <Text style={S.drawMeta}>
-                    {isSketch(drawing) ? 'Sketch' : `Rev ${drawing.revision}`}
-                    {!isSketch(drawing) && !currentSheetIds.has(drawing.id) ? ' · superseded' : ''}
-                    {' · Tap to inspect'}
-                  </Text>
-                </View>
-                <Text style={S.arrow}>{'→'}</Text>
+          {adding === 'drawings' && (
+            addFrom(drawingItems).length === 0 && !olderTile ? (
+              <View style={[S.emptyBox, { marginBottom: 10 }]}><Text style={S.emptyText}>Every drawing is already in this inspection.</Text></View>
+            ) : (
+              <View style={{ marginBottom: 12 }}>
+                <Text style={S.hint}>Tap a drawing to add it</Text>
+                <PickRow items={addFrom(drawingItems)} selected={[]} onToggle={addOne} trailing={olderTile} />
+              </View>
+            )
+          )}
+          {chosenSheets.length === 0 && adding !== 'drawings'
+            ? <Text style={S.hint}>None yet — tap + Add</Text>
+            : <Text style={S.hint}>Tap a drawing to open it and mark inspection zones</Text>}
+          {chosenSheets.map(renderChosen)}
+        </View>
+
+        <View style={S.section}>
+          <View style={S.sectionRow}>
+            <Text style={[S.sectionTitle, { marginBottom: 0 }]}>Sketches ({chosenSketches.length})</Text>
+            {sketchPickItems.length > 0 && (
+              <TouchableOpacity onPress={() => setAdding(a => a === 'sketches' ? null : 'sketches')} hitSlop={8}>
+                <Text style={S.addDrawText}>{adding === 'sketches' ? 'Done' : '+ Add'}</Text>
               </TouchableOpacity>
-            </Swipeable>
-          ))}
+            )}
+          </View>
+          {adding === 'sketches' && (
+            addFrom(sketchPickItems).length === 0 ? (
+              <View style={[S.emptyBox, { marginBottom: 10 }]}><Text style={S.emptyText}>Every sketch is already in this inspection.</Text></View>
+            ) : (
+              <View style={{ marginBottom: 12 }}>
+                <Text style={S.hint}>Tap a sketch to add it</Text>
+                <PickRow items={addFrom(sketchPickItems)} selected={[]} onToggle={addOne} />
+              </View>
+            )
+          )}
+          {sketchPickItems.length === 0
+            ? <Text style={S.hint}>No sketches on this project</Text>
+            : chosenSketches.length === 0 && adding !== 'sketches' ? <Text style={S.hint}>None yet — tap + Add</Text> : null}
+          {chosenSketches.map(renderChosen)}
         </View>
 
         <View style={S.section}>
@@ -585,11 +627,8 @@ const S = StyleSheet.create({
 
   // Drawing checkboxes
   checkRow:     { flexDirection: 'row', alignItems: 'center', backgroundColor: T.surface, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1.5, borderColor: T.line, gap: 12 },
-  checkRowActive:{ borderColor: T.indigo, backgroundColor: T.indigoSoft },
   checkbox:     { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: T.line, alignItems: 'center', justifyContent: 'center' },
   checkboxActive:{ backgroundColor: T.indigo, borderColor: T.indigo },
-  pickerBadge:     { backgroundColor: T.indigoSoft, borderRadius: R.md, paddingHorizontal: 16, paddingVertical: 12, minWidth: 52, alignItems: 'center' },
-  pickerBadgeText: { fontSize: 19, color: T.indigo, fontWeight: '800' },
   checkmark:    { fontSize: 14, color: '#FFFFFF', fontWeight: '700' },
   checkInfo:    { flex: 1 },
   checkTitle:   { fontSize: 14, color: T.ink, fontWeight: '500', marginBottom: 2 },
@@ -627,16 +666,6 @@ const S = StyleSheet.create({
   drawMeta:     { fontSize: 12, color: T.mid },
   arrow:        { fontSize: 20, color: T.mid },
   rowThumb:     { width: 76, height: 52, borderRadius: 8, borderWidth: 1, borderColor: T.line },
-  strip:        { marginHorizontal: -16 },
-  stripContent: { paddingHorizontal: 16, gap: 10 },
-  stripCard:    { width: 132, backgroundColor: T.surface, borderRadius: 12, borderWidth: 1, borderColor: T.line, overflow: 'hidden' },
-  stripThumb:   { width: 132, height: 88, borderBottomWidth: 1, borderBottomColor: T.line },
-  stripBody:    { paddingHorizontal: 8, paddingTop: 6, paddingBottom: 8 },
-  stripLabel:   { fontSize: 12, fontWeight: '800', color: T.indigoDeep },
-  stripTitle:   { fontSize: 11, color: T.mid },
-  stripRemove:  { position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(42,46,55,0.78)', alignItems: 'center', justifyContent: 'center' },
-  stripAdd:     { width: 110, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', borderColor: T.indigo, alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 130 },
-  stripAddText: { fontSize: 12, fontWeight: '700', color: T.indigo },
   swipeDeleteBtn: { backgroundColor: T.clay, width: 72, borderRadius: R.md, marginBottom: 8, alignItems: 'center', justifyContent: 'center' },
   addDrawText:  { fontSize: 13, color: T.indigo, fontWeight: '700' },
 
