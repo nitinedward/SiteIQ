@@ -16,6 +16,7 @@ import {
   downloadProject, offlineProjects, onOfflineProjectsChange, removeOfflineProject, type OfflineProject,
 } from '../../lib/offline/download';
 import { isOnline } from '../../lib/offline/net';
+import { loadProjectDocs, canLabel, sketchSource, sketchViewerParams, type CanItem, type SketchItem, type DrawingRow } from '../../lib/projectDocs';
 
 const T = theme.colors;
 const R = theme.radius;
@@ -65,6 +66,10 @@ export default function ProjectDetailScreen() {
   // the web portal — the current sheet is the one worth opening on site.
   const [showSuperseded, setShowSuperseded] = useState(false);
   const [showAllReports, setShowAllReports] = useState(false);
+  // Drawings, CANs and sketches are kept apart, as on the web.
+  const [docTab, setDocTab]             = useState<'drawings' | 'cans' | 'sketches'>('drawings');
+  const [cans, setCans]                 = useState<CanItem[]>([]);
+  const [sketches, setSketches]         = useState<SketchItem[]>([]);
 
   // Visits started on this phone (or by this engineer) and not completed —
   // continued or thrown away from here, never deleted behind their back.
@@ -82,9 +87,17 @@ export default function ProjectDetailScreen() {
       setInspections(rows.filter(r => r.status === 'COMPLETED'));
       setInProgress(rows.filter(r => r.status !== 'COMPLETED' && (r._pending || r.created_by === me)));
     };
+    // A sketch's hidden drawing row (see lib/projectDocs) goes under
+    // Sketches, never Drawings; a failure loading CANs leaves them empty.
+    const showDrawings = (rows: DrawingRow[]) => {
+      setDrawings(rows.filter(r => (r.kind ?? 'drawing') !== 'sketch') as Drawing[]);
+      loadProjectDocs(pid, rows)
+        .then(docs => { setCans(docs.cans); setSketches(docs.sketches); })
+        .catch(err => { console.warn('[project] CANs/sketches:', err); setCans([]); setSketches([]); });
+    };
     const [p, d, ins] = await Promise.all([
       getProject(pid, row => row && setProject(row)),
-      listDrawings(pid, rows => setDrawings(rows)),
+      listDrawings(pid, showDrawings),
       listInspections(pid, showInspections),
     ]);
     if (!p) {
@@ -96,7 +109,7 @@ export default function ProjectDetailScreen() {
     }
     setError('');
     setProject(p as Project);
-    setDrawings(d as Drawing[]);
+    showDrawings(d as DrawingRow[]);
     showInspections(ins as Inspection[]);
     setLoading(false);
 
@@ -257,49 +270,111 @@ export default function ProjectDetailScreen() {
             : <Switch value={!!offline} onValueChange={toggleOffline} trackColor={{ true: T.sage, false: T.line }} />}
         </View>
 
-        {/* DRAWINGS */}
+        {/* DRAWINGS · CANs · SKETCHES */}
         <View style={S.section}>
-          <View style={S.sectionHeaderRow}>
-            <Text style={S.sectionTitleRow}>Drawings</Text>
-            {visibleDrawings.length > DRAWING_PREVIEW_COUNT && (
-              <TouchableOpacity onPress={() => setShowAllDrawings(v => !v)}>
-                <Text style={S.viewAllText}>{showAllDrawings ? 'Show less' : 'View all'}</Text>
+          <View style={S.segment}>
+            {([
+              ['drawings', `Drawings (${currentDrawings.length})`],
+              ['cans', `CANs (${cans.filter(c => c.status === 'current').length})`],
+              ['sketches', `Sketches (${sketches.length})`],
+            ] as const).map(([key, label]) => (
+              <TouchableOpacity key={key} style={[S.segmentBtn, docTab === key && S.segmentBtnActive]}
+                onPress={() => setDocTab(key)} activeOpacity={0.8}>
+                <Text style={[S.segmentText, docTab === key && S.segmentTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {docTab === 'drawings' && (
+            <>
+              {visibleDrawings.length > DRAWING_PREVIEW_COUNT && (
+                <TouchableOpacity onPress={() => setShowAllDrawings(v => !v)} style={{ alignSelf: 'flex-end', marginBottom: 8 }}>
+                  <Text style={S.viewAllText}>{showAllDrawings ? 'Show less' : 'View all'}</Text>
+                </TouchableOpacity>
+              )}
+            {drawings.length === 0 ? (
+              <View style={S.emptyCard}>
+                <Text style={S.emptyText}>No drawings — admin uploads via web portal</Text>
+              </View>
+            ) : (showAllDrawings ? visibleDrawings : visibleDrawings.slice(0, DRAWING_PREVIEW_COUNT)).map(d => (
+              <TouchableOpacity key={d.id} style={S.row}
+                onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, number: d.number, revision: d.revision, file_url: d.file_url, preview_url: d.preview_url ?? '', project_id: project.id, view_only: 'true' } })}
+                activeOpacity={0.7}>
+                <View style={S.rowBadge}>
+                  <Text style={S.rowBadgeText}>{d.number || '-'}</Text>
+                </View>
+                <View style={S.rowInfo}>
+                  <Text style={S.rowTitle} numberOfLines={1}>{d.title}</Text>
+                  <Text style={S.rowMeta}>
+                    Rev {d.revision}
+                    {!showSuperseded && revisionCount(drawings, d) > 1
+                      ? ` · ${revisionCount(drawings, d)} revisions`
+                      : ''}
+                    {showSuperseded && !currentDrawings.some(c => c.id === d.id) ? ' · superseded' : ''}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={T.mid} />
+              </TouchableOpacity>
+            ))}
+  
+            {supersededCount > 0 && (
+              <TouchableOpacity onPress={() => setShowSuperseded(v => !v)} activeOpacity={0.7} style={{ paddingVertical: 10 }}>
+                <Text style={S.viewAllText}>
+                  {showSuperseded
+                    ? 'Hide older revisions'
+                    : `Show ${supersededCount} older revision${supersededCount === 1 ? '' : 's'}`}
+                </Text>
               </TouchableOpacity>
             )}
-          </View>
-          {drawings.length === 0 ? (
-            <View style={S.emptyCard}>
-              <Text style={S.emptyText}>No drawings — admin uploads via web portal</Text>
-            </View>
-          ) : (showAllDrawings ? visibleDrawings : visibleDrawings.slice(0, DRAWING_PREVIEW_COUNT)).map(d => (
-            <TouchableOpacity key={d.id} style={S.row}
-              onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: d.id, title: d.title, number: d.number, revision: d.revision, file_url: d.file_url, preview_url: d.preview_url ?? '', project_id: project.id, view_only: 'true' } })}
-              activeOpacity={0.7}>
-              <View style={S.rowBadge}>
-                <Text style={S.rowBadgeText}>{d.number || '-'}</Text>
-              </View>
-              <View style={S.rowInfo}>
-                <Text style={S.rowTitle} numberOfLines={1}>{d.title}</Text>
-                <Text style={S.rowMeta}>
-                  Rev {d.revision}
-                  {!showSuperseded && revisionCount(drawings, d) > 1
-                    ? ` · ${revisionCount(drawings, d)} revisions`
-                    : ''}
-                  {showSuperseded && !currentDrawings.some(c => c.id === d.id) ? ' · superseded' : ''}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={T.mid} />
-            </TouchableOpacity>
-          ))}
+            </>
+          )}
 
-          {supersededCount > 0 && (
-            <TouchableOpacity onPress={() => setShowSuperseded(v => !v)} activeOpacity={0.7} style={{ paddingVertical: 10 }}>
-              <Text style={S.viewAllText}>
-                {showSuperseded
-                  ? 'Hide older revisions'
-                  : `Show ${supersededCount} older revision${supersededCount === 1 ? '' : 's'}`}
-              </Text>
-            </TouchableOpacity>
+          {/* A CAN is the whole notice: open it in full, and its sketches are listed on its screen. */}
+          {docTab === 'cans' && (
+            cans.length === 0 ? (
+              <View style={S.emptyCard}>
+                <Text style={S.emptyText}>No CANs — uploaded via web portal</Text>
+              </View>
+            ) : cans.map(c => (
+              <TouchableOpacity key={c.id} style={[S.row, c.status === 'superseded' && { opacity: 0.6 }]}
+                onPress={() => router.push({ pathname: '/can/[id]', params: { id: c.id, project_id: project.id } })}
+                activeOpacity={0.7}>
+                <View style={S.rowBadge}>
+                  <Text style={S.rowBadgeText}>{c.number || 'CAN'}</Text>
+                </View>
+                <View style={S.rowInfo}>
+                  <Text style={S.rowTitle} numberOfLines={1}>{c.title || canLabel(c)}</Text>
+                  <Text style={S.rowMeta}>
+                    {c.revision ? `Rev ${c.revision}` : 'No revision'}
+                    {c.issuedOn ? ` · issued ${fmt(c.issuedOn)}` : ''}
+                    {` · ${c.sketches.length} sketch${c.sketches.length === 1 ? '' : 'es'}`}
+                    {c.status === 'superseded' ? ' · superseded' : ''}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={T.mid} />
+              </TouchableOpacity>
+            ))
+          )}
+
+          {docTab === 'sketches' && (
+            sketches.length === 0 ? (
+              <View style={S.emptyCard}>
+                <Text style={S.emptyText}>No sketches — added via web portal or found in a CAN</Text>
+              </View>
+            ) : sketches.map(sk => (
+              <TouchableOpacity key={sk.drawing.id} style={S.row}
+                onPress={() => router.push({ pathname: '/drawing/[id]', params: sketchViewerParams(sk, project.id) })}
+                activeOpacity={0.7}>
+                <View style={[S.rowBadge, { backgroundColor: T.goldSoft }]}>
+                  <Ionicons name="create-outline" size={14} color={T.indigo} />
+                </View>
+                <View style={S.rowInfo}>
+                  <Text style={S.rowTitle} numberOfLines={1}>{sk.title}</Text>
+                  <Text style={S.rowMeta} numberOfLines={1}>{sketchSource(sk, cans)}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={T.mid} />
+              </TouchableOpacity>
+            ))
           )}
         </View>
 
@@ -398,6 +473,13 @@ const S = StyleSheet.create({
   sectionHeaderRow:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, marginTop: 24 },
   sectionTitleRow: { fontSize: 11, fontWeight: '700', color: T.mid, textTransform: 'uppercase', letterSpacing: 1 },
   viewAllText:     { fontSize: 11, fontWeight: '700', color: T.indigo },
+
+  // Drawings · CANs · Sketches switch
+  segment:          { flexDirection: 'row', backgroundColor: T.surface, borderRadius: R.pill, padding: 4, marginTop: 24, marginBottom: 12, borderWidth: 1, borderColor: T.line },
+  segmentBtn:       { flex: 1, paddingVertical: 9, borderRadius: R.pill, alignItems: 'center' },
+  segmentBtnActive: { backgroundColor: T.indigo },
+  segmentText:      { fontSize: 12, fontWeight: '700', color: T.mid },
+  segmentTextActive:{ color: '#FFFFFF' },
 
   // Rows
   row: {

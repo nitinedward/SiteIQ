@@ -18,6 +18,7 @@ import {
 } from '../lib/offline/store';
 import { Waveform, useLevel } from '../components/Waveform';
 import { SyncStatus } from '../components/SyncStatus';
+import { DrawingThumb } from '../components/DrawingThumb';
 
 const T = theme.colors;
 const R = theme.radius;
@@ -35,7 +36,11 @@ const WEATHER_OPTIONS = [
 ];
 
 type Step = 'details' | 'capture';
-type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; preview_url: string | null; created_at: string };
+type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; preview_url: string | null; created_at: string; kind?: string | null };
+
+const isSketch = (d: Drawing) => (d.kind ?? 'drawing') === 'sketch';
+/** "S1.01", or "Sketch" for a sketch (they all share a number). */
+const drawingLabel = (d: Drawing) => isSketch(d) ? 'Sketch' : (d.number || 'Drawing');
 type GeneralObservation = { id: string; notes: string | null; transcript: string | null; report_text?: string | null; severity: string | null; observed_at: string; zone_label: string | null };
 
 export default function SessionScreen() {
@@ -115,9 +120,18 @@ export default function SessionScreen() {
 
   const toggleDrawing = (id: string) => setSelectedDrawings(curr => curr.includes(id) ? curr.filter(d => d !== id) : [...curr, id]);
 
+  // While capturing, the picker only adds: a drawing or sketch already in
+  // the inspection may carry markups, so it is removed deliberately (swipe),
+  // never by an untick in the picker. Before capturing, the picker's choice
+  // is the selection.
+  const stepRef = useRef(step);
+  stepRef.current = step;
   useFocusEffect(useCallback(() => {
     const pending = consumePendingDrawingSelection();
-    if (pending) setSelectedDrawings(pending);
+    if (!pending) return;
+    setSelectedDrawings(curr => stepRef.current === 'capture'
+      ? [...curr, ...pending.filter(id => !curr.includes(id))]
+      : pending);
   }, []));
 
   // The visit remembers its drawings on the phone, so continuing it later
@@ -227,6 +241,14 @@ export default function SessionScreen() {
     ]);
   };
 
+  const openPicker = () =>
+    router.push({ pathname: '/select-drawings', params: { project_id: String(project_id), selected: selectedDrawings.join(',') } });
+  // In the order they were chosen.
+  const chosenDrawings = selectedDrawings
+    .map(id => allDrawings.find(d => d.id === id))
+    .filter((d): d is Drawing => !!d);
+  const currentSheetIds = new Set(latestRevisions(allDrawings.filter(d => !isSketch(d))).map(d => d.id));
+
   // ── STEP 1: DETAILS ─────────────────────────────────
   if (step === 'details') {
     return (
@@ -271,26 +293,56 @@ export default function SessionScreen() {
             <TextInput style={S.input} placeholder="14:00" placeholderTextColor={T.mid} value={startTime} onChangeText={setStartTime} keyboardType="numbers-and-punctuation" maxLength={5} />
           </View>
 
-          {/* Drawings */}
+          {/* Drawings: the ones chosen are shown here, so there's no need to
+              open the picker again to check. */}
           <View style={S.section}>
-            <Text style={S.sectionTitle}>Drawings</Text>
+            <View style={S.sectionRow}>
+              <Text style={[S.sectionTitle, { marginBottom: 0 }]}>
+                Drawings & sketches{chosenDrawings.length > 0 ? ` (${chosenDrawings.length})` : ''}
+              </Text>
+              {chosenDrawings.length > 0 && (
+                <TouchableOpacity onPress={openPicker} hitSlop={8}>
+                  <Text style={S.addDrawText}>Change</Text>
+                </TouchableOpacity>
+              )}
+            </View>
             {allDrawings.length === 0 ? (
               <View style={S.emptyBox}><Text style={S.emptyText}>No drawings uploaded yet</Text></View>
-            ) : (
-              <TouchableOpacity style={S.checkRow}
-                onPress={() => router.push({ pathname: '/select-drawings', params: { project_id: String(project_id), selected: selectedDrawings.join(',') } })}
-                activeOpacity={0.7}>
+            ) : chosenDrawings.length === 0 ? (
+              <TouchableOpacity style={S.checkRow} onPress={openPicker} activeOpacity={0.7}>
                 <View style={S.pickerBadge}>
-                  <Text style={S.pickerBadgeText}>{selectedDrawings.length}</Text>
+                  <Ionicons name="images-outline" size={22} color={T.indigo} />
                 </View>
                 <View style={S.checkInfo}>
-                  <Text style={S.checkTitle}>
-                    {selectedDrawings.length === 0 ? 'Select drawings' : 'Drawings Selected'}
-                  </Text>
-                  <Text style={S.checkMeta}>Tap to choose the drawings relevant to today's inspection</Text>
+                  <Text style={S.checkTitle}>Select drawings & sketches</Text>
+                  <Text style={S.checkMeta}>Tap to choose the drawings and sketches for today's inspection</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={T.mid} />
               </TouchableOpacity>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>
+                {chosenDrawings.map(d => (
+                  <View key={d.id} style={S.stripCard}>
+                    <DrawingThumb previewUrl={d.preview_url} style={S.stripThumb} />
+                    <View style={S.stripBody}>
+                      <Text style={S.stripLabel} numberOfLines={1}>{drawingLabel(d)}</Text>
+                      <Text style={S.stripTitle} numberOfLines={1}>{d.title}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={S.stripRemove}
+                      onPress={() => setSelectedDrawings(curr => curr.filter(id => id !== d.id))}
+                      accessibilityLabel={`Remove ${drawingLabel(d)} ${d.title}`}
+                      hitSlop={6}
+                    >
+                      <Ionicons name="close" size={14} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                <TouchableOpacity style={S.stripAdd} onPress={openPicker} activeOpacity={0.7}>
+                  <Ionicons name="add" size={24} color={T.indigo} />
+                  <Text style={S.stripAddText}>Add drawings</Text>
+                </TouchableOpacity>
+              </ScrollView>
             )}
           </View>
 
@@ -317,8 +369,22 @@ export default function SessionScreen() {
 
           {/* Start */}
           <View style={S.section}>
-            <TouchableOpacity style={[S.startBtn, isSaving && { opacity: 0.6 }]} onPress={startCapturing} disabled={isSaving} activeOpacity={0.85}>
-              {isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={S.startBtnText}>{'Start Capturing →'}</Text>}
+            {/* Held while a dictated purpose is still being written out, or
+                it would be saved without it. */}
+            <TouchableOpacity
+              style={[S.startBtn, (isSaving || isRecording || isTranscribing) && { opacity: 0.6 }]}
+              onPress={startCapturing}
+              disabled={isSaving || isRecording || isTranscribing}
+              activeOpacity={0.85}
+            >
+              {isSaving ? <ActivityIndicator color="#FFFFFF" /> : (
+                <Text style={S.startBtnText}>
+                  {isRecording ? 'Stop dictating to continue'
+                    : isTranscribing ? 'Writing out your dictation…'
+                    : inspectionId ? 'Save & Continue Capturing →'
+                    : 'Start Capturing →'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -329,7 +395,7 @@ export default function SessionScreen() {
   }
 
   // ── STEP 2: CAPTURE ─────────────────────────────────
-  const inspDrawings = allDrawings.filter(d => selectedDrawings.includes(d.id));
+  const inspDrawings = chosenDrawings;
   return (
     <View style={S.container}>
       <View style={S.header}>
@@ -353,14 +419,10 @@ export default function SessionScreen() {
 
         <View style={S.section}>
           <View style={S.sectionRow}>
-            <Text style={[S.sectionTitle, { marginBottom: 0 }]}>Drawings ({inspDrawings.length})</Text>
-            <TouchableOpacity onPress={() => {
-              // Only current sheets are offered; a superseded revision is
-              // reachable from "Select drawings", deliberately.
-              const unsel = latestRevisions(allDrawings).filter(d => !selectedDrawings.includes(d.id));
-              if (!unsel.length) { Alert.alert('All drawings added', 'All project drawings are already in this inspection.'); return; }
-              Alert.alert('Add Drawing', 'Select an additional drawing:', [...unsel.map(d => ({ text: `${d.number ? d.number + ' -' : ''}${d.title}`, onPress: () => setSelectedDrawings(curr => [...curr, d.id]) })), { text: 'Cancel', style: 'cancel' as const }]);
-            }}>
+            <Text style={[S.sectionTitle, { marginBottom: 0 }]}>Drawings & sketches ({inspDrawings.length})</Text>
+            {/* The same picker as before capturing: drawings, and sketches
+                (from CANs or the office) in their own section. */}
+            <TouchableOpacity onPress={openPicker} hitSlop={8}>
               <Text style={S.addDrawText}>+ Add</Text>
             </TouchableOpacity>
           </View>
@@ -382,13 +444,13 @@ export default function SessionScreen() {
               <TouchableOpacity style={S.drawingRow}
                 onPress={() => router.push({ pathname: '/drawing/[id]', params: { id: drawing.id, title: drawing.title, file_url: drawing.file_url, preview_url: drawing.preview_url ?? '', project_id: String(project_id), inspection_id: inspectionId, view_only: 'false' } })}
                 activeOpacity={0.7}>
-                <View style={S.drawBadge}><Text style={S.drawBadgeText}>{drawing.number || '-'}</Text></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={S.drawTitle}>{drawing.title}</Text>
+                <DrawingThumb previewUrl={drawing.preview_url} style={S.rowThumb} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={S.drawTitle} numberOfLines={2}>{drawingLabel(drawing)} · {drawing.title}</Text>
                   <Text style={S.drawMeta}>
-                    Rev {drawing.revision}
-                    {!latestRevisions(allDrawings).some(d => d.id === drawing.id) ? ' · superseded' : ''}
-                    {' - Tap to inspect'}
+                    {isSketch(drawing) ? 'Sketch' : `Rev ${drawing.revision}`}
+                    {!isSketch(drawing) && !currentSheetIds.has(drawing.id) ? ' · superseded' : ''}
+                    {' · Tap to inspect'}
                   </Text>
                 </View>
                 <Text style={S.arrow}>{'→'}</Text>
@@ -564,6 +626,17 @@ const S = StyleSheet.create({
   drawTitle:    { fontSize: 14, color: T.ink, fontWeight: '500', marginBottom: 2 },
   drawMeta:     { fontSize: 12, color: T.mid },
   arrow:        { fontSize: 20, color: T.mid },
+  rowThumb:     { width: 76, height: 52, borderRadius: 8, borderWidth: 1, borderColor: T.line },
+  strip:        { marginHorizontal: -16 },
+  stripContent: { paddingHorizontal: 16, gap: 10 },
+  stripCard:    { width: 132, backgroundColor: T.surface, borderRadius: 12, borderWidth: 1, borderColor: T.line, overflow: 'hidden' },
+  stripThumb:   { width: 132, height: 88, borderBottomWidth: 1, borderBottomColor: T.line },
+  stripBody:    { paddingHorizontal: 8, paddingTop: 6, paddingBottom: 8 },
+  stripLabel:   { fontSize: 12, fontWeight: '800', color: T.indigoDeep },
+  stripTitle:   { fontSize: 11, color: T.mid },
+  stripRemove:  { position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(42,46,55,0.78)', alignItems: 'center', justifyContent: 'center' },
+  stripAdd:     { width: 110, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', borderColor: T.indigo, alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 130 },
+  stripAddText: { fontSize: 12, fontWeight: '700', color: T.indigo },
   swipeDeleteBtn: { backgroundColor: T.clay, width: 72, borderRadius: R.md, marginBottom: 8, alignItems: 'center', justifyContent: 'center' },
   addDrawText:  { fontSize: 13, color: T.indigo, fontWeight: '700' },
 

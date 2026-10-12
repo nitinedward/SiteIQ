@@ -1,8 +1,9 @@
 /** Projects kept on the phone for use without signal ("Available offline").
  *
- *  Downloading copies a project's details, drawings (with their images),
- *  site visits, mark-ups and notes; photos of earlier visits stay on the
- *  web, to keep the download small. While there's a connection, kept
+ *  Downloading copies a project's details, drawings (with their images and
+ *  small copies for lists), its CANs' details and sketches, site visits,
+ *  mark-ups and notes; photos of earlier visits stay on the web, and so
+ *  does a CAN's full PDF, to keep the download small. While there's a connection, kept
  *  projects are refreshed when the app opens, so the copy on the phone
  *  stays current. */
 
@@ -12,6 +13,8 @@ import { db, getRows, putRow, replaceRows, setMeta } from './db'
 import { downloadDrawing, forgetDrawing } from './files'
 import { isOnline, withTimeout } from './net'
 import { myId } from './store'
+import { loadProjectDocs } from '../projectDocs'
+import { thumbRemote } from '../thumbs'
 
 const READ_MS = 20_000
 
@@ -81,13 +84,29 @@ export function downloadProject(projectId: string, onProgress?: (fraction: numbe
     await setMeta(`fetched:inspections:${projectId}`, Date.now())
     for (const id of ids) await setMeta(`fetched:observations:${id}`, Date.now())
 
-    // The current sheets' images; superseded revisions open with signal.
-    const sheets = latestRevisions(drawings).filter(d => d.preview_url)
+    step(0.19, 'CANs and sketches')
+    // Remembered on the phone for the CAN and sketch screens (lib/projectDocs).
+    await loadProjectDocs(projectId, drawings).catch(() => {})
+
+    // Full images of the current sheets and every sketch (sketches share a
+    // "number", so they aren't revisions of each other); superseded
+    // revisions open with signal. Small copies of all of them, for lists.
+    const isSketch = (d: any) => (d.kind ?? 'drawing') === 'sketch'
+    const sheets = [...latestRevisions(drawings.filter(d => !isSketch(d))), ...drawings.filter(isSketch)]
+      .filter(d => d.preview_url)
+    const smalls = drawings.filter(d => d.preview_url)
+    const total = sheets.length + smalls.length
     let bytes = 0
-    for (let i = 0; i < sheets.length; i++) {
-      step(0.2 + 0.78 * (i / Math.max(1, sheets.length)), `Drawing ${i + 1} of ${sheets.length}`)
-      bytes += await downloadDrawing(sheets[i].preview_url)
-      await setMeta(`fetched:zones:${sheets[i].id}`, Date.now())
+    let done = 0
+    for (const sheet of sheets) {
+      step(0.2 + 0.78 * (done++ / Math.max(1, total)), `Drawing ${done} of ${sheets.length}`)
+      bytes += await downloadDrawing(sheet.preview_url)
+      await setMeta(`fetched:zones:${sheet.id}`, Date.now())
+    }
+    for (const d of smalls) {
+      step(0.2 + 0.78 * (done++ / Math.max(1, total)), 'Thumbnails')
+      // A missing small copy only means a placeholder in the list.
+      bytes += await downloadDrawing(thumbRemote(d.preview_url)).catch(() => 0)
     }
 
     const d = await db()
@@ -106,7 +125,9 @@ export function downloadProject(projectId: string, onProgress?: (fraction: numbe
  *  Anything still waiting to upload is unaffected. */
 export async function removeOfflineProject(projectId: string): Promise<void> {
   for (const drawing of await getRows('drawings', { project: projectId })) {
-    if (drawing.preview_url) await forgetDrawing(drawing.preview_url)
+    if (!drawing.preview_url) continue
+    await forgetDrawing(drawing.preview_url)
+    await forgetDrawing(thumbRemote(drawing.preview_url))
   }
   const d = await db()
   await d.runAsync('DELETE FROM offline_projects WHERE project_id = ?', projectId)
