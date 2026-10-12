@@ -7,7 +7,8 @@ import { useCallback, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../lib/theme';
-import { getInspection, getObservation, listResponses, photoList, respondToNote, zoneAndDrawing, type NoteResponse } from '../../lib/offline/store';
+import { getInspection, getObservation, listResponses, photoList, projectNoteNumbers, respondToNote, zoneAndDrawing, type NoteResponse } from '../../lib/offline/store';
+import { noteRefLabel } from '../../lib/noteRefs';
 import { discardFile, localFor, savePhoto, isLocal } from '../../lib/offline/files';
 import { thumbFor } from '../../lib/thumbs';
 import { SyncStatus } from '../../components/SyncStatus';
@@ -34,6 +35,7 @@ export default function SiteNoteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [note, setNote]           = useState<any | null>(null);
   const [reportNo, setReportNo]   = useState('');
+  const [sn, setSn]               = useState<string | null>(null);
   const [history, setHistory]     = useState<NoteResponse[]>([]);
   const [drawing, setDrawing]     = useState<any | null>(null);
   const [loading, setLoading]     = useState(true);
@@ -48,6 +50,7 @@ export default function SiteNoteScreen() {
     const n = await getObservation(String(id));
     setNote(n);
     if (n?.inspection_id) setReportNo((await getInspection(n.inspection_id))?.report_no ?? '');
+    if (n?.project_id) setSn(noteRefLabel((await projectNoteNumbers(n.project_id)).get(n.id)));
     // Where it was marked: its zone's drawing, for "View on drawing".
     setDrawing(n?.zone_id ? (await zoneAndDrawing(n.zone_id, n.project_id ?? null))?.drawing ?? null : null);
     setHistory(await listResponses(String(id), setHistory));
@@ -117,7 +120,7 @@ export default function SiteNoteScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={S.title} numberOfLines={1}>{note.zone_label || 'Site note'}</Text>
-          <Text style={S.sub}>{reportNo ? `SR ${reportNo}` : 'Site note'}{note.observed_at ? ` · ${when(note.observed_at)}` : ''}</Text>
+          <Text style={S.sub}>{sn ? `${sn} · ` : ''}{reportNo ? `SR ${reportNo}` : 'Site note'}{note.observed_at ? ` · ${when(note.observed_at)}` : ''}</Text>
         </View>
         <View style={[S.pill, { backgroundColor: closed ? T.sageSoft : T.goldSoft }]}>
           <Text style={[S.pillText, { color: closed ? '#3F6F5A' : T.marigoldDeep }]}>{closed ? 'Closed' : 'Open'}</Text>
@@ -151,7 +154,8 @@ export default function SiteNoteScreen() {
             onPress={() => router.push({ pathname: '/drawing/[id]', params: {
               id: drawing.id, title: drawing.title, number: drawing.number ?? '', revision: drawing.revision ?? '',
               file_url: drawing.file_url, preview_url: drawing.preview_url ?? '', project_id: note.project_id ?? '',
-              inspection_id: note.inspection_id ?? '', view_only: 'true',
+              // The drawing with all its finalised mark-ups, this one picked out.
+              focus_zone: note.zone_id ?? '', view_only: 'true',
             } })}
           >
             <Ionicons name="map-outline" size={18} color={T.indigo} />

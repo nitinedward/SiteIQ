@@ -19,6 +19,7 @@ import {
 import { discardFile, isLocal } from './files'
 import { isConnectionError, isOnline, markUnreachable, withTimeout } from './net'
 import { dropInspection, dropTarget, enqueue, neverSent } from './outbox'
+import { noteRefs } from '../noteRefs'
 
 const READ_MS = 12_000
 
@@ -445,4 +446,23 @@ export async function zoneAndDrawing(zoneId: string, projectId: string | null): 
     } catch { drawing = null }
   }
   return drawing ? { zone, drawing } : null
+}
+
+/** Every mark-up on a drawing, whichever visit made it (for the drawing
+ *  opened from the project, which shows the finalised reports' ones). */
+export async function listDrawingZones(drawingId: string, onFresh?: Fresh<any[]>): Promise<any[]> {
+  const local = async () => (await getRows('zones', { parent: drawingId }))
+    .sort((a, b) => String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')))
+  const refresh = async () => {
+    const rows = await q<any[]>(supabase.from('zones').select('*').eq('drawing_id', drawingId))
+    await replaceRows('zones', await getRows('zones', { parent: drawingId }), rows)
+  }
+  return read(`zones:${drawingId}`, local, refresh, onFresh)
+}
+
+/** The project's site note numbers (SN 07), from what's on the phone. */
+export async function projectNoteNumbers(projectId: string): Promise<Map<string, number>> {
+  const reports = await getRows('inspections', { project: projectId })
+  const notes = await getRows('observations', { project: projectId })
+  return noteRefs(reports, notes)
 }

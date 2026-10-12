@@ -8,8 +8,11 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import {
-  createZone, deleteZone as removeZone, listZones, observationForZone, photoList, zoneNotes,
+  createZone, deleteZone as removeZone, listDrawingZones, listInspections, listProjectNotes, listZones,
+  observationForZone, photoList, zoneNotes,
 } from '../../lib/offline/store';
+import { isFinalised } from '../../lib/reports';
+import { noteRefLabel, noteRefs } from '../../lib/noteRefs';
 import { localFor } from '../../lib/offline/files';
 import { shapeSpace, trueImageSize } from '../../lib/markupSpace';
 import Svg, { Circle, Ellipse, Rect, Path, G } from 'react-native-svg';
@@ -23,6 +26,8 @@ const { width: SW, height: SH } = Dimensions.get('window');
 
 type MarkupType = 'pin' | 'rectangle' | 'freehand';
 type Tool = 'pin' | 'rectangle' | 'freehand';
+/** A mark-up's site note, for the drawing opened from the project. */
+type ZoneInfo = { noteId: string | null; sn: string | null; closed: boolean; wording: string; report: string | null };
 type Zone = { id: string; label: string; x_percent: number; y_percent: number; markup_type: MarkupType; shape_data: string | null };
 type Pt = { x: number; y: number };
 type PdfRect = { x: number; y: number; width: number; height: number };
@@ -55,8 +60,16 @@ export default function DrawingViewerScreen() {
   const projectId    = params.project_id as string;
   const inspectionId = params.inspection_id as string;
   const viewOnly     = params.view_only === 'true';
+  /** Opened from the project (or a site note): the finalised reports'
+   *  mark-ups, each with its site note, rather than one visit's. */
+  const projectMode  = viewOnly && !inspectionId;
+  const focusZone    = (params.focus_zone as string | undefined) || null;
 
   const [zones, setZones]         = useState<Zone[]>([]);
+  // Project mode: each mark-up's site note, and which are shown / chosen.
+  const [info, setInfo]           = useState<Map<string, ZoneInfo>>(new Map());
+  const [filter, setFilter]       = useState<'OPEN' | 'ALL'>('OPEN');
+  const [selected, setSelected]   = useState<string | null>(focusZone);
   const zonesRef                  = useRef<Zone[]>([]);
   const setZonesAndRef = (z: Zone[]) => { zonesRef.current = z; setZones(z); };
   // Straight to the drawing: the list of its zones is a tap away ("Zones").
@@ -187,13 +200,57 @@ export default function DrawingViewerScreen() {
   };
 
   const fetchZones = async () => {
+    if (projectMode) { await fetchProjectZones(); return; }
     // Zones placed during an inspection are scoped to that inspection_id.
-    // Zones placed while just browsing a drawing (no active inspection,
-    // e.g. from Project Detail) are standalone — inspection_id is null.
+    // Zones placed while just browsing a drawing (no active inspection)
+    // are standalone — inspection_id is null.
     const show = (rows: Zone[]) => setZonesAndRef(rows);
     show(await listZones(drawingId, inspectionId || null, show));
   };
+
+  // The finalised reports' mark-ups on this drawing, each with its site
+  // note: numbered (SN), open or closed, and its report wording.
+  const fetchProjectZones = async () => {
+    const build = async (all: any[]) => {
+      const reports = await listInspections(projectId);
+      const finalised = new Set(reports.filter(isFinalised).map((r: any) => r.id));
+      const notes = await listProjectNotes(projectId, reports.map((r: any) => r.id));
+      const refs = noteRefs(reports, notes);
+      const reportNo = new Map(reports.map((r: any) => [r.id, r.report_no]));
+      const next = new Map<string, ZoneInfo>();
+      const shown = all.filter(z => finalised.has(z.inspection_id));
+      for (const z of shown) {
+        const note = notes.find((n: any) => n.zone_id === z.id && n.inspection_id === z.inspection_id)
+          ?? notes.find((n: any) => n.zone_id === z.id);
+        next.set(z.id, {
+          noteId: note?.id ?? null,
+          sn: note ? noteRefLabel(refs.get(note.id)) : null,
+          closed: String(note?.severity ?? '').toUpperCase() === 'CLOSED',
+          wording: String(note?.report_text || note?.transcript || '').trim(),
+          report: reportNo.get(z.inspection_id) ? `SR ${reportNo.get(z.inspection_id)}` : null,
+        });
+      }
+      setInfo(next);
+      setZonesAndRef(shown);
+      // A closed item opened from its site note: show the closed ones too.
+      if (focusZone && next.get(focusZone)?.closed) setFilter('ALL');
+    };
+    await build(await listDrawingZones(drawingId, rows => { build(rows); }));
+  };
   useFocusEffect(useCallback(() => { fetchZones(); }, [drawingId, inspectionId]));
+
+  // Project mode shows the open ones, or all; taps reach only those.
+  const visibleZones = projectMode
+    ? zones.filter(z => filter === 'ALL' || !info.get(z.id)?.closed)
+    : zones;
+  const visibleRef = useRef<Zone[]>([]);
+  visibleRef.current = visibleZones;
+  // A tapped mark-up: opens its note while capturing; is picked out (and
+  // its note shown) on the drawing opened from the project.
+  const tapZoneRef = useRef<(z: Zone) => void>(() => {});
+  tapZoneRef.current = projectMode
+    ? (z: Zone) => setSelected(s => s === z.id ? null : z.id)
+    : (z: Zone) => { openZone(z); };
 
   const panResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -274,7 +331,7 @@ export default function DrawingViewerScreen() {
         const tapLx = (lx - pageLeft.current) / scale.current;
         const tapLy = (ly - pageTop.current)  / scale.current;
         if (dt < 500) {
-          const hitZone = zonesRef.current?.find(zone => {
+          const hitZone = visibleRef.current?.find(zone => {
             const sc = { x: (zone.x_percent / 100) * SW, y: (zone.y_percent / 100) * naturalH.current };
             if (!zone.markup_type || zone.markup_type === 'pin') {
               return Math.sqrt(Math.pow(tapLx - sc.x, 2) + Math.pow(tapLy - sc.y, 2)) < 28;
@@ -289,7 +346,7 @@ export default function DrawingViewerScreen() {
             if (zone.markup_type === 'freehand') return Math.sqrt(Math.pow(tapLx - sc.x, 2) + Math.pow(tapLy - sc.y, 2)) < 36;
             return false;
           });
-          if (hitZone) { tapStart.current = null; hasMoved.current = false; openZone(hitZone); return; }
+          if (hitZone) { tapStart.current = null; hasMoved.current = false; tapZoneRef.current(hitZone); return; }
         }
       }
 
@@ -403,23 +460,34 @@ export default function DrawingViewerScreen() {
     );
   };
 
+  /** How a mark-up is drawn: by status on the drawing opened from the
+   *  project (open marigold, closed green), faded when another is picked. */
+  const lookOf = (zone: Zone) => {
+    if (!projectMode) return { stroke: T.indigo, freeStroke: '#F59E0B', opacity: 1 };
+    const closed = !!info.get(zone.id)?.closed;
+    const colour = closed ? '#5B9279' : '#E08D0B';
+    return { stroke: colour, freeStroke: colour, opacity: selected && selected !== zone.id ? 0.3 : 1 };
+  };
+
   const renderSvg = (h: number) => (
     <Svg width={SW} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
-      {zones.map(zone => {
+      {visibleZones.map(zone => {
         const sc = pctToPage(zone.x_percent, zone.y_percent);
+        const look = lookOf(zone);
+        const strong = selected === zone.id ? 1.6 : 1;
         if (!zone.markup_type || zone.markup_type === 'pin') {
           return (
-            <G key={zone.id}>
+            <G key={zone.id} opacity={look.opacity}>
               <Ellipse cx={sc.x} cy={sc.y + 2} rx={7} ry={2} fill="rgba(0,0,0,0.14)" />
-              <Circle cx={sc.x} cy={sc.y} r={12} fill="#FFFFFF" stroke={T.indigo} strokeWidth={3} />
-              <Circle cx={sc.x} cy={sc.y} r={4}  fill={T.marigold} />
+              <Circle cx={sc.x} cy={sc.y} r={12} fill="#FFFFFF" stroke={look.stroke} strokeWidth={3 * strong} />
+              <Circle cx={sc.x} cy={sc.y} r={4}  fill={projectMode ? look.stroke : T.marigold} />
             </G>
           );
         }
         if (zone.markup_type === 'rectangle' && zone.shape_data) {
           try {
             const pr = pdfRectToPage(JSON.parse(zone.shape_data), spaceOf(zone));
-            return <Rect key={zone.id} x={pr.x} y={pr.y} width={pr.width} height={pr.height} fill={T.indigo} fillOpacity={0.16} stroke={T.indigo} strokeWidth={1.5} />;
+            return <Rect key={zone.id} opacity={look.opacity} x={pr.x} y={pr.y} width={pr.width} height={pr.height} fill={look.stroke} fillOpacity={0.16} stroke={look.stroke} strokeWidth={1.5 * strong} />;
           } catch { return null; }
         }
         if (zone.markup_type === 'freehand' && zone.shape_data) {
@@ -427,7 +495,7 @@ export default function DrawingViewerScreen() {
             const pts: Pt[] = JSON.parse(zone.shape_data);
             const [sw, sh] = spaceOf(zone);
             const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${(p.x / sw) * SW} ${(p.y / sh) * h}`).join(' ');
-            return <Path key={zone.id} d={d} stroke="#F59E0B" strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
+            return <Path key={zone.id} opacity={look.opacity} d={d} stroke={look.freeStroke} strokeWidth={2 * strong} fill="none" strokeLinecap="round" strokeLinejoin="round" />;
           } catch { return null; }
         }
         return null;
@@ -437,18 +505,30 @@ export default function DrawingViewerScreen() {
     </Svg>
   );
 
-  const renderLabels = () => zones.map(zone => {
+  const renderLabels = () => visibleZones.map(zone => {
     const sc = pctToPage(zone.x_percent, zone.y_percent);
     const isFree = zone.markup_type === 'freehand';
     const isPin  = !zone.markup_type || zone.markup_type === 'pin';
+    const zi = info.get(zone.id);
+    const look = lookOf(zone);
     return (
-      <TouchableOpacity key={zone.id} style={{ position: 'absolute', left: sc.x - 80, top: sc.y - (isPin ? 37 : 46), zIndex: 10, width: 160, alignItems: 'center' }} onPress={() => openZone(zone)} disabled={tool === 'rectangle' || tool === 'freehand'}>
-        <View style={[S.labelBubble, isFree && S.labelFree]}>
-          <Text style={S.labelText} numberOfLines={1}>{zone.label}</Text>
+      <TouchableOpacity
+        key={zone.id}
+        style={{ position: 'absolute', left: sc.x - 90, top: sc.y - (isPin ? 37 : 46), zIndex: selected === zone.id ? 20 : 10, width: 180, alignItems: 'center', opacity: look.opacity }}
+        onPress={() => tapZoneRef.current(zone)}
+        disabled={tool === 'rectangle' || tool === 'freehand'}
+      >
+        <View style={[S.labelBubble, isFree && S.labelFree, projectMode && { backgroundColor: look.stroke }]}>
+          <Text style={S.labelText} numberOfLines={1}>{projectMode && zi?.sn ? `${zi.sn} · ${zone.label}` : zone.label}</Text>
         </View>
       </TouchableOpacity>
     );
   });
+
+  // Project mode: the list of this drawing's site notes, newest first.
+  const listZonesShown = projectMode
+    ? [...visibleZones].sort((a, b) => (info.get(b.id)?.sn ?? '').localeCompare(info.get(a.id)?.sn ?? ''))
+    : [];
 
   return (
     <View style={S.container}>
@@ -483,6 +563,18 @@ export default function DrawingViewerScreen() {
 
       {showPdf ? (
         <View style={S.pdfScreen}>
+          {projectMode && (
+            <View style={S.filterBar}>
+              <View style={S.filterSegment}>
+                {([['OPEN', `Open (${zones.filter(z => !info.get(z.id)?.closed).length})`], ['ALL', `All (${zones.length})`]] as const).map(([key, label]) => (
+                  <TouchableOpacity key={key} onPress={() => setFilter(key)} style={[S.filterBtn, filter === key && S.filterBtnOn]}>
+                    <Text style={[S.filterText, filter === key && S.filterTextOn]}>{label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={S.filterHint}>From finalised reports</Text>
+            </View>
+          )}
           {!viewOnly && (
             <View style={S.toolbar}>
               <ToolBtn icon="location-outline" label="Pin"  active={tool==='pin'}       onPress={() => updateTool('pin')} />
@@ -490,7 +582,7 @@ export default function DrawingViewerScreen() {
               <ToolBtn icon="pencil-outline"   label="Draw" active={tool==='freehand'}  onPress={() => updateTool('freehand')} />
             </View>
           )}
-          <View ref={pdfWrapRef} style={S.pdfWrap} onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h > 0) pdfWrapH.current = h; measureWrap(); setTimeout(measureWrap, 50); }} {...panResponder.panHandlers}>
+          <View ref={pdfWrapRef} style={[S.pdfWrap, projectMode && { flex: 0, height: Math.round(SH * 0.4) }]} onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h > 0) pdfWrapH.current = h; measureWrap(); setTimeout(measureWrap, 50); }} {...panResponder.panHandlers}>
             <Animated.View style={{ position: 'absolute', top: 0, left: 0, width: SW, height: pdfH, transform: [{ translateX: animTx }, { translateY: animTy }, { scale: animScale }] }}>
               {!isLoading && !pdfError && previewUrl && (
                 <Image
@@ -508,7 +600,41 @@ export default function DrawingViewerScreen() {
           {editingZones && (
             <TouchableOpacity style={S.editDismissOverlay} activeOpacity={1} onPress={() => setEditingZones(false)} />
           )}
-          {zones.length > 0 && (
+          {projectMode && (
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+              <Text style={S.sectionTitle}>Site notes on this drawing ({listZonesShown.length})</Text>
+              {listZonesShown.length === 0 ? (
+                <Text style={S.emptyBody}>
+                  {zones.length === 0 ? 'No mark-ups from finalised reports on this drawing.' : 'No open items — choose All to see closed ones.'}
+                </Text>
+              ) : listZonesShown.map(zone => {
+                const zi = info.get(zone.id);
+                const on = selected === zone.id;
+                return (
+                  <View key={zone.id} style={[S.noteRow, on && S.noteRowOn]}>
+                    <TouchableOpacity style={S.noteRowHead} onPress={() => setSelected(on ? null : zone.id)} activeOpacity={0.7}>
+                      <View style={[S.noteDot, { backgroundColor: zi?.closed ? '#5B9279' : T.marigold }]} />
+                      {!!zi?.sn && <Text style={S.noteSn}>{zi.sn}</Text>}
+                      <Text style={S.noteLabel} numberOfLines={1}>{zone.label}</Text>
+                      {!!zi?.report && <Text style={S.noteReport}>{zi.report}</Text>}
+                    </TouchableOpacity>
+                    {on && (
+                      <View style={S.noteBody}>
+                        <Text style={[S.notePill, zi?.closed ? S.notePillClosed : S.notePillOpen]}>{zi?.closed ? 'Closed' : 'Open'}</Text>
+                        {!!zi?.wording && <Text style={S.noteWording}>{zi.wording}</Text>}
+                        {!!zi?.noteId && (
+                          <TouchableOpacity style={S.noteOpen} onPress={() => router.push({ pathname: '/note/[id]', params: { id: zi.noteId! } })} activeOpacity={0.85}>
+                            <Text style={S.noteOpenText}>Open site note</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
+          {!projectMode && zones.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={S.strip} contentContainerStyle={S.stripContent}>
               {zones.map((zone, idx) => {
                 const rotate = jiggleAnim.interpolate({
@@ -648,6 +774,27 @@ const S = StyleSheet.create({
   labelText:     { fontSize: 10, color: '#FFFFFF', fontWeight: '700' },
   labelFree:     { backgroundColor: '#F59E0B' },
   strip:         { backgroundColor: T.paper, maxHeight: 56 },
+  filterBar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10, backgroundColor: T.paper },
+  filterSegment: { flexDirection: 'row', backgroundColor: T.surface, borderRadius: 20, borderWidth: 1, borderColor: T.line, padding: 3 },
+  filterBtn:     { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16 },
+  filterBtnOn:   { backgroundColor: T.indigo },
+  filterText:    { fontSize: 13, fontWeight: '700', color: T.mid },
+  filterTextOn:  { color: '#FFFFFF' },
+  filterHint:    { fontSize: 11, color: T.mid },
+  noteRow:       { backgroundColor: T.surface, borderRadius: R.md, borderWidth: 1, borderColor: T.line, marginBottom: 8, overflow: 'hidden' },
+  noteRowOn:     { borderColor: T.indigo, borderWidth: 2, backgroundColor: T.indigoSoft },
+  noteRowHead:   { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
+  noteDot:       { width: 10, height: 10, borderRadius: 5 },
+  noteSn:        { fontSize: 12, fontWeight: '800', color: T.indigo },
+  noteLabel:     { flex: 1, fontSize: 14, fontWeight: '700', color: T.ink },
+  noteReport:    { fontSize: 11, color: T.mid },
+  noteBody:      { paddingHorizontal: 12, paddingBottom: 12, gap: 8 },
+  notePill:      { alignSelf: 'flex-start', fontSize: 11, fontWeight: '700', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 10, overflow: 'hidden' },
+  notePillOpen:  { backgroundColor: T.goldSoft, color: T.marigoldDeep },
+  notePillClosed:{ backgroundColor: T.sageSoft, color: '#3F6F5A' },
+  noteWording:   { fontSize: 13, color: T.ink, lineHeight: 19 },
+  noteOpen:      { backgroundColor: T.indigo, borderRadius: R.pill, paddingVertical: 12, alignItems: 'center' },
+  noteOpenText:  { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   stripContent:  { paddingLeft: 28, paddingRight: 16, gap: 10, alignItems: 'center', paddingTop: 6, paddingBottom: 10 },
   chip:          { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: T.indigoSoft, borderRadius: 18, paddingHorizontal: 11, paddingVertical: 7, borderWidth: 1, borderColor: T.indigo },
   chipFree:      { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },

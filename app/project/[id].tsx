@@ -18,6 +18,7 @@ import {
 import { isOnline } from '../../lib/offline/net';
 import { listProjectNotes } from '../../lib/offline/store';
 import { isFinalised, isInOffice, savedReportIds, saveReport, removeSavedReport } from '../../lib/reports';
+import { noteRefLabel, noteRefs } from '../../lib/noteRefs';
 import { loadProjectDocs, canLabel, sketchSource, sketchViewerParams, type CanItem, type SketchItem, type DrawingRow } from '../../lib/projectDocs';
 
 const T = theme.colors;
@@ -80,6 +81,8 @@ export default function ProjectDetailScreen() {
   const [savingReport, setSavingReport] = useState<string | null>(null);
   // Site notes from finalised reports.
   const [notes, setNotes]             = useState<any[]>([]);
+  // Site note numbers (SN 07), as in the reports and on the web.
+  const [refs, setRefs]               = useState<Map<string, number>>(new Map());
   const [noteFilter, setNoteFilter]   = useState<NoteFilter>('OPEN');
   const [showAllNotes, setShowAllNotes] = useState(false);
   // Drawings, CANs and sketches are kept apart, as on the web.
@@ -107,7 +110,14 @@ export default function ProjectDetailScreen() {
       setInspections(finalised);
       setInOffice(rows.filter(isInOffice).length);
       setInProgress(rows.filter(r => r.status !== 'COMPLETED' && (r._pending || r.created_by === me)));
-      listProjectNotes(pid, finalised.map(r => r.id), setNotes).then(setNotes).catch(() => {});
+      // Every report's notes, for numbering; only finalised ones are listed.
+      const finalisedIds = new Set(finalised.map(r => r.id));
+      const showNotes = (all: any[]) => {
+        setRefs(noteRefs(rows, all));
+        setNotes(all.filter(n => finalisedIds.has(n.inspection_id))
+          .sort((a, b) => String(b.observed_at ?? '').localeCompare(String(a.observed_at ?? ''))));
+      };
+      listProjectNotes(pid, rows.map(r => r.id), showNotes).then(showNotes).catch(() => {});
     };
     savedReportIds().then(setSavedReports).catch(() => {});
     // A sketch's hidden drawing row (see lib/projectDocs) goes under
@@ -509,7 +519,9 @@ export default function ProjectDetailScreen() {
                     onPress={() => router.push({ pathname: '/note/[id]', params: { id: n.id } })}>
                     <View style={[S.noteDot, { backgroundColor: noteIsClosed(n) ? T.sage : T.marigold }]} />
                     <View style={S.rowInfo}>
-                      <Text style={S.rowTitle} numberOfLines={1}>{n.zone_label || 'Site note'}</Text>
+                      <Text style={S.rowTitle} numberOfLines={1}>
+                        {noteRefLabel(refs.get(n.id)) ? `${noteRefLabel(refs.get(n.id))} · ` : ''}{n.zone_label || 'Site note'}
+                      </Text>
                       <Text style={S.rowMeta} numberOfLines={2}>
                         {reportNo(n.inspection_id) ? `SR ${reportNo(n.inspection_id)} · ` : ''}
                         {String(n.report_text || n.transcript || '').trim() || 'No wording'}
