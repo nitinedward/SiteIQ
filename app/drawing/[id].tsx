@@ -5,6 +5,7 @@ import {
   PanResponder, Animated, Image,
 } from 'react-native';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import {
   createZone, deleteZone as removeZone, listZones, observationForZone, photoList, zoneNotes,
@@ -42,6 +43,7 @@ function ToolBtn({ icon, label, active, onPress }: { icon: keyof typeof Ionicons
 }
 
 export default function DrawingViewerScreen() {
+  const insets = useSafeAreaInsets();
   const params       = useLocalSearchParams();
   const drawingId    = params.id as string;
   const title        = params.title as string;
@@ -534,6 +536,9 @@ export default function DrawingViewerScreen() {
               })}
             </ScrollView>
           )}
+          {/* Clear of Android's navigation bar (and the iPhone's home bar),
+              which the app is drawn beneath. */}
+          <View style={{ height: insets.bottom, backgroundColor: T.paper }} />
         </View>
       ) : (
         <ScrollView style={S.scroll} showsVerticalScrollIndicator={false}>
@@ -592,7 +597,7 @@ export default function DrawingViewerScreen() {
       <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
         <KeyboardAvoidingView style={S.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => { setShowModal(false); setPendingZone(null); setNewLabel(''); setLiveRect(null); setLivePath([]); }} />
-          <View style={S.modalCard}>
+          <View style={[S.modalCard, { paddingBottom: 24 + insets.bottom }]}>
             <Text style={S.modalTitle}>Name this zone</Text>
             <Text style={S.modalSub}>{pendingZone?.markup_type === 'pin' ? 'e.g. Column C3, Beam B1' : pendingZone?.markup_type === 'rectangle' ? 'e.g. Spalling area, Crack zone' : 'e.g. Crack pattern, Settlement area'}</Text>
             <TextInput style={S.modalInput} placeholder="Zone name..." placeholderTextColor="#94A3B8" value={newLabel} onChangeText={setNewLabel} autoFocus returnKeyType="done" onSubmitEditing={handleSave} />

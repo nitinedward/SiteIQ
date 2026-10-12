@@ -425,3 +425,24 @@ export async function respondToNote(
   await enqueue(owner, 'response.insert', response.id, note.inspection_id ?? null,
     { response, observation_id: note.id, set_status: status })
 }
+
+/** A mark-up and the drawing it's on, for "View on drawing" — the phone's
+ *  copy, else (with signal) the server's, then kept. */
+export async function zoneAndDrawing(zoneId: string, projectId: string | null): Promise<{ zone: any; drawing: any } | null> {
+  let zone = projectId ? (await getRows('zones', { project: projectId })).find(z => z.id === zoneId) : null
+  if (!zone && isOnline()) {
+    try {
+      zone = await q<any>(supabase.from('zones').select('*').eq('id', zoneId).single())
+      if (zone) await putRow('zones', zone)
+    } catch { zone = null }
+  }
+  if (!zone?.drawing_id) return null
+  let drawing = await getRow('drawings', zone.drawing_id)
+  if (!drawing && isOnline()) {
+    try {
+      drawing = await q<any>(supabase.from('drawings').select('*').eq('id', zone.drawing_id).single())
+      if (drawing) await putRow('drawings', drawing)
+    } catch { drawing = null }
+  }
+  return drawing ? { zone, drawing } : null
+}

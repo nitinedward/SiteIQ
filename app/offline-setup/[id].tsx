@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Switch, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../lib/theme';
 import {
@@ -25,6 +26,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 export default function OfflineSetupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const pid = String(id);
+  const insets = useSafeAreaInsets();
   const [name, setName]       = useState('');
   const [sizes, setSizes]     = useState<ProjectSizes | null>(null);
   const [problem, setProblem] = useState('');
@@ -177,7 +179,7 @@ export default function OfflineSetupScreen() {
             <View style={{ height: 140 }} />
           </ScrollView>
 
-          <View style={S.footer}>
+          <View style={[S.footer, { paddingBottom: 16 + Math.max(16, insets.bottom) }]}>
             <Text style={[S.total, tooBig && { color: T.clay }]}>
               Selected: {mb(total)} · Free on this phone: {mb(sizes.free)}
             </Text>

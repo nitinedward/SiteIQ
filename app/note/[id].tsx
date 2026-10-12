@@ -7,8 +7,7 @@ import { useCallback, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../lib/theme';
-import { getInspection, getObservation, listResponses, photoList, respondToNote, type NoteResponse } from '../../lib/offline/store';
-import { getRow, getRows } from '../../lib/offline/db';
+import { getInspection, getObservation, listResponses, photoList, respondToNote, zoneAndDrawing, type NoteResponse } from '../../lib/offline/store';
 import { discardFile, localFor, savePhoto, isLocal } from '../../lib/offline/files';
 import { thumbFor } from '../../lib/thumbs';
 import { SyncStatus } from '../../components/SyncStatus';
@@ -50,11 +49,7 @@ export default function SiteNoteScreen() {
     setNote(n);
     if (n?.inspection_id) setReportNo((await getInspection(n.inspection_id))?.report_no ?? '');
     // Where it was marked: its zone's drawing, for "View on drawing".
-    if (n?.zone_id) {
-      const zones = n.project_id ? await getRows('zones', { project: n.project_id }) : [];
-      const zone = zones.find(z => z.id === n.zone_id);
-      setDrawing(zone?.drawing_id ? await getRow('drawings', zone.drawing_id) : null);
-    } else setDrawing(null);
+    setDrawing(n?.zone_id ? (await zoneAndDrawing(n.zone_id, n.project_id ?? null))?.drawing ?? null : null);
     setHistory(await listResponses(String(id), setHistory));
     setLoading(false);
   };
