@@ -14,6 +14,7 @@ import { getInspection, getObservation, photoList, saveObservation } from '../li
 import { discardFile, keepRecording, localFor, savePhoto } from '../lib/offline/files';
 import { deferTranscription } from '../lib/transcribeJobs';
 import { Waveform, useLevel } from '../components/Waveform';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const T = theme.colors;
 const R = theme.radius;
@@ -53,6 +54,7 @@ function toStatus(stored: string | null | undefined): Status {
 
 export default function ObservationScreen() {
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   const zoneId        = params.zone_id as string || '';
   const isGeneral     = zoneId === 'general';
   const projectId     = params.project_id as string || '';
@@ -431,7 +433,8 @@ export default function ObservationScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={{ height: 40 }} />
+        {/* Clear of Android's navigation bar, which is drawn over the app. */}
+        <View style={{ height: 40 + insets.bottom }} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
