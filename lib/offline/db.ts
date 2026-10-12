@@ -12,7 +12,7 @@
 
 import * as SQLite from 'expo-sqlite'
 
-export type Table = 'projects' | 'drawings' | 'inspections' | 'zones' | 'observations'
+export type Table = 'projects' | 'drawings' | 'inspections' | 'zones' | 'observations' | 'note_responses'
 
 let opening: Promise<SQLite.SQLiteDatabase> | null = null
 
@@ -73,6 +73,8 @@ function keys(tbl: Table, row: any): { project: string | null; parent: string | 
     case 'inspections':  return { project: row.project_id ?? null, parent: null }
     case 'zones':        return { project: row.project_id ?? null, parent: row.drawing_id ?? null }
     case 'observations': return { project: row.project_id ?? null, parent: row.inspection_id ?? null }
+    // A note's comments: filed under the note, and (phone-side) its project.
+    case 'note_responses': return { project: row._project ?? null, parent: row.observation_id ?? null }
   }
 }
 

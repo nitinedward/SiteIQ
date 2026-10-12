@@ -80,7 +80,7 @@ async function refreshCounts() {
   const f = await d.getFirstAsync<{ waiting: number; failed: number }>(
     `SELECT SUM(CASE WHEN attempts < ? THEN 1 ELSE 0 END) AS waiting,
             SUM(CASE WHEN attempts >= ? THEN 1 ELSE 0 END) AS failed
-       FROM files WHERE uploaded = 0 AND kind != 'drawing'`, FILE_TRIES, FILE_TRIES)
+       FROM files WHERE uploaded = 0 AND kind IN ('photo', 'audio')`, FILE_TRIES, FILE_TRIES)
   const files = f?.waiting ?? 0
   const mode = await uploadMode()
   const may = allowed(mode, isWifi(), false)
@@ -179,28 +179,44 @@ async function pass(manual: boolean): Promise<void> {
   if (!may.changes && !may.files) return
   setStatus({ uploading: true })
   try {
-    if (may.changes && !(await sendChanges(owner))) return
+    if (may.changes && !(await sendChanges(owner, may.files))) return
     if (may.files) await sendFiles()
   } finally {
     setStatus({ uploading: false })
   }
 }
 
-/** Sends waiting changes in order. False if it stopped on a failure. */
-async function sendChanges(owner: string): Promise<boolean> {
+/** A change that carries photos the upload setting holds back for now
+ *  (a site note closed with photos, on mobile data with "Photos on Wi-Fi").
+ *  It stays queued, and the queue moves on past it. */
+class HeldForWifi extends Error {}
+
+/** Sends waiting changes in order. False if it stopped on a failure.
+ *  `filesAllowed`: whether photos may go up now. */
+async function sendChanges(owner: string, filesAllowed: boolean): Promise<boolean> {
+  const held: number[] = []
+  // Changes to a note held back with its closing photos wait with it, so
+  // the note is never shown closed on the web without them.
+  const heldNotes = new Set<string>()
   for (;;) {
     if (!isOnline()) return false
-    const op = await nextOp(owner)
+    const op = await nextOp(owner, held)
     if (!op) { setStatus({ problem: null }); return true }
+    if (heldNotes.has(op.target) || heldNotes.has(op.payload?.observation_id)) { held.push(op.seq); continue }
     setInFlight(op.seq)
     try {
-      await run(op)
+      await run(op, filesAllowed)
       await completeOp(op.seq)
       await markSynced(op)
       markReachable()
       backoffMs = 0
       setStatus({ problem: null })
     } catch (err: any) {
+      if (err instanceof HeldForWifi) {
+        held.push(op.seq)
+        if (op.payload?.observation_id) heldNotes.add(op.payload.observation_id)
+        continue
+      }
       const permanent = err instanceof PermanentError
       console.warn(`[sync] ${op.kind} ${op.target}:`, err?.message ?? err)
       if (!permanent && isConnectionError(err)) markUnreachable()
@@ -229,7 +245,7 @@ async function sendFiles(): Promise<void> {
   if (!token) return
   const d = await db()
   const files = await d.getAllAsync<{ local: string; created_at: number }>(
-    `SELECT local, created_at FROM files WHERE uploaded = 0 AND kind != 'drawing' AND attempts < ? ORDER BY created_at`, FILE_TRIES)
+    `SELECT local, created_at FROM files WHERE uploaded = 0 AND kind IN ('photo', 'audio') AND attempts < ? ORDER BY created_at`, FILE_TRIES)
   for (const f of files) {
     if (!isOnline()) return
     const notes = await notesUsing(f.local)
@@ -326,7 +342,7 @@ function check(res: { error: any; status: number }, what: string) {
 
 const isDuplicate = (res: { error: any }) => res.error?.code === '23505'
 
-async function run(op: Op): Promise<void> {
+async function run(op: Op, filesAllowed = true): Promise<void> {
   const p = op.payload
   switch (op.kind) {
     case 'inspection.insert': {
@@ -377,6 +393,68 @@ async function run(op: Op): Promise<void> {
       await callApi('/api/notes/delete', { observationId: op.target }, true)
       return
     }
+    case 'response.insert': {
+      await sendResponse(op, filesAllowed)
+      return
+    }
+  }
+}
+
+/** A comment on a site note — the engineer closing (or reopening) an item
+ *  on site, with photos — stored exactly as the web stores one
+ *  (web/sql/note_responses.sql, note_response_files.sql): the comment and
+ *  its files are one entry in the note's history. Responses can't be
+ *  edited once saved, so its photos go up first; then the entry, then the
+ *  note's status. Sent again after a cut, the entry is a duplicate and
+ *  only the status is set. */
+async function sendResponse(op: Op, filesAllowed: boolean) {
+  const { response, observation_id, set_status } = op.payload as {
+    response: { id: string; comment: string; files: { url: string; name: string; type: string | null }[]; created_at: string; created_by: string | null }
+    observation_id: string
+    set_status: 'OPEN' | 'CLOSED' | null
+  }
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+
+  const files: { url: string; name: string; type: string | null }[] = []
+  for (const f of response.files ?? []) {
+    if (!isLocal(f.url)) { files.push(f); continue }
+    const d = await db()
+    const done = await d.getFirstAsync<{ uploaded: number }>('SELECT uploaded FROM files WHERE local = ?', f.url)
+    if (!done?.uploaded && !filesAllowed) throw new HeldForWifi()
+    files.push({ ...f, url: await ensureUploaded(f.url, token, SUPABASE_KEY) })
+  }
+
+  const row: Record<string, any> = {
+    id: response.id, observation_id, comment: response.comment ?? '', files,
+    file_url: files[0]?.url ?? null, file_name: files[0]?.name ?? null, file_type: files[0]?.type ?? null,
+    created_by: response.created_by, created_at: response.created_at,
+  }
+  let res = await withTimeout(supabase.from('note_responses').insert(row), REQUEST_MS)
+  // Before web/sql/note_response_files.sql the table has no `files` column.
+  if (res.error?.code === 'PGRST204' && /'files'/.test(res.error.message ?? '')) {
+    const { files: _f, ...legacy } = row
+    res = await withTimeout(supabase.from('note_responses').insert(legacy), REQUEST_MS)
+  }
+  if (!isDuplicate(res)) check(res, 'Saving a comment on a site note')
+
+  if (set_status) {
+    check(await withTimeout(supabase.from('observations').update({ severity: set_status }).eq('id', observation_id), REQUEST_MS),
+      set_status === 'CLOSED' ? 'Closing the site note' : 'Reopening the site note')
+  }
+
+  // The phone's copies: the entry with its web addresses; the note no
+  // longer waiting (unless something else about it still is).
+  const local = await getRow('note_responses', response.id)
+  if (local) {
+    const { _pending, ...rest } = local
+    await putRow('note_responses', { ...rest, files })
+  }
+  const note = await getRow('observations', observation_id)
+  if (note && !(await hasPending(observation_id))) {
+    const { _pending, ...rest } = note
+    await putRow('observations', rest)
   }
 }
 

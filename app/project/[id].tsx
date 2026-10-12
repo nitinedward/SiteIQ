@@ -16,6 +16,8 @@ import {
   downloadProject, offlineProjects, onOfflineProjectsChange, removeOfflineProject, type OfflineProject,
 } from '../../lib/offline/download';
 import { isOnline } from '../../lib/offline/net';
+import { listProjectNotes } from '../../lib/offline/store';
+import { isFinalised, isInOffice, savedReportIds, saveReport, removeSavedReport } from '../../lib/reports';
 import { loadProjectDocs, canLabel, sketchSource, sketchViewerParams, type CanItem, type SketchItem, type DrawingRow } from '../../lib/projectDocs';
 
 const T = theme.colors;
@@ -34,7 +36,13 @@ type Inspection = {
   id: string; date: string; report_no: string; weather: string;
   site_contact: string; status: string; created_at: string;
   created_by?: string | null; _pending?: boolean;
+  report_status?: string | null; finalised_at?: string | null;
+  /** The one-line description the web writes for each report. */
+  summary?: string | null;
 };
+type NoteFilter = 'OPEN' | 'CLOSED' | 'ALL';
+const noteIsClosed = (n: any) => String(n.severity ?? '').toUpperCase() === 'CLOSED';
+const NOTE_PREVIEW_COUNT = 5;
 
 const statusConfig = {
   ACTIVE:    { colour: '#5B9279', bg: '#E7F0EB', label: 'Active' },
@@ -66,6 +74,14 @@ export default function ProjectDetailScreen() {
   // the web portal — the current sheet is the one worth opening on site.
   const [showSuperseded, setShowSuperseded] = useState(false);
   const [showAllReports, setShowAllReports] = useState(false);
+  // Reports completed on site but not yet finalised in the office.
+  const [inOffice, setInOffice]       = useState(0);
+  const [savedReports, setSavedReports] = useState<Set<string>>(new Set());
+  const [savingReport, setSavingReport] = useState<string | null>(null);
+  // Site notes from finalised reports.
+  const [notes, setNotes]             = useState<any[]>([]);
+  const [noteFilter, setNoteFilter]   = useState<NoteFilter>('OPEN');
+  const [showAllNotes, setShowAllNotes] = useState(false);
   // Drawings, CANs and sketches are kept apart, as on the web.
   const [docTab, setDocTab]             = useState<'drawings' | 'cans' | 'sketches'>('drawings');
   const [cans, setCans]                 = useState<CanItem[]>([]);
@@ -83,10 +99,17 @@ export default function ProjectDetailScreen() {
   // when there's signal (lib/offline/store).
   const fetchData = async () => {
     const me = await myId();
+    // Only finalised reports are listed: what the office issued. Ones still
+    // being written are counted, so the engineer knows they arrived.
     const showInspections = (rows: Inspection[]) => {
-      setInspections(rows.filter(r => r.status === 'COMPLETED'));
+      const finalised = rows.filter(isFinalised)
+        .sort((a, b) => String(b.finalised_at ?? b.created_at).localeCompare(String(a.finalised_at ?? a.created_at)));
+      setInspections(finalised);
+      setInOffice(rows.filter(isInOffice).length);
       setInProgress(rows.filter(r => r.status !== 'COMPLETED' && (r._pending || r.created_by === me)));
+      listProjectNotes(pid, finalised.map(r => r.id), setNotes).then(setNotes).catch(() => {});
     };
+    savedReportIds().then(setSavedReports).catch(() => {});
     // A sketch's hidden drawing row (see lib/projectDocs) goes under
     // Sketches, never Drawings; a failure loading CANs leaves them empty.
     const showDrawings = (rows: DrawingRow[]) => {
@@ -121,13 +144,12 @@ export default function ProjectDetailScreen() {
   const loadOffline = () => offlineProjects().then(rows => setOffline(rows.find(r => r.project_id === pid) ?? null)).catch(() => {});
   useEffect(() => onOfflineProjectsChange(loadOffline), [pid]);
 
+  // Turning it on opens "Keep on this phone", where the engineer picks what
+  // to download (app/offline-setup).
   const toggleOffline = (on: boolean) => {
     if (on) {
       if (!isOnline()) { Alert.alert('No connection', 'Connect to Wi-Fi or mobile data to download this project.'); return; }
-      setDownload({ fraction: 0, what: 'Starting' });
-      downloadProject(pid, (fraction, what) => setDownload({ fraction, what }))
-        .then(() => { setDownload(null); fetchData(); })
-        .catch(err => { setDownload(null); Alert.alert('Download stopped', err?.message ?? 'Please try again.'); });
+      router.push({ pathname: '/offline-setup/[id]', params: { id: pid } });
       return;
     }
     Alert.alert('Remove from this phone?', "The project's drawings are removed from the phone to free space. Anything not yet uploaded stays and still uploads.", [
@@ -147,9 +169,31 @@ export default function ProjectDetailScreen() {
       { text: 'Discard', style: 'destructive', onPress: async () => { await discardInspection(ins.id); fetchData(); } },
     ]);
 
+  // The finalised PDF, in the app's own viewer (app/report-pdf).
   const openReport = (ins: Inspection) => {
-    if (!isOnline()) { Alert.alert('No connection', 'Opening a finished report needs signal.'); return; }
-    router.push({ pathname: '/report/[id]', params: { id: ins.id, project_name: project?.name ?? '' } });
+    if (!savedReports.has(ins.id) && !isOnline()) {
+      Alert.alert('Not on this phone', "This report isn't kept on the phone. Open it with signal, or keep it offline (Available offline → Manage).");
+      return;
+    }
+    router.push({ pathname: '/report-pdf/[id]', params: { id: ins.id, title: `SR ${ins.report_no}`, subtitle: ins.date } });
+  };
+
+  const toggleSaved = async (ins: Inspection) => {
+    if (savedReports.has(ins.id)) {
+      await removeSavedReport(ins.id);
+    } else {
+      if (!isOnline()) { Alert.alert('No connection', 'Saving a report to the phone needs signal.'); return; }
+      setSavingReport(ins.id);
+      try {
+        const path = await saveReport(ins.id);
+        if (!path) Alert.alert('No PDF', 'This report was finalised before reports were saved as PDFs.');
+      } catch (err: any) {
+        Alert.alert('Could not save', err?.message ?? 'Please try again.');
+      } finally {
+        setSavingReport(null);
+      }
+    }
+    setSavedReports(await savedReportIds());
   };
 
   useFocusEffect(useCallback(() => { fetchData(); loadOffline(); }, [id]));
@@ -269,6 +313,11 @@ export default function ProjectDetailScreen() {
             ? <ActivityIndicator color={T.indigo} />
             : <Switch value={!!offline} onValueChange={toggleOffline} trackColor={{ true: T.sage, false: T.line }} />}
         </View>
+        {!!offline && !download && (
+          <TouchableOpacity onPress={() => router.push({ pathname: '/offline-setup/[id]', params: { id: pid } })} style={S.manageLink}>
+            <Text style={S.viewAllText}>Manage what's kept on this phone</Text>
+          </TouchableOpacity>
+        )}
 
         {/* DRAWINGS · CANs · SKETCHES */}
         <View style={S.section}>
@@ -378,7 +427,7 @@ export default function ProjectDetailScreen() {
           )}
         </View>
 
-        {/* PAST REPORTS */}
+        {/* SITE REPORTS — finalised only */}
         <View style={S.section}>
           <View style={S.sectionHeaderRow}>
             <Text style={S.sectionTitleRow}>Site Reports</Text>
@@ -390,21 +439,94 @@ export default function ProjectDetailScreen() {
           </View>
           {inspections.length === 0 ? (
             <View style={S.emptyCard}>
-              <Text style={S.emptyText}>No reports yet — start an inspection above</Text>
+              <Text style={S.emptyText}>No finalised reports yet</Text>
             </View>
           ) : (showAllReports ? inspections : inspections.slice(0, REPORT_PREVIEW_COUNT)).map(ins => (
-            <TouchableOpacity key={ins.id} style={S.row} activeOpacity={0.7}
-              onPress={() => openReport(ins)}>
+            <TouchableOpacity key={ins.id} style={S.row} activeOpacity={0.7} onPress={() => openReport(ins)}>
               <View style={S.rowBadge}>
                 <Text style={S.rowBadgeText}>SR {ins.report_no}</Text>
               </View>
               <View style={S.rowInfo}>
-                <Text style={S.rowTitle} numberOfLines={1}>{ins.date}</Text>
-                <Text style={S.rowMeta}>{ins.site_contact || 'No contact'} · {ins.weather}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={S.rowTitle} numberOfLines={1}>{ins.date}</Text>
+                  <View style={S.finalBadge}><Text style={S.finalBadgeText}>Final</Text></View>
+                </View>
+                <Text style={S.rowMeta} numberOfLines={2}>{ins.summary || `${ins.site_contact || 'No contact'} · ${ins.weather}`}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={T.mid} />
+              <TouchableOpacity
+                onPress={() => toggleSaved(ins)}
+                hitSlop={8}
+                accessibilityLabel={savedReports.has(ins.id) ? 'Remove from this phone' : 'Save to this phone'}
+              >
+                {savingReport === ins.id
+                  ? <ActivityIndicator size="small" color={T.indigo} />
+                  : <Ionicons
+                      name={savedReports.has(ins.id) ? 'cloud-done' : 'cloud-download-outline'}
+                      size={20}
+                      color={savedReports.has(ins.id) ? T.sage : T.mid}
+                    />}
+              </TouchableOpacity>
             </TouchableOpacity>
           ))}
+          {inOffice > 0 && (
+            <Text style={S.inOffice}>
+              {inOffice} report{inOffice === 1 ? ' is' : 's are'} being written in the office
+            </Text>
+          )}
+        </View>
+
+        {/* SITE NOTES — from finalised reports */}
+        <View style={S.section}>
+          <View style={S.sectionHeaderRow}>
+            <Text style={S.sectionTitleRow}>Site Notes</Text>
+          </View>
+          <View style={S.segment}>
+            {([
+              ['OPEN', `Open (${notes.filter(n => !noteIsClosed(n)).length})`],
+              ['CLOSED', `Closed (${notes.filter(noteIsClosed).length})`],
+              ['ALL', `All (${notes.length})`],
+            ] as const).map(([key, label]) => (
+              <TouchableOpacity key={key} style={[S.segmentBtn, noteFilter === key && S.segmentBtnActive]}
+                onPress={() => { setNoteFilter(key); setShowAllNotes(false); }} activeOpacity={0.8}>
+                <Text style={[S.segmentText, noteFilter === key && S.segmentTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {(() => {
+            const shown = notes.filter(n => noteFilter === 'ALL' || (noteFilter === 'CLOSED') === noteIsClosed(n));
+            const reportNo = (inspId: string) => inspections.find(i => i.id === inspId)?.report_no;
+            if (shown.length === 0) return (
+              <View style={S.emptyCard}>
+                <Text style={S.emptyText}>
+                  {notes.length === 0 ? 'Site notes appear here once their report is finalised' : noteFilter === 'OPEN' ? 'No open items' : 'Nothing here'}
+                </Text>
+              </View>
+            );
+            return (
+              <>
+                {(showAllNotes ? shown : shown.slice(0, NOTE_PREVIEW_COUNT)).map(n => (
+                  <TouchableOpacity key={n.id} style={S.row} activeOpacity={0.7}
+                    onPress={() => router.push({ pathname: '/note/[id]', params: { id: n.id } })}>
+                    <View style={[S.noteDot, { backgroundColor: noteIsClosed(n) ? T.sage : T.marigold }]} />
+                    <View style={S.rowInfo}>
+                      <Text style={S.rowTitle} numberOfLines={1}>{n.zone_label || 'Site note'}</Text>
+                      <Text style={S.rowMeta} numberOfLines={2}>
+                        {reportNo(n.inspection_id) ? `SR ${reportNo(n.inspection_id)} · ` : ''}
+                        {String(n.report_text || n.transcript || '').trim() || 'No wording'}
+                      </Text>
+                      {n._pending && <Text style={S.notePending}>Waiting to upload</Text>}
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={T.mid} />
+                  </TouchableOpacity>
+                ))}
+                {shown.length > NOTE_PREVIEW_COUNT && (
+                  <TouchableOpacity onPress={() => setShowAllNotes(v => !v)} style={{ paddingVertical: 8 }}>
+                    <Text style={S.viewAllText}>{showAllNotes ? 'Show less' : `Show all ${shown.length}`}</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            );
+          })()}
         </View>
 
         <View style={{ height: 100 }} />
@@ -499,6 +621,14 @@ const S = StyleSheet.create({
   rowTitle:    { fontSize: 15, fontWeight: '700', color: T.ink, marginBottom: 2 },
   rowMeta:     { fontSize: 11, color: T.mid },
   rowArrow:    { fontSize: 22, color: T.mid },
+
+  // Reports and notes
+  finalBadge:     { backgroundColor: T.sageSoft, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1 },
+  finalBadgeText: { fontSize: 10, fontWeight: '700', color: '#3F6F5A' },
+  inOffice:       { fontSize: 12, color: T.mid, fontStyle: 'italic', marginTop: 4, marginLeft: 4 },
+  noteDot:        { width: 12, height: 12, borderRadius: 6 },
+  notePending:    { fontSize: 11, color: T.marigoldDeep, marginTop: 2 },
+  manageLink:     { marginHorizontal: 16, marginTop: 6, marginBottom: 4 },
 
   // Visits in progress
   progressCard: {

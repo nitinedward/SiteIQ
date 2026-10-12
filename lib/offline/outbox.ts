@@ -10,6 +10,8 @@ export type OpKind =
   | 'inspection.insert' | 'inspection.update' | 'inspection.delete'
   | 'zone.insert' | 'zone.delete'
   | 'observation.insert' | 'observation.update' | 'observation.delete'
+  /** A comment (with photos) on a site note, usually closing or reopening it. */
+  | 'response.insert'
 
 export type Op = {
   seq: number
@@ -81,10 +83,13 @@ export async function dropInspection(inspectionId: string): Promise<void> {
   outboxChanged()
 }
 
-export async function nextOp(owner: string): Promise<Op | null> {
+/** The next change to send; `skip` names ones held back this pass (waiting
+ *  for Wi-Fi, say) so the queue moves past them. */
+export async function nextOp(owner: string, skip: number[] = []): Promise<Op | null> {
   const d = await db()
   const r = await d.getFirstAsync<any>(
-    'SELECT * FROM outbox WHERE failed = 0 AND (owner = ? OR owner IS NULL) ORDER BY seq LIMIT 1', owner)
+    `SELECT * FROM outbox WHERE failed = 0 AND (owner = ? OR owner IS NULL)
+       ${skip.length ? `AND seq NOT IN (${skip.map(() => '?').join(',')})` : ''} ORDER BY seq LIMIT 1`, owner, ...skip)
   return r ? { ...r, payload: JSON.parse(r.payload) } : null
 }
 

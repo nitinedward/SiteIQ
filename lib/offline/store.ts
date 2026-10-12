@@ -346,3 +346,82 @@ export async function deleteObservation(id: string): Promise<void> {
 function sortNewest(rows: any[]): any[] {
   return [...rows].sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
 }
+
+// ── Site notes from finalised reports, and their history ─────────────────
+
+/** Notes of these (finalised) visits — the project's site notes as the
+ *  office issued them. */
+export async function listProjectNotes(projectId: string, inspectionIds: string[], onFresh?: Fresh<any[]>): Promise<any[]> {
+  const ids = new Set(inspectionIds)
+  const mine = async () => (await getRows('observations', { project: projectId })).filter(o => ids.has(o.inspection_id))
+  const local = async () => (await mine())
+    .sort((a, b) => String(b.observed_at ?? '').localeCompare(String(a.observed_at ?? '')))
+  const refresh = async () => {
+    if (!ids.size) return
+    const list = [...ids]
+    const rows: any[] = []
+    for (let i = 0; i < list.length; i += 100) {
+      rows.push(...await q<any[]>(supabase.from('observations').select('*').in('inspection_id', list.slice(i, i + 100))))
+    }
+    await replaceRows('observations', await mine(), rows.map(r => withProject(r, projectId)))
+  }
+  return read(`projectNotes:${projectId}`, local, refresh, onFresh)
+}
+
+export type NoteFile = { url: string; name: string; type: string | null }
+export type NoteResponse = {
+  id: string; observation_id: string; comment: string; files: NoteFile[]
+  created_at: string; created_by: string | null; _pending?: boolean
+}
+
+function toResponse(row: any): NoteResponse {
+  const files: NoteFile[] = Array.isArray(row.files) && row.files.length
+    ? row.files.filter((f: any) => f?.url)
+    : row.file_url ? [{ url: row.file_url, name: row.file_name ?? 'Attachment', type: row.file_type ?? null }] : []
+  return {
+    id: row.id, observation_id: row.observation_id, comment: row.comment ?? '', files,
+    created_at: row.created_at, created_by: row.created_by ?? null, _pending: row._pending,
+  }
+}
+
+/** A site note's history (comments, photos), oldest first. */
+export async function listResponses(observationId: string, onFresh?: Fresh<NoteResponse[]>): Promise<NoteResponse[]> {
+  const local = async () => (await getRows('note_responses', { parent: observationId }))
+    .map(toResponse)
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+  const refresh = async () => {
+    const rows = await q<any[]>(supabase.from('note_responses').select('*').eq('observation_id', observationId))
+    const note = await getRow('observations', observationId)
+    await replaceRows('note_responses', await getRows('note_responses', { parent: observationId }),
+      rows.map(r => ({ ...r, _project: note?.project_id ?? null })))
+  }
+  return read(`responses:${observationId}`, local, refresh, onFresh)
+}
+
+/** Closes (or reopens) a site note on site, with a comment and photos
+ *  (local paths from files.savePhoto). Saved on the phone at once — the
+ *  note reads Closed straight away — and sent as one change: photos, then
+ *  the comment, then the status (lib/offline/sync). */
+export async function respondToNote(
+  note: { id: string; inspection_id?: string | null; project_id?: string | null },
+  { comment, photos, status }: { comment: string; photos: string[]; status: 'OPEN' | 'CLOSED' | null },
+): Promise<void> {
+  const owner = await myId()
+  const response = {
+    id: randomUUID(), observation_id: note.id, comment: comment.trim(),
+    files: photos.map((p, i) => ({ url: p, name: `site-photo-${i + 1}.jpg`, type: 'image/jpeg' })),
+    created_at: new Date().toISOString(), created_by: owner,
+  }
+  await putRow('note_responses', { ...response, _pending: true, _project: note.project_id ?? null })
+  if (status) {
+    const row = await getRow('observations', note.id)
+    if (row) {
+      await putRow('observations', {
+        ...row, severity: status, _pending: true,
+        closed_at: status === 'CLOSED' ? new Date().toISOString() : null,
+      })
+    }
+  }
+  await enqueue(owner, 'response.insert', response.id, note.inspection_id ?? null,
+    { response, observation_id: note.id, set_status: status })
+}

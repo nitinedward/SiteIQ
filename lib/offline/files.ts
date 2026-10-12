@@ -24,7 +24,7 @@ const PHOTO_MAX_PX = 2000
 /** Uploaded files are kept on the phone this long, then tidied away. */
 const KEEP_DAYS = 14
 
-export type FileKind = 'photo' | 'audio' | 'drawing'
+export type FileKind = 'photo' | 'audio' | 'drawing' | 'report'
 
 /** web address → local path, for showing files without signal. */
 const byRemote = new Map<string, string>()
@@ -62,7 +62,7 @@ async function register(local: string, remote: string, kind: FileKind, uploaded 
 
 /** Saves a photo for a note: scaled down if it's larger than needed, kept in
  *  the app's folder. Returns its local path, which goes on the note. */
-export async function savePhoto(uri: string, size?: { width?: number; height?: number }): Promise<string> {
+export async function savePhoto(uri: string, size?: { width?: number; height?: number }, folder?: string): Promise<string> {
   await FileSystem.makeDirectoryAsync(DIR, { intermediates: true }).catch(() => {})
   const long = Math.max(size?.width ?? 0, size?.height ?? 0)
   const resize = long > PHOTO_MAX_PX
@@ -72,7 +72,9 @@ export async function savePhoto(uri: string, size?: { width?: number; height?: n
   const name = `photo-${Date.now()}-${randomUUID().slice(0, 8)}.jpg`
   const local = `${DIR}${name}`
   await FileSystem.moveAsync({ from: out.uri, to: local })
-  await register(local, publicUrl(name), 'photo')
+  // `folder`: a site note's closing photos go where the web keeps note
+  // responses' files (note-responses/<note id>/), apart from report photos.
+  await register(local, publicUrl(folder ? `${folder}/${name}` : name), 'photo')
   return local
 }
 
@@ -164,7 +166,7 @@ export async function tidyFiles(): Promise<void> {
   const d = await db()
   const cutoff = Date.now() - KEEP_DAYS * 86400_000
   const old = await d.getAllAsync<{ local: string; remote: string }>(
-    `SELECT local, remote FROM files WHERE kind != 'drawing' AND uploaded = 1 AND uploaded_at < ?
+    `SELECT local, remote FROM files WHERE kind IN ('photo', 'audio') AND uploaded = 1 AND uploaded_at < ?
        AND local NOT IN (SELECT audio FROM transcribe_jobs)`, cutoff)
   for (const f of old) {
     await FileSystem.deleteAsync(f.local, { idempotent: true }).catch(() => {})

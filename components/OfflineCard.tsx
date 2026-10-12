@@ -4,7 +4,7 @@
 
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native'
 import { useCallback, useEffect, useState } from 'react'
-import { useFocusEffect } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { theme } from '../lib/theme'
 import { SyncStatus } from './SyncStatus'
@@ -111,7 +111,10 @@ export default function OfflineCard() {
           <Ionicons name="cloud-done-outline" size={16} color={T.sage} />
           <Text style={S.projectName} numberOfLines={1}>{p.name}</Text>
           <Text style={S.detail}>{p.mb} MB</Text>
-          <TouchableOpacity onPress={() => remove(p)} hitSlop={10}>
+          <TouchableOpacity onPress={() => router.push({ pathname: '/offline-setup/[id]', params: { id: p.id } })} hitSlop={8}>
+            <Text style={S.manage}>Manage</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => remove(p)} hitSlop={10} accessibilityLabel={`Remove ${p.name} from this phone`}>
             <Ionicons name="close-circle-outline" size={20} color={T.mid} />
           </TouchableOpacity>
         </View>
@@ -141,5 +144,6 @@ const S = StyleSheet.create({
   modeLabel: { fontSize: 14, fontWeight: '600', color: T.ink },
   modeDetail:{ fontSize: 12, color: T.mid, marginTop: 1 },
   projectRow:{ flexDirection: 'row', alignItems: 'center', gap: 8 },
+  manage:    { fontSize: 13, fontWeight: '700', color: T.indigo },
   projectName:{ flex: 1, fontSize: 14, color: T.ink, fontWeight: '500' },
 })
