@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { noteLabel } from './reportNotes'
+import { compareReportOrder, noteRefs, reportOrder, visitTime, type RefReport } from './noteRefs'
 import { drawingAssetStem } from './drawingAssetName'
 
 /**
@@ -148,17 +149,8 @@ export async function loadNoteDrawings(
  * to an earlier report later moves the numbers of reports regenerated after
  * that. 0 when it can't be read, which numbers from 01 as before.
  */
-type ReportRow = { id: string; report_no?: string | null; date?: string | null; created_at?: string | null }
+type ReportRow = RefReport
 type ThisReport = ReportRow & { project_id?: string | null }
-
-/** When a report's visit was: its visit date ("10 October 2026", as the app
- *  writes it), else when it was created. */
-function visitTime(r: ReportRow): number {
-  const visit = Date.parse(String(r.date ?? ''))
-  if (Number.isFinite(visit)) return visit
-  const created = Date.parse(String(r.created_at ?? ''))
-  return Number.isFinite(created) ? created : Number.MAX_SAFE_INTEGER
-}
 
 /** The project's reports before this one, oldest first: by report number,
  *  then visit date, then when created. */
@@ -169,13 +161,9 @@ async function earlierReports(supabase: SupabaseClient, inspection: ThisReport):
     .select('id, report_no, date, created_at')
     .eq('project_id', inspection.project_id)
   if (error) throw new Error(error.message)
-  const order = (r: ReportRow): [number, number, number] => {
-    const n = parseInt(String(r.report_no ?? '').replace(/\D/g, ''), 10)
-    const created = Date.parse(String(r.created_at ?? ''))
-    return [Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER, visitTime(r), Number.isFinite(created) ? created : 0]
-  }
-  const compare = (a: [number, number, number], b: [number, number, number]) =>
-    a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
+  // The same order as site note numbers (lib/noteRefs).
+  const order = reportOrder
+  const compare = compareReportOrder
   const self = order(inspection)
   return ((reports ?? []) as ReportRow[])
     .filter(r => r.id !== inspection.id && compare(order(r), self) < 0)
@@ -266,11 +254,7 @@ export async function loadPreviousItems(
 
     // Refs as each report numbered them: its notes in order, counted on
     // from the reports before it (see earlierNoteCount).
-    const refOf = new Map<string, number>()
-    let running = 0
-    for (const report of reports) {
-      for (const note of rows.filter(n => n.inspection_id === report.id)) refOf.set(note.id, ++running)
-    }
+    const refOf = noteRefs(reports, rows)
 
     const previousVisit = visitTime(reports[reports.length - 1])
     const keep = rows.filter(n => {

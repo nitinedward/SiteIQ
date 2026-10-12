@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { Shell, Badge, Btn, Spinner, Card, NewProjectModal } from '@/components/Shell'
 import { reportDisplayName, reportNoLabel } from '@/lib/reportFileName'
+import { noteRefLabel } from '@/lib/noteRefs'
 import { loadReportTemplates, defaultTemplateLabel, type ReportTemplate } from '@/lib/reportTemplates'
 import { parseRecipients, type Recipient } from '@/lib/reportRecipients'
 import { SiteNoteModal } from '@/components/SiteNoteModal'
@@ -1648,6 +1649,14 @@ function AdminPageInner() {
                             >
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  {/* The note's number across the project — its Ref in its report. */}
+                                  {noteRefLabel(note.ref) && (
+                                    <span style={{
+                                      fontFamily: 'var(--f-mono)', fontSize: 12, fontWeight: 700,
+                                      color: 'var(--indigo)', background: 'var(--indigo-soft)',
+                                      padding: '3px 8px', borderRadius: 'var(--radius-sm)',
+                                    }}>{noteRefLabel(note.ref)}</span>
+                                  )}
                                   <span style={{
                                     display: 'inline-flex', alignItems: 'center', gap: 6,
                                     background: tone.bg, color: tone.fg,

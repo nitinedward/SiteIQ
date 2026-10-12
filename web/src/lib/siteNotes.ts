@@ -1,3 +1,4 @@
+import { noteRefs } from './noteRefs'
 import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/apiFetch'
 
@@ -42,6 +43,9 @@ export type SiteNote = {
   /** The project the note was loaded for. */
   projectId: string
   reportNo: string | null
+  /** The note's number across the project (SN 07), the same as its Ref in
+   *  its report; null for a note on no report (lib/noteRefs). */
+  ref: number | null
   visitDate: string | null
   zone: NoteZone | null
   drawing: NoteDrawing | null
@@ -116,6 +120,8 @@ export async function loadProjectSiteNotes(projectId: string): Promise<SiteNote[
   const zoneById       = new Map((zones ?? []).map((z: any) => [z.id, z]))
   const drawingById    = new Map((drawings ?? []).map((d: any) => [d.id, d]))
 
+  const refs = noteRefs((inspections ?? []) as any[], [...rows.values()])
+
   const notes: SiteNote[] = [...rows.values()].map((row: any) => {
     const zone       = row.zone_id ? zoneById.get(row.zone_id) ?? null : null
     const drawing    = zone?.drawing_id ? drawingById.get(zone.drawing_id) ?? null : null
@@ -133,6 +139,7 @@ export async function loadProjectSiteNotes(projectId: string): Promise<SiteNote[
       inspectionId: row.inspection_id ?? null,
       projectId,
       reportNo: inspection?.report_no ?? null,
+      ref: refs.get(row.id) ?? null,
       visitDate: inspection?.date ?? null,
       zone: zone
         ? {
@@ -157,12 +164,12 @@ export async function loadProjectSiteNotes(projectId: string): Promise<SiteNote[
     }
   })
 
-  // Oldest first: site notes read as a running record of the job, so the
-  // earliest observation belongs at the top.
+  // Newest first: the latest site notes are the ones being acted on.
+  // Notes recorded at the same moment keep their number order.
   return notes.sort((a, b) => {
     const at = a.observedAt ? new Date(a.observedAt).getTime() : 0
     const bt = b.observedAt ? new Date(b.observedAt).getTime() : 0
-    return at - bt
+    return bt - at || (b.ref ?? 0) - (a.ref ?? 0)
   })
 }
 

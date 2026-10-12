@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Spinner } from '@/components/Shell'
 import NoteSketches from '@/components/NoteSketches'
+import { noteRefLabel } from '@/lib/noteRefs'
 import {
   SiteNote, NoteStatus, NoteResponse, formatNoteDate, noteReportRef, measurementLabel,
   loadNoteResponses, addNoteResponse, deleteNoteResponse, isImageFile, isViewableFile,
@@ -298,6 +299,13 @@ export function SiteNoteModal({
         >
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              {noteRefLabel(note.ref) && (
+                <span style={{
+                  fontFamily: 'var(--f-mono)', fontSize: 12, fontWeight: 700,
+                  color: 'var(--indigo)', background: 'var(--indigo-soft)',
+                  padding: '4px 9px', borderRadius: 'var(--radius-sm)',
+                }}>{noteRefLabel(note.ref)}</span>
+              )}
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 background: tone.bg, color: tone.fg,
