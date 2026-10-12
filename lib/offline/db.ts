@@ -114,7 +114,7 @@ export async function replaceRows(tbl: Table, existing: any[], fresh: any[]): Pr
   const d = await db()
   const freshIds = new Set(fresh.map(r => r.id))
   const pending = new Set(existing.filter(r => r._pending).map(r => r.id))
-  await d.withTransactionAsync(async () => {
+  await oneAtATime(() => d.withTransactionAsync(async () => {
     for (const old of existing) {
       if (!freshIds.has(old.id) && !pending.has(old.id)) {
         await d.runAsync('DELETE FROM rows WHERE tbl = ? AND id = ?', tbl, old.id)
@@ -127,7 +127,18 @@ export async function replaceRows(tbl: Table, existing: any[], fresh: any[]): Pr
         'INSERT OR REPLACE INTO rows (tbl, id, project_id, parent_id, data) VALUES (?, ?, ?, ?, ?)',
         tbl, row.id, project, parent, JSON.stringify(row))
     }
-  })
+  }))
+}
+
+/** Transactions share the one connection, and SQLite refuses to start one
+ *  inside another: a screen refreshing its drawings and its visits at once
+ *  had the second refused ("cannot start a transaction within a
+ *  transaction"), so the screen kept showing nothing. They now queue. */
+let txQueue: Promise<unknown> = Promise.resolve()
+function oneAtATime<T>(fn: () => Promise<T>): Promise<T> {
+  const run = txQueue.then(fn, fn)
+  txQueue = run.catch(() => {})
+  return run
 }
 
 export async function getMeta<T = any>(key: string): Promise<T | null> {
