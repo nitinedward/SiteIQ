@@ -29,7 +29,7 @@
     },
     "android": {
       "package": "com.nitinedward.siteiq",
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F5A524"
