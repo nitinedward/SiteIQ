@@ -69,7 +69,6 @@ export default function SettingsPage() {
   const drawingInputRef  = useRef<HTMLInputElement>(null)
 
   const SUPABASE_URL      = 'https://vbaewualqaxhbmqgnhdt.supabase.co'
-  const SUPABASE_ANON_KEY = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '').replace(/^﻿/, '').trim()
 
   // ── load MS token (called on mount + after connect/disconnect) ──
   const loadMsToken = async () => {
@@ -249,12 +248,13 @@ export default function SettingsPage() {
 
   /** Upload a .docx to the report-templates bucket, overwriting that path. Returns its URL. */
   const putTemplateFile = async (fileName: string, file: File) => {
-    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/report-templates/${fileName}`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'x-upsert': 'true' },
-      body: await file.arrayBuffer(),
+    // Uploaded as the signed-in admin: the storage rules only let a firm's
+    // admins write that firm's templates (web/sql/security_lockdown.sql).
+    const { error } = await supabase.storage.from('report-templates').upload(fileName, file, {
+      upsert: true,
+      contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     })
-    if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+    if (error) throw new Error(`Upload failed: ${error.message}`)
     return `${SUPABASE_URL}/storage/v1/object/report-templates/${fileName}`
   }
 
@@ -351,13 +351,9 @@ export default function SettingsPage() {
     setDrawingUploading(true)
     try {
       const fileName = `drawing-${Date.now()}-${pendingDrawing.name.replace(/\s/g, '-')}`
-      const buffer   = await pendingDrawing.arrayBuffer()
-      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/drawings/${fileName}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/pdf', 'x-upsert': 'true' },
-        body: buffer,
-      })
-      if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+      // Uploaded as the signed-in user, not the public key (security_lockdown.sql).
+      const { error: upErr } = await supabase.storage.from('drawings').upload(fileName, pendingDrawing, { contentType: 'application/pdf', upsert: true })
+      if (upErr) throw new Error(`Upload failed: ${upErr.message}`)
       const fileUrl = `${SUPABASE_URL}/storage/v1/object/public/drawings/${fileName}`
       const { data: newDrawing } = await supabase.from('drawings').insert({ title: drawingTitle.trim(), number: drawingNumber.trim() || '-', file_url: fileUrl, project_id: selectedProject }).select().single()
       if (newDrawing) setDrawings(prev => [newDrawing as Drawing, ...prev])

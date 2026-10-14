@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import { requireProjectAccess } from '@/lib/apiAuth'
+import { overHourlyLimit } from '@/lib/rateLimit'
 import { supabaseUrl } from '@/lib/storageFetch'
 
 export const dynamic = 'force-dynamic'
@@ -77,6 +78,8 @@ export async function POST(request: NextRequest) {
     const { projectId, canId } = await request.json()
     const access = await requireProjectAccess(request, projectId)
     if (!access.ok) return access.response
+    const limited = await overHourlyLimit(request, 'cans-analyse', access.caller?.userId ?? null)
+    if (limited) return limited
     if (typeof canId !== 'string' || !UUID.test(canId)) {
       return NextResponse.json({ error: 'Missing or invalid canId' }, { status: 400 })
     }

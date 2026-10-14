@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     const { data: note } = await supabase
       .from('observations')
-      .select('id, photos, project_id, inspection_id')
+      .select('id, photos, audio, project_id, inspection_id')
       .eq('id', observationId)
       .single()
     if (!note) return NextResponse.json({ error: 'Site note not found' }, { status: 404 })
@@ -78,7 +78,8 @@ export async function POST(request: NextRequest) {
     }
 
     // ── The files it points at, found before the row goes ─────────────────
-    const photoPaths = asArray(note.photos)
+    // Dictation recordings sit beside the photos (privacy policy: they go with the note).
+    const photoPaths = [...asArray(note.photos), ...asArray((note as any).audio)]
       .map((url: string) => storagePath(url, 'observation-photos'))
       .filter(Boolean) as string[]
 

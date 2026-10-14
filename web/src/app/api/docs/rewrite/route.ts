@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireCaller } from '@/lib/apiAuth'
+import { overHourlyLimit } from '@/lib/rateLimit'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,8 @@ export async function POST(request: NextRequest) {
     // plugins send the editor's own session token (see their scripts).
     const access = await requireCaller(request)
     if (!access.ok) return access.response
+    const limited = await overHourlyLimit(request, 'rewrite', access.caller?.userId ?? null, cors)
+    if (limited) return limited
 
     const { selectedText, tone, instruction, context } = await request.json()
     if (!selectedText || typeof selectedText !== 'string' || !selectedText.trim()) {

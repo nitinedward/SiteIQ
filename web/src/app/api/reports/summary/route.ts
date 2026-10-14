@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import { requireInspectionAccess } from '@/lib/apiAuth'
+import { overHourlyLimit } from '@/lib/rateLimit'
 import { tidySummary, writeReportSummary } from '@/lib/reportSummary'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +27,8 @@ export async function POST(request: NextRequest) {
     if (!inspectionId) return NextResponse.json({ error: 'Missing inspectionId' }, { status: 400 })
     const access = await requireInspectionAccess(request, inspectionId)
     if (!access.ok) return access.response
+    const limited = await overHourlyLimit(request, 'report-summary', access.caller?.userId ?? null)
+    if (limited) return limited
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co',

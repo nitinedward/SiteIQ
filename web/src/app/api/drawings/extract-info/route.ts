@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireCaller } from '@/lib/apiAuth'
+import { overHourlyLimit } from '@/lib/rateLimit'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,8 @@ export async function POST(request: NextRequest) {
     // An AI call on SiteIQ's key: signed-in firm members only.
     const access = await requireCaller(request)
     if (!access.ok) return access.response
+    const limited = await overHourlyLimit(request, 'extract-info', access.caller?.userId ?? null)
+    if (limited) return limited
 
     const { imageBase64, mediaType } = await request.json()
     if (!imageBase64 || typeof imageBase64 !== 'string') {

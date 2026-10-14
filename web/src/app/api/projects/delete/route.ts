@@ -64,12 +64,12 @@ export async function POST(request: NextRequest) {
     const [{ data: inspections }, { data: drawings }, { data: notes }] = await Promise.all([
       supabase.from('inspections').select('id, marked_drawing_urls').eq('project_id', projectId),
       supabase.from('drawings').select('id, file_url, preview_url').eq('project_id', projectId),
-      supabase.from('observations').select('id, photos').eq('project_id', projectId),
+      supabase.from('observations').select('id, photos, audio').eq('project_id', projectId),
     ])
     const inspectionIds = (inspections ?? []).map((i: any) => i.id)
 
     const { data: reportNotes } = inspectionIds.length > 0
-      ? await supabase.from('observations').select('id, photos').in('inspection_id', inspectionIds)
+      ? await supabase.from('observations').select('id, photos, audio').in('inspection_id', inspectionIds)
       : { data: [] as any[] }
 
     const allNotes = [...(notes ?? []), ...(reportNotes ?? [])]
@@ -95,8 +95,9 @@ export async function POST(request: NextRequest) {
 
     const photoPaths: string[] = []
     for (const note of allNotes) {
-      const raw = Array.isArray(note.photos) ? note.photos : (() => { try { return JSON.parse(note.photos || '[]') } catch { return [] } })()
-      for (const url of raw) {
+      const list = (v: any): string[] => Array.isArray(v) ? v : (() => { try { return JSON.parse(v || '[]') } catch { return [] } })()
+      // Photos, and the dictation recordings kept beside them.
+      for (const url of [...list(note.photos), ...list(note.audio)]) {
         const p = storagePath(url, 'observation-photos')
         if (p) photoPaths.push(p)
       }

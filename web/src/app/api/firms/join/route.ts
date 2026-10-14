@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     })
     if (insertError) throw insertError
 
-    console.log('[join-firm]', member.email, 'joined', firm.name)
+    console.log('[join-firm]', member.id, 'joined firm', firm.id)
     return NextResponse.json({ success: true, firmId: firm.id, firmName: firm.name }, { headers: cors })
   } catch (err: any) {
     console.error('[join-firm] error:', err)

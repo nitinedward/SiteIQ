@@ -71,13 +71,14 @@ export async function POST(request: NextRequest) {
     // ── What it owns ──────────────────────────────────────────────────────
     const { data: notes } = await supabase
       .from('observations')
-      .select('id, photos')
+      .select('id, photos, audio')
       .eq('inspection_id', inspectionId)
     const noteIds = (notes ?? []).map((n: any) => n.id)
 
     const photoPaths: string[] = []
     for (const note of notes ?? []) {
-      for (const url of asArray((note as any).photos)) {
+      // Photos, and the dictation recordings kept beside them.
+      for (const url of [...asArray((note as any).photos), ...asArray((note as any).audio)]) {
         const p = storagePath(url, 'observation-photos')
         if (p) photoPaths.push(p)
       }

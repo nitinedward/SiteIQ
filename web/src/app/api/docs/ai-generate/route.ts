@@ -9,6 +9,7 @@ import { emailedToName, parseRecipients, recipientNames, recipientEmails } from 
 import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
 import { parseSelected } from '@/lib/attachmentSelection'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
+import { overHourlyLimit } from '@/lib/rateLimit'
 import { buildObservationBlocks, chooseCarryForward, earlierItemsFor, earlierNoteCount } from '@/lib/observationBlocks'
 
 export const dynamic = 'force-dynamic'
@@ -56,6 +57,8 @@ export async function POST(request: NextRequest) {
     // report's firm.
     const access = await requireInspectionAccess(request, inspectionId, { legacyMobile: true })
     if (!access.ok) return access.response
+    const limited = await overHourlyLimit(request, 'ai-generate', access.caller?.userId ?? null)
+    if (limited) return limited
     const keyCheck = docKeyMismatch(docKey, inspectionId)
     if (keyCheck) return keyCheck.response
 

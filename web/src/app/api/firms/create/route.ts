@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       throw memberError
     }
 
-    console.log('[create-firm]', member.email, 'created', firm.name)
+    console.log('[create-firm]', member.id, 'created firm', firm.id)
     return NextResponse.json(
       { success: true, firmId: firm.id, firmName: firm.name, joinCode: firm.join_code },
       { headers: cors }

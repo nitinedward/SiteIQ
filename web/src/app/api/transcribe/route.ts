@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireCallerOrLegacyMobile } from '@/lib/apiAuth'
+import { overHourlyLimit } from '@/lib/rateLimit'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -28,6 +29,8 @@ export async function POST(request: NextRequest) {
   // the shipped app, which sends no token (lib/apiAuth legacyMobileAllowed).
   const access = await requireCallerOrLegacyMobile(request)
   if (!access.ok) return access.response
+  const limited = await overHourlyLimit(request, 'transcribe', access.caller?.userId ?? null, CORS)
+  if (limited) return limited
 
   // Strip a leading BOM (U+FEFF) — see extract-info/route.ts for why.
   const openaiKey = (process.env.OPENAI_KEY ?? process.env.OPENAI_API_KEY ?? '').replace(/^﻿/, '').trim()
