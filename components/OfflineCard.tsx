@@ -8,8 +8,8 @@ import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { theme } from '../lib/theme'
 import { SyncStatus } from './SyncStatus'
-import { failedFiles, getSyncStatus, onSyncStatus, retryFailedFiles, syncNow } from '../lib/offline/sync'
-import { failedOps, retryFailed } from '../lib/offline/outbox'
+import { failedFiles, getSyncStatus, onSyncStatus, removeFailedFile, retryFailedFiles, syncNow } from '../lib/offline/sync'
+import { failedOps, removeFailed, retryFailed } from '../lib/offline/outbox'
 import { offlineProjects, onOfflineProjectsChange, removeOfflineProject } from '../lib/offline/download'
 import { getRow } from '../lib/offline/db'
 import { myId } from '../lib/offline/store'
@@ -25,10 +25,12 @@ const WHAT: Record<string, string> = {
   photo: 'Photo', audio: 'Recording',
 }
 
+type Failed = { key: string; what: string; why: string; lost: boolean; remove: () => Promise<void> }
+
 export default function OfflineCard() {
   const [status, setStatus] = useState(getSyncStatus())
   const [mode, setMode] = useState<UploadMode>('auto')
-  const [failed, setFailed] = useState<{ key: string; what: string; why: string }[]>([])
+  const [failed, setFailed] = useState<Failed[]>([])
   const [projects, setProjects] = useState<{ id: string; name: string; mb: number }[]>([])
 
   const load = async () => {
@@ -36,8 +38,16 @@ export default function OfflineCard() {
     const ops = await failedOps(await myId())
     const files = await failedFiles()
     setFailed([
-      ...ops.map(o => ({ key: `op${o.seq}`, what: WHAT[o.kind] ?? o.kind, why: o.last_error ?? '' })),
-      ...files.map(f => ({ key: f.local, what: WHAT[f.kind] ?? f.kind, why: f.last_error ?? '' })),
+      ...ops.map(o => ({
+        key: `op${o.seq}`, what: WHAT[o.kind] ?? o.kind, why: o.last_error ?? '',
+        // A delete's item is already off the phone: removing it only stops
+        // the server delete. Anything else won't reach the office.
+        lost: !o.kind.endsWith('.delete'), remove: () => removeFailed(o.seq),
+      })),
+      ...files.map(f => ({
+        key: f.local, what: WHAT[f.kind] ?? f.kind, why: f.last_error ?? '',
+        lost: true, remove: () => removeFailedFile(f.local),
+      })),
     ])
     const rows = await offlineProjects()
     setProjects(await Promise.all(rows.map(async r => ({
@@ -58,6 +68,15 @@ export default function OfflineCard() {
     await retryFailedFiles()
     syncNow({ manual: true })
   }
+
+  // Something the server will never accept would otherwise stay listed
+  // forever, however often "Try again" is tapped.
+  const giveUp = (f: Failed) => Alert.alert(
+    `Remove "${f.what}"?`,
+    f.lost
+      ? "It stops trying to upload. It won't reach the office, and it can't be got back."
+      : "It's already gone from this phone. This only stops trying to delete it on the server.",
+    [{ text: 'Keep', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => { f.remove().then(load).catch(() => {}) } }])
 
   const remove = (p: { id: string; name: string }) => Alert.alert(
     'Remove from this phone?', `${p.name}'s drawings are removed from the phone. Anything not yet uploaded stays and still uploads.`,
@@ -84,7 +103,12 @@ export default function OfflineCard() {
         <View style={S.failBox}>
           <Text style={S.failTitle}>Couldn't upload</Text>
           {failed.slice(0, 6).map(f => (
-            <Text key={f.key} style={S.failLine} numberOfLines={3}>• {f.what}: {f.why}</Text>
+            <View key={f.key} style={S.failRow}>
+              <Text style={[S.failLine, { flex: 1 }]} numberOfLines={3}>• {f.what}: {f.why}</Text>
+              <TouchableOpacity onPress={() => giveUp(f)} hitSlop={8} accessibilityLabel={`Remove ${f.what}`}>
+                <Text style={S.failRemove}>Remove</Text>
+              </TouchableOpacity>
+            </View>
           ))}
           <TouchableOpacity onPress={retry} activeOpacity={0.7}>
             <Text style={S.retry}>Try again</Text>
@@ -137,6 +161,8 @@ const S = StyleSheet.create({
   button:    { backgroundColor: T.indigo, borderRadius: R.pill, paddingVertical: 10, alignItems: 'center' },
   buttonText:{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   failBox:   { backgroundColor: '#FDECEA', borderRadius: R.sm, padding: 12, gap: 4 },
+  failRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  failRemove:{ fontSize: 12, fontWeight: '700', color: T.clay, textDecorationLine: 'underline' },
   failTitle: { fontSize: 13, fontWeight: '700', color: T.clay },
   failLine:  { fontSize: 12, color: T.ink },
   retry:     { fontSize: 13, fontWeight: '700', color: T.indigo, marginTop: 4 },

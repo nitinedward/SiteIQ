@@ -365,7 +365,8 @@ async function run(op: Op, filesAllowed = true): Promise<void> {
       return
     }
     case 'inspection.delete': {
-      await callApi('/api/reports/delete', { inspectionId: op.target })
+      // Already gone (an earlier try got through, say) is done, not a failure.
+      await callApi('/api/reports/delete', { inspectionId: op.target }, true)
       return
     }
     case 'zone.insert': {
@@ -518,6 +519,13 @@ export async function failedFiles(): Promise<{ local: string; kind: string; last
 }
 
 /** Gives refused photos and recordings another go. */
+/** Gives up on a photo or recording that keeps failing, when the engineer
+ *  chooses to: it's deleted from the phone, and the note goes up without it. */
+export async function removeFailedFile(local: string): Promise<void> {
+  await discardFile(local)
+  outboxChanged()
+}
+
 export async function retryFailedFiles(): Promise<void> {
   const d = await db()
   await d.runAsync('UPDATE files SET attempts = 0 WHERE uploaded = 0')

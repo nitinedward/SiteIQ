@@ -135,6 +135,15 @@ export async function failedOps(owner: string | null): Promise<Op[]> {
   return rows.map(r => ({ ...r, payload: JSON.parse(r.payload) }))
 }
 
+/** Takes one change that gave up off the queue for good, when the engineer
+ *  chooses to: otherwise one the server will never accept stays listed as
+ *  "couldn't upload" forever, however many times they try again. */
+export async function removeFailed(seq: number): Promise<void> {
+  const d = await db()
+  await d.runAsync('DELETE FROM outbox WHERE seq = ? AND failed = 1', seq)
+  outboxChanged()
+}
+
 /** Puts changes that gave up back in the queue, to try again. */
 export async function retryFailed(): Promise<void> {
   const d = await db()

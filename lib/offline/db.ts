@@ -112,6 +112,7 @@ export async function deleteRow(tbl: Table, id: string): Promise<void> {
  *  has go — except ones changed on the phone and still waiting to upload. */
 export async function replaceRows(tbl: Table, existing: any[], fresh: any[]): Promise<void> {
   const d = await db()
+  fresh = await withoutDeleting(d, fresh)
   const freshIds = new Set(fresh.map(r => r.id))
   const pending = new Set(existing.filter(r => r._pending).map(r => r.id))
   await oneAtATime(() => d.withTransactionAsync(async () => {
@@ -128,6 +129,20 @@ export async function replaceRows(tbl: Table, existing: any[], fresh: any[]): Pr
         tbl, row.id, project, parent, JSON.stringify(row))
     }
   }))
+}
+
+/** Drops server rows that were deleted on the phone and whose deletion is
+ *  still waiting to upload (with what hangs off them: a discarded visit's
+ *  notes and mark-ups, a deleted note's comments). Otherwise a refresh
+ *  brought a discarded visit straight back as "in progress", and deleting
+ *  it again seemed to do nothing. Reads the outbox table directly, since
+ *  lib/offline/outbox builds on this file. */
+async function withoutDeleting(d: SQLite.SQLiteDatabase, fresh: any[]): Promise<any[]> {
+  const ops = await d.getAllAsync<{ kind: string; target: string }>(
+    "SELECT kind, target FROM outbox WHERE kind LIKE '%.delete'")
+  if (!ops.length) return fresh
+  const gone = new Set(ops.map(o => o.target))
+  return fresh.filter(r => !gone.has(r.id) && !gone.has(r.inspection_id) && !gone.has(r.observation_id))
 }
 
 /** Transactions share the one connection, and SQLite refuses to start one
