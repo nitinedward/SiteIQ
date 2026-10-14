@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
-import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
+import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildParagraphXml, type TemplateLayout } from '@/lib/templateProcessor'
 import { writeWithRebuiltAttachments } from '@/lib/rebuildAttachments'
 import { noteLabel, noteDictation, noteBulletLine } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
@@ -247,6 +247,9 @@ Return:
     // photos and markups with it — they are lifted out and re-attached, so
     // the text can be regenerated at any point in the workflow.
     let carried: string[] = []
+    // The parts of the template the document was built from, for the report
+    // page (see the generate route).
+    let layout: TemplateLayout = { blocks: false, openItems: false }
 
     if (firmId) {
       // For templates laid out a block per note: the same wording, kept per
@@ -283,10 +286,12 @@ Return:
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined
-      const { buffer, templateId } = await fillTemplate(firmId, templateData, {
+      const filled = await fillTemplate(firmId, templateData, {
         pinnedTemplateId,
         projectId: inspection.project_id,
       })
+      const { buffer, templateId } = filled
+      layout = filled.layout
       await pinReportTemplate(inspectionId, pinnedTemplateId, templateId)
       carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups, sketches: selectedSketches })
       console.log('AI document generated using firm template')
@@ -296,7 +301,7 @@ Return:
       carried = await writeWithRebuiltAttachments(inspectionId, inspection.project_id, buffer, { gate, photos: selectedUrls, drawings: selectedMarkups, sketches: selectedSketches })
     }
 
-    return NextResponse.json({ success: true, carried })
+    return NextResponse.json({ success: true, carried, layout })
   } catch (err) {
     if (err instanceof NotSettledError) {
       return NextResponse.json({ error: err.message }, { status: 409 })

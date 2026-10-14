@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildParagraphXml } from '@/lib/templateProcessor'
+import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildParagraphXml, type TemplateLayout } from '@/lib/templateProcessor'
 import { generateServerReport } from '@/lib/reportGeneratorServer'
 import { saveDoc } from '@/lib/docStorage'
 import { writeWithRebuiltAttachments } from '@/lib/rebuildAttachments'
@@ -126,6 +126,11 @@ export async function POST(request: NextRequest) {
     )
 
     let carried: string[] = []
+    // The parts of the template this document was built from, sent back so
+    // the report page offers the earlier-items choice for exactly that
+    // template instead of looking the template up again (a second lookup
+    // could disagree and hide the choice).
+    let layout: TemplateLayout = { blocks: false, openItems: false }
 
     if (firmId) {
       // For templates laid out a block per note: each note's dictation as
@@ -160,10 +165,12 @@ export async function POST(request: NextRequest) {
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined
-      const { buffer, templateId } = await fillTemplate(firmId, templateData, {
+      const filled = await fillTemplate(firmId, templateData, {
         pinnedTemplateId,
         projectId: inspection.project_id,
       })
+      const { buffer, templateId } = filled
+      layout = filled.layout
       await pinReportTemplate(inspectionId, pinnedTemplateId, templateId)
       // A forced rewrite replaces a document that may already hold inserted
       // photos and markups; a first generation has nothing to carry.
@@ -199,7 +206,7 @@ export async function POST(request: NextRequest) {
         : (await saveDoc(inspectionId, buffer), [])
     }
 
-    return NextResponse.json({ success: true, inspectionId, carried })
+    return NextResponse.json({ success: true, inspectionId, carried, layout })
   } catch (err) {
     if (err instanceof NotSettledError) {
       return NextResponse.json({ error: err.message }, { status: 409 })

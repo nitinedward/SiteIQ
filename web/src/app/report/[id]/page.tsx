@@ -112,6 +112,16 @@ export default function ReportPage() {
   // the template has {{#open_items}} rows to put them in.
   const [carryForward,       setCarryForward]        = useState<CarryForward>(DEFAULT_CARRY_FORWARD)
   const [templateOpenItems,  setTemplateOpenItems]   = useState(false)
+  // Set once a generate or rewrite reports the parts of the template it
+  // actually built the document from. That answer wins: looking the
+  // template up again separately could disagree, and on SR 015 it did,
+  // hiding the earlier-items choice for a report whose template has the table.
+  const layoutFromBuild = useRef(false)
+  const applyBuiltLayout = (layout: { blocks?: boolean; openItems?: boolean }) => {
+    layoutFromBuild.current = true
+    reportInBlocks.current = layout.blocks === true
+    setTemplateOpenItems(layout.openItems === true)
+  }
   const [updatingOpenItems,  setUpdatingOpenItems]   = useState(false)
   // Why the table couldn't be updated on its own, kept on screen under the
   // button until the next attempt or rewrite.
@@ -364,12 +374,17 @@ export default function ReportPage() {
         await reopenEditor()
       }
       setDocReady(true)
-      // Generating pins the report to its template; check again which parts
-      // that template has, so the earlier-items choice shows for it.
-      fetchRecordedSelection(inspectionId).then(r => {
-        reportInBlocks.current = r.inBlocks
-        setTemplateOpenItems(r.openItems)
-      }).catch(() => {})
+      if (data.layout) {
+        applyBuiltLayout(data.layout)
+      } else {
+        // An existing document was opened, not built: ask which parts its
+        // template has.
+        fetchRecordedSelection(inspectionId).then(r => {
+          if (layoutFromBuild.current) return
+          reportInBlocks.current = r.inBlocks
+          setTemplateOpenItems(r.openItems)
+        }).catch(() => {})
+      }
     } catch (err) {
       console.error('[generateDoc] error:', err)
       alert('Could not generate document. Please refresh.')
@@ -453,6 +468,7 @@ export default function ReportPage() {
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'AI generation failed')
         console.log('[ai-generate] Success:', data)
+        if (data.layout) applyBuiltLayout(data.layout)
         sketchesWritten(selectedSketches)
         setOpenItemsProblem('')
         setTextVersionResult(
@@ -493,6 +509,7 @@ export default function ReportPage() {
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || 'Could not rebuild the text from your notes')
         console.log('[plain-generate] Success:', data)
+        if (data.layout) applyBuiltLayout(data.layout)
         sketchesWritten(selectedSketches)
         setOpenItemsProblem('')
         setTextVersionResult(
@@ -1498,8 +1515,12 @@ export default function ReportPage() {
       // describe the report. Nothing is ticked for a report with no recorded
       // selection: photos are chosen by hand, never all by default.
       const recorded = await recordedSelection
-      reportInBlocks.current = recorded.inBlocks
-      setTemplateOpenItems(recorded.openItems)
+      // A document built since this load began knows its template's parts
+      // for certain; this answer may be older.
+      if (!layoutFromBuild.current) {
+        reportInBlocks.current = recorded.inBlocks
+        setTemplateOpenItems(recorded.openItems)
+      }
       const inReport = new Set(recorded.photos ?? [])
       const allPhotos: SelectedPhoto[] = []
       ;(obsData ?? []).forEach((ob: any) => {

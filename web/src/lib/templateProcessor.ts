@@ -288,10 +288,28 @@ export async function fillTemplate(
   firmId: string,
   data: TemplateData,
   choice: TemplateChoice = {},
-): Promise<{ buffer: Buffer; templateId: string | null }> {
+): Promise<{ buffer: Buffer; templateId: string | null; layout: TemplateLayout }> {
   const template = await resolveTemplate(firmId, choice)
   const templateBuffer = await fetchTemplateBuffer(template)
-  return { buffer: fillTemplateBuffer(templateBuffer, data), templateId: template.templateId }
+  return {
+    buffer: fillTemplateBuffer(templateBuffer, data),
+    templateId: template.templateId,
+    layout: templateLayout(templateBuffer),
+  }
+}
+
+export type TemplateLayout = { blocks: boolean; openItems: boolean }
+
+/** Which parts a template has: a block per site note ({{#observations}})
+ *  and the earlier reports' items ({{#open_items}}). Both false on any doubt. */
+export function templateLayout(templateBuffer: Buffer): TemplateLayout {
+  try {
+    const zip = new AdmZip(templateBuffer)
+    const xml = mergeRunsContainingPlaceholders(zip.getEntry('word/document.xml')?.getData().toString('utf-8') ?? '')
+    return { blocks: xml.includes(BLOCK_START), openItems: xml.includes(OPEN_ITEMS_START) }
+  } catch {
+    return { blocks: false, openItems: false }
+  }
 }
 
 /** Fills a template already in hand — the whole of filling, with no
@@ -439,7 +457,7 @@ export async function templateUsesObservationBlocks(inspectionId: string): Promi
  *  {{#open_items}} rows for earlier reports' items — the report page only
  *  offers its choice of those items when the template has somewhere to put
  *  them. Both false on any doubt. */
-export async function reportTemplateLayout(inspectionId: string): Promise<{ blocks: boolean; openItems: boolean }> {
+export async function reportTemplateLayout(inspectionId: string): Promise<TemplateLayout> {
   try {
     const { data: inspection } = await getSupabase()
       .from('inspections')
@@ -452,9 +470,7 @@ export async function reportTemplateLayout(inspectionId: string): Promise<{ bloc
       pinnedTemplateId: (inspection as any).report_template_id,
       projectId: (inspection as any).project_id,
     })
-    const zip = new AdmZip(await fetchTemplateBuffer(template))
-    const xml = mergeRunsContainingPlaceholders(zip.getEntry('word/document.xml')?.getData().toString('utf-8') ?? '')
-    const layout = { blocks: xml.includes(BLOCK_START), openItems: xml.includes(OPEN_ITEMS_START) }
+    const layout = templateLayout(await fetchTemplateBuffer(template))
     console.log('[template] layout', inspectionId, 'pinned:', (inspection as any).report_template_id ?? null,
       'project:', (inspection as any).project_id ?? null, 'used:', template.templateId, layout)
     return layout
