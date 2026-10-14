@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import EmailedToPicker from '@/components/EmailedToPicker'
 import { apiFetch } from '@/lib/apiFetch'
 import { useRouter, useParams } from 'next/navigation'
 import { captureDrawingAndEachZone, captureDrawingWithMarkup } from '@/lib/captureDrawing'
@@ -25,6 +26,8 @@ type Inspection = {
   report_file_name?: string | null
   // Likewise once web/sql/note_closed_at.sql has run.
   carry_forward?: string | null
+  // Likewise once web/sql/emailed_to.sql has run.
+  emailed_to?: unknown
 }
 
 /** The report page's choice of which earlier reports' items the report
@@ -2143,6 +2146,16 @@ export default function ReportPage() {
                   </>
                 )}
               </button>
+
+              {/* Who "Emailed to" names: shown once sql/emailed_to.sql has run. */}
+              {pageData?.inspection && 'emailed_to' in pageData.inspection && (
+                <EmailedToPicker
+                  inspectionId={inspectionId}
+                  projectId={pageData.inspection.project_id}
+                  report={pageData.inspection}
+                  disabled={reportStatus === 'finalised'}
+                />
+              )}
 
               {/* Which earlier reports' items the template's {{#open_items}}
                   rows list. "Update table" refills just that table; the

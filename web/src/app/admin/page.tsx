@@ -6,7 +6,7 @@ import { Shell, Badge, Btn, Spinner, Card, NewProjectModal } from '@/components/
 import { reportDisplayName, reportNoLabel } from '@/lib/reportFileName'
 import { noteRefLabel } from '@/lib/noteRefs'
 import { loadReportTemplates, defaultTemplateLabel, type ReportTemplate } from '@/lib/reportTemplates'
-import { parseRecipients, type Recipient } from '@/lib/reportRecipients'
+import { parseEmailedTo, parseRecipients, type Recipient } from '@/lib/reportRecipients'
 import { SiteNoteModal } from '@/components/SiteNoteModal'
 import { apiFetch } from '@/lib/apiFetch'
 import ProjectCans from '@/components/ProjectCans'
@@ -25,7 +25,7 @@ const supabase = createClient(
   ).replace(/^﻿/, '').trim()
 )
 
-type Project = { id: string; name: string; project_number: string; address: string; client_name: string; client_email?: string | null; report_recipients?: Recipient[] | string | null; status: string; report_template_id?: string | null }
+type Project = { id: string; name: string; project_number: string; address: string; client_name: string; client_email?: string | null; report_recipients?: Recipient[] | string | null; emailed_to?: unknown; status: string; report_template_id?: string | null }
 type Drawing = { id: string; title: string; number: string; revision: string; file_url: string; file_name: string; preview_url?: string | null; created_at: string; sort_order?: number | null; kind?: string | null }
 
 /** Uploaded drawings only. A CAN's sketch has a hidden companion row in
@@ -68,6 +68,10 @@ function sortDrawingsForDisplay(rows: Drawing[]): Drawing[] {
 }
 
 // ── FORM PRIMITIVES ───────────────────────────────────────────────────────────
+// The project's "Emailed to" choices besides a recipient's name.
+const SITE_CONTACT = '__site_contact__'
+const OTHER_PERSON = '__other__'
+
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
     <label style={{
@@ -207,6 +211,10 @@ function AdminPageInner() {
   const [editForm, setEditForm]             = useState<Partial<Project>>({})
   // Who this project's reports are issued to — filled into every report.
   const [recipients, setRecipients]         = useState<Recipient[]>([])
+  // "Emailed to" on the project's reports: SITE_CONTACT, a recipient's
+  // name, or OTHER with the name typed in emailedOther (lib/reportRecipients).
+  const [emailedChoice, setEmailedChoice]   = useState(SITE_CONTACT)
+  const [emailedOther, setEmailedOther]     = useState('')
   const [reportTemplates, setReportTemplates] = useState<ReportTemplate[]>([])
 
   const [saving, setSaving]         = useState(false)
@@ -379,6 +387,11 @@ function AdminPageInner() {
     if (!selectedProject) return
     setEditForm({ ...selectedProject })
     setRecipients(parseRecipients(selectedProject.report_recipients))
+    const emailed = parseEmailedTo(selectedProject.emailed_to)
+    const names = parseRecipients(selectedProject.report_recipients).map(r => r.name).filter(Boolean)
+    if (!emailed || !('name' in emailed)) { setEmailedChoice(SITE_CONTACT); setEmailedOther('') }
+    else if (names.includes(emailed.name)) { setEmailedChoice(emailed.name); setEmailedOther('') }
+    else { setEmailedChoice(OTHER_PERSON); setEmailedOther(emailed.name) }
     setEditingProject(true)
   }
 
@@ -396,6 +409,11 @@ function AdminPageInner() {
       ...('report_recipients' in selectedProject
         ? { report_recipients: recipients.filter(r => r.name.trim() || r.email.trim()).map(r => ({ name: r.name.trim(), email: r.email.trim() })) }
         : {}),
+      // Only sent once sql/emailed_to.sql has run. Null means the site contact.
+      ...('emailed_to' in selectedProject ? { emailed_to: (() => {
+        const name = emailedChoice === SITE_CONTACT ? '' : emailedChoice === OTHER_PERSON ? emailedOther.trim() : emailedChoice
+        return name ? { name } : null
+      })() } : {}),
       // Only reports generated from now on use it; existing reports keep the template they were built with.
       ...(reportTemplates.length > 0 ? { report_template_id: editForm.report_template_id || null } : {}),
     }).eq('id', selectedProject.id).select().single()
@@ -1388,6 +1406,29 @@ function AdminPageInner() {
                           {recipients.length === 0 ? 'Add a recipient' : 'Add another'}
                         </Btn>
                       </div>
+
+                      {selectedProject && 'emailed_to' in selectedProject && (
+                        <div style={{ marginTop: 14 }}>
+                          <FieldLabel>Emailed To</FieldLabel>
+                          <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)', marginBottom: 8, lineHeight: 1.5 }}>
+                            Named in each report’s “Emailed to”. It can be changed on a single report.
+                          </div>
+                          <FSel
+                            value={emailedChoice}
+                            onChange={setEmailedChoice}
+                            options={[
+                              { value: SITE_CONTACT, label: 'The site contact recorded on each visit' },
+                              ...[...new Set(recipients.map(r => r.name.trim()).filter(Boolean))].map(n => ({ value: n, label: n })),
+                              { value: OTHER_PERSON, label: 'Someone else…' },
+                            ]}
+                          />
+                          {emailedChoice === OTHER_PERSON && (
+                            <div style={{ marginTop: 8 }}>
+                              <FInp value={emailedOther} onChange={setEmailedOther} placeholder="Name" />
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {reportTemplates.length > 1 && (
                         <div style={{ marginTop: 14 }}>

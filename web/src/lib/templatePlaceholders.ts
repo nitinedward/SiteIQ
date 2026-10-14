@@ -36,6 +36,7 @@ export const PLACEHOLDERS: PlaceholderDef[] = [
   { name: 'client_email', kind: 'data', description: 'The client’s email address, from the project' },
   { name: 'issued_to', kind: 'data', description: 'Everyone the report is issued to, by name — set on the project' },
   { name: 'issued_to_emails', kind: 'data', description: 'Their email addresses, in the same order' },
+  { name: 'emailed_to', kind: 'data', description: 'Emailed to: the site contact, or the person the project (or the report) nominates — name only' },
   { name: 'emailed_to_1', kind: 'data', description: 'The client’s name, from the project' },
   { name: 'emailed_to_2', kind: 'data', description: 'Second recipient — the rest of the issued-to list' },
   { name: 'site_contact', kind: 'data', description: 'Site contact, recorded when starting the inspection' },

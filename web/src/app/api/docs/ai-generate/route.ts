@@ -5,7 +5,7 @@ import { fillTemplate, pinReportTemplate, TemplateData, buildBulletXml, buildPar
 import { writeWithRebuiltAttachments } from '@/lib/rebuildAttachments'
 import { noteLabel, noteDictation, noteBulletLine } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
-import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
+import { emailedToName, parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
 import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
 import { parseSelected } from '@/lib/attachmentSelection'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     // are still read on their own so a database without them yet (see
     // sql/project_client_email.sql and sql/project_report_recipients.sql)
     // still generates reports.
-    const [engineer, { data: client }, { data: recipientRow }] = await Promise.all([
+    const [engineer, { data: client }, { data: recipientRow }, { data: emailedRow }] = await Promise.all([
       loadReportEngineer(supabase, inspection as any, firmId),
       supabase
         .from('projects')
@@ -105,6 +105,13 @@ export async function POST(request: NextRequest) {
       supabase
         .from('projects')
         .select('report_recipients')
+        .eq('id', inspection.project_id)
+        .single(),
+      // Its own query, so a database without sql/emailed_to.sql still
+      // generates reports ("Emailed to" is then the site contact).
+      supabase
+        .from('projects')
+        .select('emailed_to')
         .eq('id', inspection.project_id)
         .single(),
     ])
@@ -274,6 +281,7 @@ Return:
         emailed_to_2:    recipientNames(recipients.slice(1)),
         issued_to:       recipientNames(recipients) || (projects.client_name ?? ''),
         issued_to_emails: recipientEmails(recipients),
+        emailed_to:      emailedToName(inspection as any, emailedRow as any),
         purpose:         buildParagraphXml(purposeText),
         findings:        buildBulletXml(findingLines.length > 0 ? findingLines : ['No specific findings recorded.']),
         recommendations: buildBulletXml(contractorLines),

@@ -38,6 +38,9 @@ export type TemplateData = {
   issued_to: string
   /** Their addresses, in the same order. */
   issued_to_emails: string
+  /** "Emailed to": the report's or project's nominated person, else the
+   *  site contact (lib/reportRecipients, emailedToName). Name only. */
+  emailed_to?: string
   /** Word XML produced by buildParagraphXml() */
   purpose: string
   /** Word XML produced by buildBulletXml() */
@@ -353,6 +356,7 @@ export function fillTemplateBuffer(templateBuffer: Buffer, data: TemplateData): 
     '{{emailed_to_2}}':    data.emailed_to_2    || '',
     '{{issued_to}}':       data.issued_to       || '',
     '{{issued_to_emails}}': data.issued_to_emails || '',
+    '{{emailed_to}}':      data.emailed_to      || '',
     '{{date}}':            dateStr,
     '{{time}}':            data.time            || '',
     ...observationCounts(data.observations ?? [], data.previousItems ?? []),
