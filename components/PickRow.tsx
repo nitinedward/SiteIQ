@@ -2,8 +2,8 @@
  *  inspection screen: tap a card to select it, tap again to deselect. The
  *  magnifier shows the whole sheet first. */
 
-import { useState } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, Dimensions } from 'react-native'
+import { useEffect, useState } from 'react'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, Dimensions, PixelRatio, Platform } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { DrawingThumb } from './DrawingThumb'
 import { fullImageFor, thumbFor } from '../lib/thumbs'
@@ -34,6 +34,24 @@ export function PickRow({ items, selected, onToggle, trailing }: {
 }) {
   const [zoomed, setZoomed] = useState<PickItem | null>(null)
   const zoomedOn = !!zoomed && selected.includes(zoomed.id)
+  const zoomUri = zoomed ? (fullImageFor(zoomed.previewUrl) ?? thumbFor(zoomed.previewUrl)) : null
+
+  // iPhone: the sheet is laid out at its own full size and the scroll view
+  // starts zoomed out to fit, so pinching in shows the image's real pixels.
+  // Laid out at the screen's width, iOS kept only a screen-sized copy and
+  // zooming enlarged that, as on the drawing screen (fullDetailStyle there).
+  // Android's ScrollView can't zoom, so it keeps the fitted image.
+  const [full, setFull] = useState<{ w: number; h: number } | null>(null)
+  useEffect(() => {
+    setFull(null)
+    if (Platform.OS !== 'ios' || !zoomUri) return
+    let live = true
+    Image.getSize(zoomUri, (w, h) => { if (live) setFull({ w: w / PixelRatio.get(), h: h / PixelRatio.get() }) }, () => {})
+    return () => { live = false }
+  }, [zoomUri])
+  const box = { w: Dimensions.get('window').width - 16, h: Dimensions.get('window').height * 0.6 }
+  const fit = full ? Math.min(box.w / full.w, box.h / full.h) : 1
+  const atFullSize = !!full && fit < 1
 
   return (
     <>
@@ -81,11 +99,18 @@ export function PickRow({ items, selected, onToggle, trailing }: {
               <Text style={S.zoomTitle} numberOfLines={1}>{zoomed?.title}</Text>
             </View>
           </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={S.zoomBody} maximumZoomScale={5} minimumZoomScale={1} centerContent>
-            {zoomed && (fullImageFor(zoomed.previewUrl) ?? thumbFor(zoomed.previewUrl)) ? (
+          <ScrollView
+            // Re-made once the size is known, so it opens zoomed out to fit.
+            key={atFullSize ? 'full' : 'fit'}
+            style={{ flex: 1 }} contentContainerStyle={S.zoomBody} centerContent
+            minimumZoomScale={atFullSize ? fit : 1}
+            zoomScale={atFullSize ? fit : 1}
+            maximumZoomScale={atFullSize ? Math.max(fit * 5, 1.5) : 5}
+          >
+            {zoomUri ? (
               <Image
-                source={{ uri: (fullImageFor(zoomed.previewUrl) ?? thumbFor(zoomed.previewUrl))! }}
-                style={S.zoomImage}
+                source={{ uri: zoomUri }}
+                style={atFullSize ? [S.zoomImage, { width: full!.w, height: full!.h }] : S.zoomImage}
                 resizeMode="contain"
               />
             ) : (
