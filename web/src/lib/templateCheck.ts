@@ -23,7 +23,10 @@ const WHOLE_PARAGRAPH = new Set<string>([...AI_ONLY, ...BLOCK_PARAGRAPH_FIELDS])
 /** A site note's own placeholders, filled only inside an observations block. */
 const IN_BLOCK_ONLY = new Set<string>(BLOCK_FIELDS)
 const BLOCK_KINDS = new Set(['observations', 'open_items'])
-const MARKERS = new Set(['#observations', '/observations', '#open_items', '/open_items'])
+const MARKERS = new Set(['#observations', '/observations', '#open_items', '/open_items',
+  // Around the earlier items and their heading, so the whole section can be
+  // left out (lib/observationBlocks, applyEarlierSections).
+  '#earlier_section', '/earlier_section'])
 const OPEN_ITEM_ONLY = new Set<string>(OPEN_ITEM_FIELDS)
 
 /** The headers and footers report generation fills in (lib/templateProcessor,

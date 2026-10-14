@@ -33,6 +33,9 @@ const CARRY_FORWARD_LABELS: Record<CarryForward, string> = {
   open: 'Open items only',
   open_recent: 'Open + closed since last inspection',
   all: 'All open and closed items',
+  // Offered only when the template marks its earlier-items section
+  // ({{#earlier_section}}), so there is a section to leave out.
+  none: 'None — leave the section out',
 }
 type PageData = {
   inspection: Inspection
@@ -70,6 +73,8 @@ type RecordedSelection = {
   inBlocks: boolean
   /** The template lists earlier reports' items ({{#open_items}}). */
   openItems: boolean
+  /** The template has an earlier-items section that "None" can leave out. */
+  earlierSection: boolean
 }
 
 async function fetchRecordedSelection(inspectionId: string): Promise<RecordedSelection> {
@@ -84,9 +89,10 @@ async function fetchRecordedSelection(inspectionId: string): Promise<RecordedSel
       sketchesSeen: ids(d?.sketchesSeen),
       inBlocks: d?.inBlocks === true,
       openItems: d?.openItems === true,
+      earlierSection: d?.earlierSection === true,
     }
   } catch {
-    return { photos: null, drawings: null, sketches: null, sketchesSeen: null, inBlocks: false, openItems: false }
+    return { photos: null, drawings: null, sketches: null, sketchesSeen: null, inBlocks: false, openItems: false, earlierSection: false }
   }
 }
 
@@ -112,15 +118,17 @@ export default function ReportPage() {
   // the template has {{#open_items}} rows to put them in.
   const [carryForward,       setCarryForward]        = useState<CarryForward>(DEFAULT_CARRY_FORWARD)
   const [templateOpenItems,  setTemplateOpenItems]   = useState(false)
+  const [templateEarlierSection, setTemplateEarlierSection] = useState(false)
   // Set once a generate or rewrite reports the parts of the template it
   // actually built the document from. That answer wins: looking the
   // template up again separately could disagree, and on SR 015 it did,
   // hiding the earlier-items choice for a report whose template has the table.
   const layoutFromBuild = useRef(false)
-  const applyBuiltLayout = (layout: { blocks?: boolean; openItems?: boolean }) => {
+  const applyBuiltLayout = (layout: { blocks?: boolean; openItems?: boolean; earlierSection?: boolean }) => {
     layoutFromBuild.current = true
     reportInBlocks.current = layout.blocks === true
     setTemplateOpenItems(layout.openItems === true)
+    setTemplateEarlierSection(layout.earlierSection === true)
   }
   const [updatingOpenItems,  setUpdatingOpenItems]   = useState(false)
   // Why the table couldn't be updated on its own, kept on screen under the
@@ -383,6 +391,7 @@ export default function ReportPage() {
           if (layoutFromBuild.current) return
           reportInBlocks.current = r.inBlocks
           setTemplateOpenItems(r.openItems)
+          setTemplateEarlierSection(r.earlierSection)
         }).catch(() => {})
       }
     } catch (err) {
@@ -546,8 +555,9 @@ export default function ReportPage() {
         if (res.status === 422) { problem = data.error || 'The table could not be found in this report.'; return }
         if (!res.ok) throw new Error(data.error || 'Could not update the table')
         const n = Number(data.items ?? 0)
-        setTextVersionResult(
-          `Earlier items table updated — ${n} item${n === 1 ? '' : 's'} (${CARRY_FORWARD_LABELS[carryForward].toLowerCase()}). The rest of the report is unchanged.`
+        setTextVersionResult(data.section === false
+          ? 'Earlier items section left out' + (carryForward === 'none' ? '' : ' — the earlier reports have no items yet') + '. The rest of the report is unchanged.'
+          : `Earlier items table updated — ${n} item${n === 1 ? '' : 's'} (${CARRY_FORWARD_LABELS[carryForward].toLowerCase()}). The rest of the report is unchanged.`
         )
         setTimeout(() => setTextVersionResult(''), 8000)
       }, { step: 'Updating the earlier items table' })
@@ -1520,6 +1530,7 @@ export default function ReportPage() {
       if (!layoutFromBuild.current) {
         reportInBlocks.current = recorded.inBlocks
         setTemplateOpenItems(recorded.openItems)
+        setTemplateEarlierSection(recorded.earlierSection)
       }
       const inReport = new Set(recorded.photos ?? [])
       const allPhotos: SelectedPhoto[] = []
@@ -2161,7 +2172,9 @@ export default function ReportPage() {
                       fontFamily: 'var(--f-text)', fontSize: 12.5,
                     }}
                   >
-                    {(Object.keys(CARRY_FORWARD_LABELS) as CarryForward[]).map(mode => (
+                    {(Object.keys(CARRY_FORWARD_LABELS) as CarryForward[])
+                      .filter(mode => mode !== 'none' || templateEarlierSection || carryForward === 'none')
+                      .map(mode => (
                       <option key={mode} value={mode}>{CARRY_FORWARD_LABELS[mode]}</option>
                     ))}
                   </select>

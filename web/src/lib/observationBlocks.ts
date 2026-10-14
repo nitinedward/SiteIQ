@@ -196,8 +196,10 @@ export async function earlierNoteCount(
  *  - open_recent: those still open, and those closed since the previous
  *                 report's visit — the default
  *  - all:         every item, open or closed
+ *  - none:        no items, and the template's earlier-items section
+ *                 ({{#earlier_section}} … {{/earlier_section}}) left out
  */
-export const CARRY_FORWARD_MODES = ['open', 'open_recent', 'all'] as const
+export const CARRY_FORWARD_MODES = ['open', 'open_recent', 'all', 'none'] as const
 export type CarryForward = typeof CARRY_FORWARD_MODES[number]
 export const DEFAULT_CARRY_FORWARD: CarryForward = 'open_recent'
 
@@ -240,6 +242,7 @@ export async function loadPreviousItems(
   inspection: ThisReport,
   mode: CarryForward = DEFAULT_CARRY_FORWARD,
 ): Promise<ObservationBlock[]> {
+  if (mode === 'none') return []
   try {
     const reports = await earlierReports(supabase, inspection)
     if (reports.length === 0) return []
@@ -325,6 +328,42 @@ async function latestResponses(supabase: SupabaseClient, noteIds: string[]): Pro
  * A finding cut to one short line, for {{brief}} when no AI-written one is
  * to hand: its first sentence, at most 15 words.
  */
+/**
+ * The earlier items a report lists, and whether its earlier-items section
+ * ({{#earlier_section}} … {{/earlier_section}}) stays in. It's left out when
+ * "None" is chosen, and on its own when the project's earlier reports have
+ * no items at all (a first report, say), so there's no empty table. When
+ * the chosen items are none but earlier items exist, the section stays and
+ * shows its table with no rows, as before. On any doubt it stays.
+ */
+export async function earlierItemsFor(
+  supabase: SupabaseClient,
+  inspection: ThisReport,
+  mode: CarryForward,
+): Promise<{ items: ObservationBlock[]; keepSection: boolean }> {
+  if (mode === 'none') return { items: [], keepSection: false }
+  const items = await loadPreviousItems(supabase, inspection, mode)
+  if (items.length > 0) return { items, keepSection: true }
+  return { items, keepSection: await anyEarlierItems(supabase, inspection) }
+}
+
+/** Whether the project's earlier reports have any site notes; true on any
+ *  failure, so a lookup that fails never removes the section. */
+async function anyEarlierItems(supabase: SupabaseClient, inspection: ThisReport): Promise<boolean> {
+  try {
+    const reports = await earlierReports(supabase, inspection)
+    if (reports.length === 0) return false
+    const { count, error } = await supabase
+      .from('observations')
+      .select('id', { count: 'exact', head: true })
+      .in('inspection_id', reports.map(r => r.id))
+    if (error) return true
+    return (count ?? 0) > 0
+  } catch {
+    return true
+  }
+}
+
 export function shortBrief(text: string): string {
   const first = text.trim().split('\n')[0].split(/(?<=[.;!?])\s/)[0].trim().replace(/[.;]$/, '')
   const words = first.split(/\s+/).filter(Boolean)
@@ -654,11 +693,16 @@ function fillBlock(block: string, note: ObservationBlock, nextId: () => number, 
  * Expects runs already merged (mergeRunsContainingPlaceholders) and content
  * controls flattened, so markers and placeholders are whole strings.
  */
-export function expandObservationBlocks(xml: string, notes: ObservationBlock[], previous: ObservationBlock[] = []): string {
+export function expandObservationBlocks(
+  xml: string, notes: ObservationBlock[], previous: ObservationBlock[] = [],
+  { earlierSection = true }: { earlierSection?: boolean } = {},
+): string {
   let id = 990000
   const nextId = () => id++
   const pageWidth = pageTextWidth(xml)
   const links: LinkState = { anchors: new Set(), summaryPlaced: false, openTables: 0 }
+  // First, so a section left out isn't filled.
+  xml = applyEarlierSections(xml, earlierSection, nextId)
   xml = expandBlocks(xml, BLOCK_START, BLOCK_END, notes, nextId, pageWidth, links)
   // Items carried forward from earlier reports ({{#open_items}}).
   xml = expandBlocks(xml, OPEN_ITEMS_START, OPEN_ITEMS_END, previous, nextId, pageWidth, links)
@@ -671,6 +715,86 @@ export function expandObservationBlocks(xml: string, notes: ObservationBlock[], 
 // the {{#open_items}} rows are in, and the {{carried_…}} counts, each with a
 // bookmark inside a paragraph, where the editor keeps it. replaceOpenItems
 // then swaps those for a freshly filled copy's.
+
+// ── The earlier-items section ──────────────────────────────────────────────
+// {{#earlier_section}} … {{/earlier_section}} wraps a template's earlier
+// items with their heading, so the whole lot can be left out: on "None",
+// or when there are no earlier items at all (earlierItemsFor). Each marker
+// paragraph becomes a near-invisible 1pt paragraph holding a bookmark, and
+// stays even when the section is left out, so "Update table" can put the
+// section back where it was (replaceEarlierSections).
+
+export const SECTION_START = '{{#earlier_section}}'
+export const SECTION_END = '{{/earlier_section}}'
+const SECTION_TOP = 'siteiq_es_'
+const SECTION_BOTTOM = 'siteiq_ee_'
+
+/** A paragraph a line 1pt high, holding only the named bookmark. */
+const sectionMark = (name: string, id: number) =>
+  '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>'
+  + '<w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr></w:pPr>'
+  + `<w:bookmarkStart w:id="${id}" w:name="${name}"/><w:bookmarkEnd w:id="${id}"/></w:p>`
+
+const paragraphAt = (els: El[], at: number) => ancestors(els, at).filter(e => e.tag === 'w:p').pop()
+
+/** The element directly containing `el` (undefined at the top). */
+function parentOf(els: El[], el: El): El | undefined {
+  const chain = ancestors(els, el.start)
+  return chain[chain.indexOf(el) - 1]
+}
+
+/** Keeps or leaves out each earlier-items section, swapping its two marker
+ *  paragraphs for bookmarked marks. A marker typed on a line with other
+ *  text loses only the marker; its line stays part of the section. Markers
+ *  that don't pair up within one parent are just removed. */
+function applyEarlierSections(xml: string, keep: boolean, nextId: () => number): string {
+  for (let n = 1; n <= 10; n++) {
+    const startAt = xml.indexOf(SECTION_START)
+    if (startAt === -1) break
+    const endAt = xml.indexOf(SECTION_END, startAt)
+    const els = structure(xml)
+    const top = paragraphAt(els, startAt)
+    const bottom = endAt === -1 ? undefined : paragraphAt(els, endAt)
+    if (!top || !bottom || top === bottom || parentOf(els, top) !== parentOf(els, bottom)) {
+      console.warn('[blocks] {{#earlier_section}} without a matching {{/earlier_section}} alongside it — markers removed')
+      xml = xml.split(SECTION_START).join('').split(SECTION_END).join('')
+      break
+    }
+    const alone = (p: El, marker: string) => textOf(xml.slice(p.start, p.end)).trim() === marker
+    const from = alone(top, SECTION_START) ? top.end : top.start
+    const to = alone(bottom, SECTION_END) ? bottom.start : bottom.end
+    const content = xml.slice(from, to).split(SECTION_START).join('').split(SECTION_END).join('')
+    xml = xml.slice(0, top.start)
+      + sectionMark(`${SECTION_TOP}${n}`, nextId())
+      + (keep ? content : '')
+      + sectionMark(`${SECTION_BOTTOM}${n}`, nextId())
+      + xml.slice(bottom.end)
+  }
+  return xml
+}
+
+/** Swaps each marked earlier-items section in a report, kept or left out,
+ *  for the freshly filled copy's: how "Update table" adds or removes it. */
+function replaceEarlierSections(xml: string, freshXml: string, next: () => number): { xml: string; sections: number } {
+  let sections = 0
+  for (const [name, freshTop] of bookmarks(freshXml, SECTION_TOP)) {
+    const bottomName = SECTION_BOTTOM + name.slice(SECTION_TOP.length)
+    const freshBottom = bookmarks(freshXml, SECTION_BOTTOM).get(bottomName)
+    const top = bookmarks(xml, SECTION_TOP).get(name)
+    const bottom = bookmarks(xml, SECTION_BOTTOM).get(bottomName)
+    if (!freshBottom || !top || !bottom) continue
+    const freshEls = structure(freshXml)
+    const els = structure(xml)
+    const fs = paragraphAt(freshEls, freshTop.at)
+    const fe = paragraphAt(freshEls, freshBottom.at)
+    const rs = paragraphAt(els, top.at)
+    const re = paragraphAt(els, bottom.at)
+    if (!fs || !fe || !rs || !re || fe.start < fs.start || re.start < rs.start) continue
+    xml = xml.slice(0, rs.start) + renumberBookmarks(freshXml.slice(fs.start, fe.end), next) + xml.slice(re.end)
+    sections++
+  }
+  return { xml, sections }
+}
 
 const OPEN_ITEMS_TABLE = 'siteiq_oi_'
 const CARRIED_COUNT = 'siteiq_cc_'
@@ -750,14 +874,19 @@ export function replaceOpenItems(reportXml: string, freshXml: string): { xml: st
   for (const m of xml.matchAll(/\bw:id="(\d+)"/g)) maxId = Math.max(maxId, Number(m[1]))
   const next = () => ++maxId
 
-  let tables = 0
-  for (const [name, fresh] of bookmarks(freshXml, OPEN_ITEMS_TABLE)) {
-    const freshTable = tableAround(freshXml, fresh.at)
-    const marked = bookmarks(xml, OPEN_ITEMS_TABLE).get(name)
-    const table = marked && tableAround(xml, marked.at)
-    if (!freshTable || !table) continue
-    xml = xml.slice(0, table.start) + renumberBookmarks(freshXml.slice(freshTable.start, freshTable.end), next) + xml.slice(table.end)
-    tables++
+  // Whole sections first: one swapped already holds its fresh table.
+  const swapped = replaceEarlierSections(xml, freshXml, next)
+  xml = swapped.xml
+  let tables = swapped.sections
+  if (swapped.sections === 0) {
+    for (const [name, fresh] of bookmarks(freshXml, OPEN_ITEMS_TABLE)) {
+      const freshTable = tableAround(freshXml, fresh.at)
+      const marked = bookmarks(xml, OPEN_ITEMS_TABLE).get(name)
+      const table = marked && tableAround(xml, marked.at)
+      if (!freshTable || !table) continue
+      xml = xml.slice(0, table.start) + renumberBookmarks(freshXml.slice(freshTable.start, freshTable.end), next) + xml.slice(table.end)
+      tables++
+    }
   }
   if (tables === 0) return { xml: reportXml, tables: 0, counts: 0 }
 

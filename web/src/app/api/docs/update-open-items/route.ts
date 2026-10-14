@@ -5,7 +5,7 @@ import { fillTemplate } from '@/lib/templateProcessor'
 import { loadDoc, saveDoc } from '@/lib/docStorage'
 import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
-import { chooseCarryForward, loadPreviousItems, replaceOpenItems } from '@/lib/observationBlocks'
+import { chooseCarryForward, earlierItemsFor, replaceOpenItems } from '@/lib/observationBlocks'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     }
 
     const mode = await chooseCarryForward(supabase, inspection as any, carryForward)
-    const previousItems = await loadPreviousItems(supabase, inspection as any, mode)
+    const { items: previousItems, keepSection } = await earlierItemsFor(supabase, inspection as any, mode)
 
     // Only the earlier items matter in this copy: nothing else is taken
     // from it.
@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
       purpose: '', findings: '', recommendations: '', other_activity: '',
       observations: [],
       previousItems,
+      earlierSection: keepSection,
     }, {
       pinnedTemplateId: (inspection as any).report_template_id,
       projectId: inspection.project_id,
@@ -91,9 +92,9 @@ export async function POST(request: NextRequest) {
     }
     report.updateFile('word/document.xml', Buffer.from(result.xml, 'utf-8'))
     await saveDoc(inspectionId, report.toBuffer())
-    console.log(`[update-open-items] ${inspectionId}: ${mode}, ${previousItems.length} items, ${result.tables} table(s), ${result.counts} count(s)`)
+    console.log(`[update-open-items] ${inspectionId}: ${mode}, ${previousItems.length} items, section ${keepSection ? 'in' : 'out'}, ${result.tables} table(s)/section(s), ${result.counts} count(s)`)
 
-    return NextResponse.json({ success: true, mode, items: previousItems.length, counts: result.counts })
+    return NextResponse.json({ success: true, mode, items: previousItems.length, section: keepSection, counts: result.counts })
   } catch (err) {
     if (err instanceof NotSettledError) {
       return NextResponse.json({ error: err.message }, { status: 409 })

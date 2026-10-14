@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
     // offers the choice of which.
     {
       photos: selection.photos, drawings, sketches: selection.sketches, sketchesSeen: selection.sketchesSeen,
-      inBlocks: layout?.blocks, openItems: layout?.openItems,
+      inBlocks: layout?.blocks, openItems: layout?.openItems, earlierSection: layout?.earlierSection,
     },
     { headers: { 'Cache-Control': 'no-store' } }
   )

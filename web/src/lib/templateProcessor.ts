@@ -3,7 +3,7 @@ import * as fs from 'fs/promises'
 import * as path from 'path'
 import AdmZip from 'adm-zip'
 import { fetchFromOurStorage } from '@/lib/storageFetch'
-import { BLOCK_START, OPEN_ITEMS_START, expandObservationBlocks, observationCounts, type ObservationBlock } from '@/lib/observationBlocks'
+import { BLOCK_START, OPEN_ITEMS_START, SECTION_START, expandObservationBlocks, observationCounts, type ObservationBlock } from '@/lib/observationBlocks'
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://vbaewualqaxhbmqgnhdt.supabase.co'
@@ -56,6 +56,9 @@ export type TemplateData = {
   /** Items from the project's earlier reports, still open or closed since
    *  the last one ({{#open_items}}, loadPreviousItems). */
   previousItems?: ObservationBlock[]
+  /** Whether the earlier-items section ({{#earlier_section}}) stays in;
+   *  false on "None" or with no earlier items at all (earlierItemsFor). */
+  earlierSection?: boolean
 }
 
 // ── XML Helpers ────────────────────────────────────────────────────────────────
@@ -298,17 +301,18 @@ export async function fillTemplate(
   }
 }
 
-export type TemplateLayout = { blocks: boolean; openItems: boolean }
+export type TemplateLayout = { blocks: boolean; openItems: boolean; earlierSection: boolean }
 
-/** Which parts a template has: a block per site note ({{#observations}})
- *  and the earlier reports' items ({{#open_items}}). Both false on any doubt. */
+/** Which parts a template has: a block per site note ({{#observations}}),
+ *  the earlier reports' items ({{#open_items}}), and a section around them
+ *  that can be left out ({{#earlier_section}}). All false on any doubt. */
 export function templateLayout(templateBuffer: Buffer): TemplateLayout {
   try {
     const zip = new AdmZip(templateBuffer)
     const xml = mergeRunsContainingPlaceholders(zip.getEntry('word/document.xml')?.getData().toString('utf-8') ?? '')
-    return { blocks: xml.includes(BLOCK_START), openItems: xml.includes(OPEN_ITEMS_START) }
+    return { blocks: xml.includes(BLOCK_START), openItems: xml.includes(OPEN_ITEMS_START), earlierSection: xml.includes(SECTION_START) }
   } catch {
-    return { blocks: false, openItems: false }
+    return { blocks: false, openItems: false, earlierSection: false }
   }
 }
 
@@ -366,11 +370,12 @@ export function fillTemplateBuffer(templateBuffer: Buffer, data: TemplateData): 
     // A template laid out one block per site note. Only such a template
     // takes this branch; every other one fills exactly as before. Content
     // controls come off first so a marker in one can't split a block.
-    if (xml.includes(BLOCK_START) || xml.includes(OPEN_ITEMS_START)) {
+    if (xml.includes(BLOCK_START) || xml.includes(OPEN_ITEMS_START) || xml.includes(SECTION_START)) {
       // Merged again keeping each line's text formatting, so a filled
       // finding looks like the placeholder did, not like its paragraph mark.
       xml = mergeRunsContainingPlaceholders(original, { textFormat: true })
-      xml = expandObservationBlocks(flattenContentControls(xml), data.observations ?? [], data.previousItems ?? [])
+      xml = expandObservationBlocks(flattenContentControls(xml), data.observations ?? [], data.previousItems ?? [],
+        { earlierSection: data.earlierSection ?? true })
       changed = true
       console.log('[templateProcessor] Observation blocks filled:', (data.observations ?? []).length)
     }
@@ -465,7 +470,7 @@ export async function reportTemplateLayout(inspectionId: string): Promise<Templa
       .eq('id', inspectionId)
       .single()
     const firmId = (inspection?.projects as any)?.firm_id as string | undefined
-    if (!inspection || !firmId) return { blocks: false, openItems: false }
+    if (!inspection || !firmId) return { blocks: false, openItems: false, earlierSection: false }
     const template = await resolveTemplate(firmId, {
       pinnedTemplateId: (inspection as any).report_template_id,
       projectId: (inspection as any).project_id,
@@ -476,7 +481,7 @@ export async function reportTemplateLayout(inspectionId: string): Promise<Templa
     return layout
   } catch (err) {
     console.warn('[template] could not tell whether the report uses observation blocks:', err)
-    return { blocks: false, openItems: false }
+    return { blocks: false, openItems: false, earlierSection: false }
   }
 }
 

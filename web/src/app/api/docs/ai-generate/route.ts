@@ -9,7 +9,7 @@ import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRe
 import { quiesceGate, NotSettledError } from '@/lib/quiesceDocument'
 import { parseSelected } from '@/lib/attachmentSelection'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
-import { buildObservationBlocks, chooseCarryForward, earlierNoteCount, loadPreviousItems } from '@/lib/observationBlocks'
+import { buildObservationBlocks, chooseCarryForward, earlierItemsFor, earlierNoteCount } from '@/lib/observationBlocks'
 
 export const dynamic = 'force-dynamic'
 
@@ -249,7 +249,7 @@ Return:
     let carried: string[] = []
     // The parts of the template the document was built from, for the report
     // page (see the generate route).
-    let layout: TemplateLayout = { blocks: false, openItems: false }
+    let layout: TemplateLayout = { blocks: false, openItems: false, earlierSection: false }
 
     if (firmId) {
       // For templates laid out a block per note: the same wording, kept per
@@ -282,7 +282,10 @@ Return:
         date:            inspection.date            ?? '',
         time:            inspectionTime(inspection as any),
         observations:    observationBlocks,
-        previousItems:   await loadPreviousItems(supabase, inspection as any, await chooseCarryForward(supabase, inspection as any, carryForward)),
+        // The earlier items, and whether their section stays in (it's left
+        // out on "None", or when the project has no earlier items at all).
+        ...(await earlierItemsFor(supabase, inspection as any, await chooseCarryForward(supabase, inspection as any, carryForward))
+          .then(e => ({ previousItems: e.items, earlierSection: e.keepSection }))),
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined

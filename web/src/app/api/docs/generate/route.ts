@@ -10,7 +10,7 @@ import { noteBulletLine, noteDictation } from '@/lib/reportNotes'
 import { loadReportEngineer, inspectionTime } from '@/lib/reportEngineer'
 import { parseRecipients, recipientNames, recipientEmails } from '@/lib/reportRecipients'
 import { requireInspectionAccess, docKeyMismatch } from '@/lib/apiAuth'
-import { buildObservationBlocks, chooseCarryForward, earlierNoteCount, loadPreviousItems } from '@/lib/observationBlocks'
+import { buildObservationBlocks, chooseCarryForward, earlierItemsFor, earlierNoteCount } from '@/lib/observationBlocks'
 
 export const dynamic = 'force-dynamic'
 
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
     // the report page offers the earlier-items choice for exactly that
     // template instead of looking the template up again (a second lookup
     // could disagree and hide the choice).
-    let layout: TemplateLayout = { blocks: false, openItems: false }
+    let layout: TemplateLayout = { blocks: false, openItems: false, earlierSection: false }
 
     if (firmId) {
       // For templates laid out a block per note: each note's dictation as
@@ -161,7 +161,10 @@ export async function POST(request: NextRequest) {
         date:            inspection.date            ?? '',
         time:            inspectionTime(inspection as any),
         observations:    observationBlocks,
-        previousItems:   await loadPreviousItems(supabase, inspection as any, await chooseCarryForward(supabase, inspection as any, carryForward)),
+        // The earlier items, and whether their section stays in (it's left
+        // out on "None", or when the project has no earlier items at all).
+        ...(await earlierItemsFor(supabase, inspection as any, await chooseCarryForward(supabase, inspection as any, carryForward))
+          .then(e => ({ previousItems: e.items, earlierSection: e.keepSection }))),
       }
 
       const pinnedTemplateId = (inspection as any).report_template_id as string | null | undefined
