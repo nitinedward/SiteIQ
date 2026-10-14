@@ -2,7 +2,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
   ActivityIndicator, Modal, TextInput, ScrollView,
   Dimensions, KeyboardAvoidingView, Platform,
-  PanResponder, Animated, Image,
+  PanResponder, Animated, Image, PixelRatio,
 } from 'react-native';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,6 +45,30 @@ function ToolBtn({ icon, label, active, onPress }: { icon: keyof typeof Ionicons
       <Text style={[S.toolLabel, active && S.toolLabelOn]}>{label}</Text>
     </TouchableOpacity>
   );
+}
+
+/** The drawing image laid out at its own full size and shrunk to fit with a
+ *  transform, rather than laid out at the screen's width.
+ *
+ *  Both iOS and Android decode an image at the size it's laid out at, so a
+ *  2200 px drawing laid out 390 points wide was kept as a ~1170 px copy
+ *  (less on Android), and pinch-zoom enlarged that copy: fine text went
+ *  soft almost at once. Laid out at full size, the phone keeps every pixel
+ *  and zooming shows real detail. It still covers exactly SW × pdfH, so
+ *  mark-ups and taps line up as before. `dims` is the image's true pixel
+ *  size (pdfDims, from the file itself). */
+function fullDetailStyle(dims: { pdfWidth: number; pdfHeight: number }, SW: number, pdfH: number) {
+  const ratio = PixelRatio.get();
+  const w = dims.pdfWidth / ratio;
+  const h = dims.pdfHeight / ratio;
+  if (!(w > SW) || !(h > 0)) return { width: SW, height: pdfH, backgroundColor: '#F1F5F9' };
+  const k = SW / w;
+  // Scaling happens about the centre, so move the centre to the fitted
+  // area's centre first.
+  return {
+    position: 'absolute' as const, left: 0, top: 0, width: w, height: h, backgroundColor: '#F1F5F9',
+    transform: [{ translateX: SW / 2 - w / 2 }, { translateY: pdfH / 2 - h / 2 }, { scale: k }],
+  };
 }
 
 export default function DrawingViewerScreen() {
@@ -587,7 +611,7 @@ export default function DrawingViewerScreen() {
               {!isLoading && !pdfError && previewUrl && (
                 <Image
                   source={{ uri: previewUrl }}
-                  style={{ width: SW, height: pdfH, backgroundColor: '#F1F5F9' }}
+                  style={fullDetailStyle(pdfDims.current, SW, pdfH)}
                   resizeMode="contain"
                 />
               )}
