@@ -11,6 +11,7 @@ import { SiteNoteModal } from '@/components/SiteNoteModal'
 import { apiFetch } from '@/lib/apiFetch'
 import ProjectCans from '@/components/ProjectCans'
 import ProjectSketches from '@/components/ProjectSketches'
+import ProjectMarkups from '@/components/ProjectMarkups'
 import Link from 'next/link'
 import {
   SiteNote, NoteStatus, loadProjectSiteNotes, setSiteNoteStatus, formatNoteDate, noteReportRef,
@@ -184,7 +185,7 @@ function AdminPageInner() {
   const [tab, setTab]                 = useState<'projects' | 'team'>('projects')
 
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
-  const [projTab, setProjTab]                 = useState<'reports' | 'notes' | 'drawings' | 'cans' | 'sketches' | 'engineers'>('reports')
+  const [projTab, setProjTab]                 = useState<'reports' | 'notes' | 'drawings' | 'markups' | 'cans' | 'sketches' | 'engineers'>('reports')
   // Bumped when a CAN adds or removes sketches, so the Sketches tab reloads.
   const [sketchRefresh, setSketchRefresh]     = useState(0)
   const [siteNotes, setSiteNotes]             = useState<SiteNote[]>([])
@@ -1502,6 +1503,7 @@ function AdminPageInner() {
                       )}
                     </button>
                     <button style={subTabBtn(projTab === 'drawings')}  onClick={() => setProjTab('drawings')}>Drawings ({drawings.length})</button>
+                    <button style={subTabBtn(projTab === 'markups')}   onClick={() => setProjTab('markups')}>Mark-ups</button>
                     <button style={subTabBtn(projTab === 'cans')}      onClick={() => setProjTab('cans')}>CANs</button>
                     <button style={subTabBtn(projTab === 'sketches')}  onClick={() => setProjTab('sketches')}>Sketches</button>
                     <button style={subTabBtn(projTab === 'engineers')} onClick={() => setProjTab('engineers')}>Engineers</button>
@@ -2047,6 +2049,24 @@ function AdminPageInner() {
                       siteNotes={siteNotes}
                       onChanged={() => setSketchRefresh(n => n + 1)}
                     />
+                  </div>
+                )}
+
+                {/* ── MARK-UPS TAB ── */}
+                {!editingProject && projTab === 'markups' && (
+                  <div style={{ padding: '24px 28px' }}>
+                    {loadingNotes
+                      ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner /></div>
+                      : (
+                        <ProjectMarkups
+                          drawings={drawings}
+                          notes={siteNotes}
+                          savingNoteId={savingNoteId}
+                          onToggleStatus={changeNoteStatus}
+                          onOpenNote={setOpenNoteId}
+                          onOpenReport={inspectionId => router.push(`/report/${inspectionId}?project_name=${encodeURIComponent(selectedProject.name ?? '')}`)}
+                        />
+                      )}
                   </div>
                 )}
 
