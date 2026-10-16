@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { shapeSpace } from '@/lib/zoneHotspots'
 import { noteRefLabel } from '@/lib/noteRefs'
 import { SiteNote, NoteStatus, formatNoteDate } from '@/lib/siteNotes'
+import PhotoViewer from '@/components/PhotoViewer'
 
 /**
  * Mark-ups tab: every drawing on the project as a thumbnail strip, and the
@@ -385,6 +386,9 @@ function NotePanel({ note, saving, onToggleStatus, onOpenNote, onOpenReport }: {
   onOpenNote: () => void
   onOpenReport?: () => void
 }) {
+  const [viewing, setViewing] = useState<number | null>(null)
+  // A different note selected: don't carry the open viewer over to it.
+  useEffect(() => { setViewing(null) }, [note.id])
   const t = tone(note.status)
   const text = note.reportText || note.description
   const shown = note.photos.slice(0, 6)
@@ -416,15 +420,27 @@ function NotePanel({ note, saving, onToggleStatus, onOpenNote, onOpenReport }: {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
             {shown.map((url, i) => (
-              <a key={url} href={url} target="_blank" rel="noreferrer" aria-label={`Open photo ${i + 1}`} style={{ display: 'block', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', background: 'var(--paper)' }}>
+              <button key={url} type="button" onClick={() => setViewing(i)} aria-label={`View photo ${i + 1} of ${note.photos.length}`} style={{ display: 'block', aspectRatio: '1', padding: 0, border: 'none', borderRadius: 8, overflow: 'hidden', background: 'var(--paper)', cursor: 'zoom-in' }}>
                 <img src={url} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-              </a>
+              </button>
             ))}
           </div>
           {note.photos.length > shown.length && (
-            <div style={{ fontFamily: 'var(--f-text)', fontSize: 12, color: 'var(--text-mid)' }}>+{note.photos.length - shown.length} more in the site note</div>
+            <button type="button" onClick={() => setViewing(shown.length)} style={{ alignSelf: 'flex-start', border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'var(--f-text)', fontSize: 12.5, color: 'var(--indigo)' }}>
+              +{note.photos.length - shown.length} more — view all
+            </button>
           )}
         </div>
+      )}
+
+      {viewing !== null && (
+        <PhotoViewer
+          photos={note.photos}
+          startIndex={viewing}
+          title={`${refLabel(note)} · ${note.zoneLabel}`}
+          subtitle={note.reportNo ? `SR ${note.reportNo} · ${formatNoteDate(note)}` : formatNoteDate(note)}
+          onClose={() => setViewing(null)}
+        />
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
