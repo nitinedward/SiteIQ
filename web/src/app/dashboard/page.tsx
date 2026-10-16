@@ -327,14 +327,11 @@ export default function DashboardPage() {
 
   // new: overdue = visit date more than 2 days ago and not yet finalised
   const overdueCount = pendingReports.filter(i => isOverdue(i.date, i.report_status)).length
-  const sortedPendingReports = [...pendingReports].sort((a, b) => {
-    const aOverdue = isOverdue(a.date, a.report_status)
-    const bOverdue = isOverdue(b.date, b.report_status)
-    if (aOverdue !== bOverdue) return aOverdue ? -1 : 1
-    // Newest first within each group, so a report just synced from site is
-    // near the top rather than behind older ones.
-    return (b.created_at ?? '').localeCompare(a.created_at ?? '')
-  })
+  // By age: newest visit at the top, oldest at the bottom (overdue ones keep
+  // their red tag wherever they fall). Same-day visits: latest created first.
+  const sortedPendingReports = [...pendingReports].sort((a, b) =>
+    daysSinceVisit(a.date) - daysSinceVisit(b.date)
+    || (b.created_at ?? '').localeCompare(a.created_at ?? ''))
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 16 }}>
