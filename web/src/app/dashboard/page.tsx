@@ -330,7 +330,10 @@ export default function DashboardPage() {
   const sortedPendingReports = [...pendingReports].sort((a, b) => {
     const aOverdue = isOverdue(a.date, a.report_status)
     const bOverdue = isOverdue(b.date, b.report_status)
-    return aOverdue === bOverdue ? 0 : aOverdue ? -1 : 1
+    if (aOverdue !== bOverdue) return aOverdue ? -1 : 1
+    // Newest first within each group, so a report just synced from site is
+    // near the top rather than behind older ones.
+    return (b.created_at ?? '').localeCompare(a.created_at ?? '')
   })
 
   if (loading) return (
@@ -523,7 +526,11 @@ export default function DashboardPage() {
             />
             {pendingReports.length === 0 ? (
               <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: 'var(--f-text)', fontSize: 14, color: 'var(--text-mid)' }}>No pending reports - all caught up</div>
-            ) : sortedPendingReports.slice(0, 5).map(ins => {
+            ) : (
+            // Every pending report, about five rows tall, scrolling for the rest —
+            // a fixed top five hid new reports behind overdue ones.
+            <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+            {sortedPendingReports.map(ins => {
               const overdue = isOverdue(ins.date, ins.report_status)
               return (
               <div
@@ -575,6 +582,8 @@ export default function DashboardPage() {
               </div>
               )
             })}
+            </div>
+            )}
           </Card>
 
           {/* Panel 3 — On Hold */}
