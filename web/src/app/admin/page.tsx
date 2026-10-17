@@ -12,6 +12,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import ProjectCans from '@/components/ProjectCans'
 import ProjectSketches from '@/components/ProjectSketches'
 import ProjectMarkups from '@/components/ProjectMarkups'
+import ProjectCloseout from '@/components/ProjectCloseout'
 import Link from 'next/link'
 import {
   SiteNote, NoteStatus, loadProjectSiteNotes, setSiteNoteStatus, formatNoteDate, noteReportRef,
@@ -185,7 +186,7 @@ function AdminPageInner() {
   const [tab, setTab]                 = useState<'projects' | 'team'>('projects')
 
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
-  const [projTab, setProjTab]                 = useState<'reports' | 'notes' | 'drawings' | 'markups' | 'cans' | 'sketches' | 'engineers'>('reports')
+  const [projTab, setProjTab]                 = useState<'reports' | 'notes' | 'drawings' | 'markups' | 'cans' | 'sketches' | 'engineers' | 'closeout'>('reports')
   // Bumped when a CAN adds or removes sketches, so the Sketches tab reloads.
   const [sketchRefresh, setSketchRefresh]     = useState(0)
   const [siteNotes, setSiteNotes]             = useState<SiteNote[]>([])
@@ -1149,6 +1150,7 @@ function AdminPageInner() {
     background: 'none', border: 'none',
     borderBottom: active ? '2px solid var(--indigo)' : '2px solid transparent',
     cursor: 'pointer', transition: 'all .15s',
+    whiteSpace: 'nowrap', flexShrink: 0,
   })
 
   // ── TABLE HEADER STYLE ────────────────────────────────────────────────────
@@ -1490,7 +1492,7 @@ function AdminPageInner() {
 
                 {/* Sub-tabs */}
                 {!editingProject && (
-                  <div style={{ display: 'flex', borderBottom: '1px solid var(--border-line)', padding: '0 4px' }}>
+                  <div style={{ display: 'flex', borderBottom: '1px solid var(--border-line)', padding: '0 4px', overflowX: 'auto' }}>
                     <button style={subTabBtn(projTab === 'reports')}   onClick={() => { setProjTab('reports'); loadProjectInspections(selectedProject.id) }}>Reports</button>
                     <button style={subTabBtn(projTab === 'notes')}     onClick={() => setProjTab('notes')}>
                       Site Notes
@@ -1507,6 +1509,7 @@ function AdminPageInner() {
                     <button style={subTabBtn(projTab === 'cans')}      onClick={() => setProjTab('cans')}>CANs</button>
                     <button style={subTabBtn(projTab === 'sketches')}  onClick={() => setProjTab('sketches')}>Sketches</button>
                     <button style={subTabBtn(projTab === 'engineers')} onClick={() => setProjTab('engineers')}>Engineers</button>
+                    <button style={subTabBtn(projTab === 'closeout')}  onClick={() => setProjTab('closeout')}>Close-out</button>
                   </div>
                 )}
 
@@ -2053,6 +2056,19 @@ function AdminPageInner() {
                 )}
 
                 {/* ── MARK-UPS TAB ── */}
+                {/* ── CLOSE-OUT TAB ── the PS4 pack, or reports and registers */}
+                {!editingProject && projTab === 'closeout' && (
+                  <div style={{ padding: '24px 28px' }}>
+                    <ProjectCloseout
+                      key={selectedProject.id}
+                      projectId={selectedProject.id}
+                      projectNumber={selectedProject.project_number ?? ''}
+                      notes={siteNotes}
+                      onOpenNote={setOpenNoteId}
+                    />
+                  </div>
+                )}
+
                 {!editingProject && projTab === 'markups' && (
                   <div style={{ padding: '24px 28px' }}>
                     {loadingNotes

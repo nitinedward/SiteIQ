@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Shell, Btn, Card, Spinner } from '@/components/Shell'
 import { loadReportTemplates, type ReportTemplate } from '@/lib/reportTemplates'
 import { PLACEHOLDERS, type TemplateCheck } from '@/lib/templatePlaceholders'
+import Ps4Settings from '@/components/Ps4Settings'
 
 type Project = { id: string; name: string; project_number: string }
 type Drawing = { id: string; title: string; number: string; file_url: string; project_id: string }
@@ -719,6 +720,9 @@ export default function SettingsPage() {
               onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; const t = replaceTargetRef.current; if (f && t) replaceTemplate(t, f) }} />
           </div>
         </Card>
+
+        {/* ── PS4 form and PS4 authors, for close-out packs ── */}
+        {firm?.id && <Ps4Settings firmId={firm.id} />}
 
         {/* ── CARD 3: Microsoft 365 ────────────────────────── */}
         <Card className="settings-card">

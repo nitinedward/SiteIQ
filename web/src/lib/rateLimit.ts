@@ -27,6 +27,7 @@ export const HOURLY_LIMITS = {
   'extract-info': 1500,
   'cans-analyse': 60,
   'report-summary': 120,
+  'ps1-read': 60,
 } as const
 
 export type LimitedRoute = keyof typeof HOURLY_LIMITS
