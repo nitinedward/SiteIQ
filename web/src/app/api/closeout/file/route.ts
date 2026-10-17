@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireCaller, requireProjectAccess } from '@/lib/apiAuth'
 import { admin, BUCKET, ownsPath } from '@/lib/closeoutServer'
-import type { FirmPs4Settings, ProjectCloseout } from '@/lib/closeout'
+import type { CloseoutTemplateKind, FirmPs4Settings, ProjectCloseout } from '@/lib/closeout'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,7 +9,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * A ten-minute link to view a close-out file kept in private storage:
- * ?kind=ps1&projectId=…, ?kind=ps4form, or ?kind=signature&authorId=…
+ * ?kind=ps1&projectId=…, ?kind=ps4form, ?kind=signature&authorId=…, or
+ * ?kind=template&which=summary|noteReg
  * The path is looked up from the record, never taken from the caller.
  */
 export async function GET(request: NextRequest) {
@@ -34,6 +35,10 @@ export async function GET(request: NextRequest) {
       if (kind === 'ps4form') {
         const { data } = await supabase.from('firms').select('ps4_settings').eq('id', firmId).single()
         path = ((data?.ps4_settings ?? {}) as FirmPs4Settings).formPath
+      } else if (kind === 'template') {
+        const which = q.get('which') as CloseoutTemplateKind
+        const { data } = await supabase.from('firms').select('ps4_settings').eq('id', firmId).single()
+        path = ((data?.ps4_settings ?? {}) as FirmPs4Settings).templates?.[which]?.path
       } else if (kind === 'signature') {
         const authorId = q.get('authorId')
         if (!authorId || !UUID.test(authorId)) return NextResponse.json({ error: 'Missing or invalid authorId' }, { status: 400 })

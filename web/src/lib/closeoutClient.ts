@@ -17,14 +17,14 @@ export async function closeoutPost<T = any>(route: string, body: unknown): Promi
  *  from /api/closeout/upload, returning its path for the route that records
  *  it. */
 export async function uploadCloseoutFile(
-  kind: 'ps1' | 'ps4form' | 'signature',
+  kind: 'ps1' | 'ps4form' | 'signature' | 'template',
   file: File,
-  extra: { projectId?: string; authorId?: string } = {},
+  extra: { projectId?: string; authorId?: string; which?: string } = {},
 ): Promise<string> {
   const ext = /\.jpe?g$/i.test(file.name) || file.type === 'image/jpeg' ? 'jpg' : 'png'
   const { path, token } = await closeoutPost<{ path: string; token: string }>('upload', { kind, ext, ...extra })
   const { error } = await supabase.storage.from('reports').uploadToSignedUrl(path, token, file, {
-    contentType: file.type || (kind === 'signature' ? `image/${ext === 'jpg' ? 'jpeg' : 'png'}` : 'application/pdf'),
+    contentType: file.type || (kind === 'signature' ? `image/${ext === 'jpg' ? 'jpeg' : 'png'}` : kind === 'template' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf'),
   })
   if (error) throw new Error('Upload failed: ' + error.message)
   return path

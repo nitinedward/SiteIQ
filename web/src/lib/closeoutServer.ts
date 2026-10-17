@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import {
   PDFDocument, PDFFont, PDFPage, PDFForm, PDFField, PDFTextField, PDFDropdown, PDFCheckBox,
-  StandardFonts, rgb, degrees,
+  StandardFonts, rgb, degrees, PDFDict, PDFName, PDFString, PDFHexString,
 } from 'pdf-lib'
 import { supabaseUrl } from '@/lib/storageFetch'
 import { loadPdf } from '@/lib/docStorage'
@@ -12,6 +12,8 @@ import {
   PS1_KEYS, PS4_FIELDS, normaliseCm,
   type Ps1Key, type ProjectCloseout, type FirmPs4Settings, type Ps4Author, type CompileRequest, type PackSectionId,
 } from '@/lib/closeout'
+import { CLOSEOUT_PLACEHOLDERS, type CloseoutTemplateKind } from '@/lib/closeout'
+import { LINK_PREFIX, renderTemplatePdf, reportLinkText } from '@/lib/closeoutTemplates'
 
 /**
  * Server side of close-out packs (lib/closeout has the shared types):
@@ -31,6 +33,7 @@ export const closeoutPaths = {
   signature: (firmId: string, authorId: string, stamp: string, ext: string) => `closeout/${firmId}/signatures/${authorId}-${stamp}.${ext}`,
   ps1: (firmId: string, projectId: string, stamp: string) => `closeout/${firmId}/projects/${projectId}/ps1-${stamp}.pdf`,
   draft: (firmId: string, projectId: string) => `closeout/${firmId}/projects/${projectId}/draft.pdf`,
+  template: (firmId: string, kind: string, stamp: string) => `closeout/${firmId}/templates/${kind}-${stamp}.docx`,
 }
 
 /** A stored path belongs to this firm's close-out folder — so a path saved
@@ -213,6 +216,43 @@ type Fonts = { regular: PDFFont; bold: PDFFont }
 /** A clickable area over text that names a report; linked to the report's
  *  first page once the reports are in the pack. */
 type LinkSpot = { page: PDFPage; rect: [number, number, number, number]; reportId: string }
+
+/** A report link that came out of a firm's Word template as a web address
+ *  (closeoutTemplates linkUrl), to be pointed at the report's page. */
+type TemplateLink = { page: PDFPage; annot: PDFDict; reportId: string }
+
+function harvestTemplateLinks(doc: PDFDocument, pages: PDFPage[]): TemplateLink[] {
+  const found: TemplateLink[] = []
+  for (const page of pages) {
+    const annots = page.node.Annots()
+    if (!annots) continue
+    for (let i = 0; i < annots.size(); i++) {
+      const annot = doc.context.lookup(annots.get(i))
+      if (!(annot instanceof PDFDict)) continue
+      const action = annot.lookup(PDFName.of('A'))
+      const uri = action instanceof PDFDict ? action.lookup(PDFName.of('URI')) : undefined
+      const text = uri instanceof PDFString || uri instanceof PDFHexString ? uri.decodeText() : ''
+      if (text.startsWith(LINK_PREFIX)) found.push({ page, annot, reportId: text.slice(LINK_PREFIX.length) })
+    }
+  }
+  return found
+}
+
+/** Points a template's report link at the report's page, or takes it off
+ *  if the report isn't in the pack. */
+function relinkTemplateLink(doc: PDFDocument, link: TemplateLink, target: PDFPage | undefined) {
+  link.annot.delete(PDFName.of('A'))
+  if (target) {
+    link.annot.set(PDFName.of('Dest'), doc.context.obj([target.ref, 'XYZ', null, null, null]))
+    link.annot.set(PDFName.of('Border'), doc.context.obj([0, 0, 0]))
+    return
+  }
+  const annots = link.page.node.Annots()
+  if (!annots) return
+  for (let i = annots.size() - 1; i >= 0; i--) {
+    if (doc.context.lookup(annots.get(i)) === link.annot) annots.remove(i)
+  }
+}
 
 /** A link inside the pack: clicking `rect` on `page` opens `target`. */
 function addLink(doc: PDFDocument, page: PDFPage, rect: [number, number, number, number], target: PDFPage) {
@@ -418,6 +458,7 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
   const generated = new Set<PDFPage>()
   const contents: { title: string; page: PDFPage }[] = []
   const spots: LinkSpot[] = []
+  const templateLinks: TemplateLink[] = []
 
   // ── 1. The PS4 ─────────────────────────────────────────────────────────
   if (isPs4) {
@@ -483,33 +524,94 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
   const contentsPage = pack.addPage(A4)
   generated.add(contentsPage)
 
+  // A firm's own Word layout for a page, when it has one (Settings): filled,
+  // converted, and put in the pack. Null if it couldn't be used — SiteIQ's
+  // own page goes in instead, with a warning.
+  const linkable = new Set(want.has('reports') ? reports.map(r => r.id) : [])
+  const today = new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Pacific/Auckland' })
+  const fromTemplate = async (kind: CloseoutTemplateKind, data: Record<string, unknown>): Promise<PDFPage[] | null> => {
+    const tpl = settings.templates?.[kind]
+    if (!tpl || !ownsPath(firmId, tpl.path)) return null
+    try {
+      const pdf = await renderTemplatePdf(
+        tpl.path, { firm_name: (firm as any)?.name ?? '', date: today, ...data },
+        `closeout/${firmId}/projects/${req.projectId}/work-${kind}-${Date.now().toString(36)}.docx`,
+        CLOSEOUT_PLACEHOLDERS[kind].title,
+      )
+      const doc = await PDFDocument.load(pdf, { ignoreEncryption: true })
+      const pages = await pack.copyPages(doc, doc.getPageIndices())
+      pages.forEach(p => pack.addPage(p))
+      templateLinks.push(...harvestTemplateLinks(pack, pages))
+      return pages
+    } catch (err: any) {
+      console.warn('[closeout] template', kind, 'failed:', err?.message)
+      warnings.push(`Your ${CLOSEOUT_PLACEHOLDERS[kind].title.toLowerCase()} template couldn't be used (${err?.message ?? 'error'}), so SiteIQ's own page is in its place.`)
+      return null
+    }
+  }
+
   // ── 2. Summary ─────────────────────────────────────────────────────────
   if (want.has('summary')) {
-    const w = new PageWriter(pack, fonts, 'Construction monitoring summary', project.name)
     const dated = reports.filter(r => visitDate(r))
     const byVisit = [...dated].sort((a, b) => visitTime(a) - visitTime(b))
     const engineers = [...new Set(reports.map(engineerOf).filter(Boolean))]
     const purposes = [...new Set(reports.map(purposeOf).filter(Boolean))]
     const consent = [closeout.consentNo, closeout.amendmentNo && `amendment(s) ${closeout.amendmentNo}`].filter(Boolean).join(', ')
-    const rows: [string, string][] = [
-      ['Project', project.name ?? ''],
-      ['Job number', project.project_number ?? ''],
-      ['Address', ps1?.fields.at || project.address || ''],
-      ['Client', ps1?.fields.owner || project.client_name || ''],
-      ['Building consent', consent],
-      ['Building consent authority', ps1?.fields.bca ?? ''],
-      ['Monitoring level', normaliseCm(ps1?.fields.cm)],
-      ['Monitoring period', byVisit.length ? `${visitDate(byVisit[0])} to ${visitDate(byVisit[byVisit.length - 1])}` : ''],
-      ['Site visits', `${reports.length} site report${reports.length === 1 ? '' : 's'}`],
-      ['Engineers', engineers.join(', ')],
-      ['Inspected', purposes.join('; ')],
-      ['Site notes', `${notes.length} raised, ${closedCount} closed${notes.length > closedCount ? `, ${notes.length - closedCount} open` : ''}`],
-      ['Design', ps1 ? [ps1.fields.designFirm, ps1.fields.designer, ps1.fields.ps1Date && `PS1 dated ${ps1.fields.ps1Date}`].filter(Boolean).join(', ') : ''],
-    ]
-    if (isPs4) rows.push(['PS4 author', author ? `${author.name}, CPEng ${author.cpeng}` : ''])
-    drawKeyValues(w, fonts, rows)
-    w.pages.forEach(p => generated.add(p))
-    contents.push({ title: 'Construction monitoring summary', page: w.pages[0] })
+    const period: [string, string] = byVisit.length ? [visitDate(byVisit[0]), visitDate(byVisit[byVisit.length - 1])] : ['', '']
+
+    const pages = await fromTemplate('summary', {
+      project_name: project.name ?? '',
+      job_number: project.project_number ?? '',
+      address: ps1?.fields.at || project.address || '',
+      client: ps1?.fields.owner || project.client_name || '',
+      consent_no: closeout.consentNo ?? '',
+      amendment_no: closeout.amendmentNo ?? '',
+      council: ps1?.fields.bca ?? '',
+      monitoring_level: normaliseCm(ps1?.fields.cm),
+      period_start: period[0],
+      period_end: period[1],
+      visit_count: String(reports.length),
+      engineers: engineers.join(', '),
+      inspected: purposes.join('; '),
+      notes_raised: String(notes.length),
+      notes_closed: String(closedCount),
+      notes_open: String(notes.length - closedCount),
+      design_firm: ps1?.fields.designFirm ?? '',
+      designer: ps1?.fields.designer ?? '',
+      ps1_date: ps1?.fields.ps1Date ?? '',
+      ps4_author: isPs4 ? author?.name ?? '' : '',
+      ps4_author_cpeng: isPs4 ? author?.cpeng ?? '' : '',
+      reports: reports.map(r => ({
+        report: reportLinkText(linkable.has(r.id) ? r.id : null, reportNoLabel(r.report_no)),
+        visit_date: visitDate(r),
+        purpose: purposeOf(r),
+        engineer: engineerOf(r),
+      })),
+    })
+    if (pages) {
+      contents.push({ title: 'Construction monitoring summary', page: pages[0] })
+    } else {
+      const w = new PageWriter(pack, fonts, 'Construction monitoring summary', project.name)
+      const rows: [string, string][] = [
+        ['Project', project.name ?? ''],
+        ['Job number', project.project_number ?? ''],
+        ['Address', ps1?.fields.at || project.address || ''],
+        ['Client', ps1?.fields.owner || project.client_name || ''],
+        ['Building consent', consent],
+        ['Building consent authority', ps1?.fields.bca ?? ''],
+        ['Monitoring level', normaliseCm(ps1?.fields.cm)],
+        ['Monitoring period', period[0] ? `${period[0]} to ${period[1]}` : ''],
+        ['Site visits', `${reports.length} site report${reports.length === 1 ? '' : 's'}`],
+        ['Engineers', engineers.join(', ')],
+        ['Inspected', purposes.join('; ')],
+        ['Site notes', `${notes.length} raised, ${closedCount} closed${notes.length > closedCount ? `, ${notes.length - closedCount} open` : ''}`],
+        ['Design', ps1 ? [ps1.fields.designFirm, ps1.fields.designer, ps1.fields.ps1Date && `PS1 dated ${ps1.fields.ps1Date}`].filter(Boolean).join(', ') : ''],
+      ]
+      if (isPs4) rows.push(['PS4 author', author ? `${author.name}, CPEng ${author.cpeng}` : ''])
+      drawKeyValues(w, fonts, rows)
+      w.pages.forEach(p => generated.add(p))
+      contents.push({ title: 'Construction monitoring summary', page: w.pages[0] })
+    }
   }
 
   // ── 3. Site report register (in the PS4 schedule when there is one) ────
@@ -525,11 +627,6 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
 
   // ── 4. Site notes closed register ──────────────────────────────────────
   if (want.has('noteReg')) {
-    const sub = closedCount === notes.length
-      ? `${project.name} · all ${notes.length} site notes closed`
-      : `${project.name} · ${closedCount} of ${notes.length} site notes closed, ${notes.length - closedCount} open`
-    const w = new PageWriter(pack, fonts, 'Site notes closed register', sub)
-
     // Latest response on each closed note: its comment and first picture.
     const closedIds = notes.filter(isClosed).map(n => n.id)
     const latest = new Map<string, any>()
@@ -537,40 +634,74 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
       const { data: responses } = await supabase.from('note_responses').select('observation_id, comment, file_url, file_type, files, created_at, created_by').in('observation_id', closedIds).order('created_at', { ascending: true })
       for (const r of responses ?? []) latest.set(r.observation_id, r)
     }
-    const images = new Map<string, Awaited<ReturnType<typeof fetchImage>>>()
-    await Promise.all([...latest.entries()].map(async ([id, r]) => {
-      const files: { url: string; type?: string | null }[] = Array.isArray(r.files) && r.files.length ? r.files : r.file_url ? [{ url: r.file_url, type: r.file_type }] : []
-      const pic = files.find(f => /^image\//.test(f.type ?? '') || /\.(jpe?g|png)(\?|$)/i.test(f.url))
-      if (pic) images.set(id, await fetchImage(pack, pic.url))
-    }))
-
-    // Only reports in this pack can be linked to.
-    const inPack = new Set(reports.map(r => r.id))
-    const rows: Cell[][] = notes.map(n => {
+    const raisedIn = (n: Note) => {
       const r = n.inspection_id ? reportById.get(n.inspection_id) : undefined
-      const resp = latest.get(n.id)
-      const text = (n.report_text || n.transcript || n.notes || '').trim()
-      const how = isClosed(n)
-        ? [firstSentence(resp?.comment ?? '', 160), resp?.created_by && nameOf.get(resp.created_by) ? `(${nameOf.get(resp.created_by)})` : ''].filter(Boolean).join(' ') || 'Closed'
-        : '—'
-      return [
-        noteRefLabel(refs.get(n.id)) ?? '—',
-        [n.zone_label || 'General', firstSentence(text)].filter(Boolean).join(': '),
-        r ? `${reportNoLabel(r.report_no)} · ${visitDateShort(r)}` : '—',
-        isClosed(n) ? 'Closed' : 'Open',
-        isClosed(n) ? shortDate(n.closed_at) || '—' : '—',
-        { text: how, image: images.get(n.id) },
-      ]
-    })
-    drawTable(w, fonts,
-      [{ header: 'Note', width: 42 }, { header: 'Item', width: 140 }, { header: 'Raised in', width: 92 }, { header: 'Status', width: 44 }, { header: 'Closed', width: 62 }, { header: 'How it was closed', width: A4[0] - MARGIN * 2 - 380 }],
-      rows, 8.5,
-      want.has('reports') ? { reports: notes.map(n => (n.inspection_id && inPack.has(n.inspection_id) ? n.inspection_id : null)), linkCol: 2, spots } : undefined)
-    if (notes.length === 0) {
-      w.page.drawText('No site notes on this project.', { x: MARGIN, y: w.y - 16, size: 10, font: fonts.regular, color: MID })
+      return r ? `${reportNoLabel(r.report_no)} · ${visitDateShort(r)}` : '—'
     }
-    w.pages.forEach(p => generated.add(p))
-    contents.push({ title: 'Site notes closed register', page: w.pages[0] })
+    const closedBy = (n: Note) => {
+      const by = latest.get(n.id)?.created_by
+      return (by && nameOf.get(by)) || ''
+    }
+
+    const pages = await fromTemplate('noteReg', {
+      project_name: project.name ?? '',
+      job_number: project.project_number ?? '',
+      notes_raised: String(notes.length),
+      notes_closed: String(closedCount),
+      notes_open: String(notes.length - closedCount),
+      notes: notes.map(n => {
+        const text = (n.report_text || n.transcript || n.notes || '').trim()
+        return {
+          ref: noteRefLabel(refs.get(n.id)) ?? '—',
+          location: n.zone_label || 'General',
+          item: firstSentence(text),
+          description: text,
+          raised_in: reportLinkText(n.inspection_id && linkable.has(n.inspection_id) ? n.inspection_id : null, raisedIn(n)),
+          status: isClosed(n) ? 'Closed' : 'Open',
+          closed_date: isClosed(n) ? shortDate(n.closed_at) || '—' : '—',
+          closed_by: isClosed(n) ? closedBy(n) : '',
+          how_closed: isClosed(n) ? (latest.get(n.id)?.comment ?? '').trim() || 'Closed' : '—',
+        }
+      }),
+    })
+    if (pages) {
+      contents.push({ title: 'Site notes closed register', page: pages[0] })
+    } else {
+      const sub = closedCount === notes.length
+        ? `${project.name} · all ${notes.length} site notes closed`
+        : `${project.name} · ${closedCount} of ${notes.length} site notes closed, ${notes.length - closedCount} open`
+      const w = new PageWriter(pack, fonts, 'Site notes closed register', sub)
+      const images = new Map<string, Awaited<ReturnType<typeof fetchImage>>>()
+      await Promise.all([...latest.entries()].map(async ([id, r]) => {
+        const files: { url: string; type?: string | null }[] = Array.isArray(r.files) && r.files.length ? r.files : r.file_url ? [{ url: r.file_url, type: r.file_type }] : []
+        const pic = files.find(f => /^image\//.test(f.type ?? '') || /\.(jpe?g|png)(\?|$)/i.test(f.url))
+        if (pic) images.set(id, await fetchImage(pack, pic.url))
+      }))
+      const rows: Cell[][] = notes.map(n => {
+        const resp = latest.get(n.id)
+        const text = (n.report_text || n.transcript || n.notes || '').trim()
+        const how = isClosed(n)
+          ? [firstSentence(resp?.comment ?? '', 160), closedBy(n) ? `(${closedBy(n)})` : ''].filter(Boolean).join(' ') || 'Closed'
+          : '—'
+        return [
+          noteRefLabel(refs.get(n.id)) ?? '—',
+          [n.zone_label || 'General', firstSentence(text)].filter(Boolean).join(': '),
+          raisedIn(n),
+          isClosed(n) ? 'Closed' : 'Open',
+          isClosed(n) ? shortDate(n.closed_at) || '—' : '—',
+          { text: how, image: images.get(n.id) },
+        ]
+      })
+      drawTable(w, fonts,
+        [{ header: 'Note', width: 42 }, { header: 'Item', width: 140 }, { header: 'Raised in', width: 92 }, { header: 'Status', width: 44 }, { header: 'Closed', width: 62 }, { header: 'How it was closed', width: A4[0] - MARGIN * 2 - 380 }],
+        rows, 8.5,
+        { reports: notes.map(n => (n.inspection_id && linkable.has(n.inspection_id) ? n.inspection_id : null)), linkCol: 2, spots })
+      if (notes.length === 0) {
+        w.page.drawText('No site notes on this project.', { x: MARGIN, y: w.y - 16, size: 10, font: fonts.regular, color: MID })
+      }
+      w.pages.forEach(p => generated.add(p))
+      contents.push({ title: 'Site notes closed register', page: w.pages[0] })
+    }
   }
 
   // ── 5. The reports ─────────────────────────────────────────────────────
@@ -613,6 +744,7 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
     const target = reportFirstPage.get(sp.reportId)
     if (target) addLink(pack, sp.page, sp.rect, target)
   }
+  for (const l of templateLinks) relinkTemplateLink(pack, l, reportFirstPage.get(l.reportId))
 
   all.forEach((p, i) => {
     if (generated.has(p)) {

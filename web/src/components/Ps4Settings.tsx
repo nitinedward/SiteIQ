@@ -3,7 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, Card, Spinner } from '@/components/Shell'
 import { closeoutFileUrl, closeoutPost, uploadCloseoutFile } from '@/lib/closeoutClient'
-import { authorComplete, looksLikeEmail, type FirmPs4Settings, type Ps4Author } from '@/lib/closeout'
+import { apiFetch } from '@/lib/apiFetch'
+import {
+  authorComplete, looksLikeEmail, CLOSEOUT_PLACEHOLDERS, CLOSEOUT_TEMPLATE_KINDS,
+  type CloseoutTemplateKind, type FirmPs4Settings, type Ps4Author,
+} from '@/lib/closeout'
 
 /**
  * Settings › PS4 form and PS4 authors: the firm's own PS4 (the fillable
@@ -200,6 +204,8 @@ export default function Ps4Settings({ firmId }: { firmId: string }) {
         </div>
       </Card>
 
+      <TemplatesCard settings={settings} onSettings={setSettings} />
+
       {draft && (
         <AuthorModal
           firmId={firmId}
@@ -324,5 +330,110 @@ function AuthorModal({ firmId, draft, signatureUrl, onClose, onSaved }: {
         </Card>
       </div>
     </div>
+  )
+}
+
+/** The firm's own Word layouts for the summary and the site notes register
+ *  (lib/closeoutTemplates). Optional: without one, SiteIQ's page is used. */
+function TemplatesCard({ settings, onSettings }: { settings: FirmPs4Settings; onSettings: (s: FirmPs4Settings) => void }) {
+  const [busy, setBusy] = useState<CloseoutTemplateKind | null>(null)
+  const [error, setError] = useState('')
+  const [showTags, setShowTags] = useState<CloseoutTemplateKind | null>(null)
+  const inputs = useRef<Partial<Record<CloseoutTemplateKind, HTMLInputElement | null>>>({})
+
+  const upload = async (kind: CloseoutTemplateKind, file: File) => {
+    setError('')
+    if (!/\.docx$/i.test(file.name)) { setError('Templates must be Word .docx files.'); return }
+    setBusy(kind)
+    try {
+      const path = await uploadCloseoutFile('template', file, { which: kind })
+      const { settings: next } = await closeoutPost<{ settings: FirmPs4Settings }>('template', { kind, path, fileName: file.name })
+      onSettings(next)
+    } catch (err: any) { setError(err.message) }
+    setBusy(null)
+  }
+
+  const remove = async (kind: CloseoutTemplateKind) => {
+    if (!confirm(`Go back to SiteIQ's own ${CLOSEOUT_PLACEHOLDERS[kind].title.toLowerCase()} page?`)) return
+    setBusy(kind)
+    setError('')
+    try {
+      const res = await apiFetch('/api/closeout/template', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Could not remove it')
+      onSettings(data.settings)
+    } catch (err: any) { setError(err.message) }
+    setBusy(null)
+  }
+
+  const starter = async (kind: CloseoutTemplateKind) => {
+    setError('')
+    try {
+      const res = await apiFetch(`/api/closeout/template?kind=${kind}`)
+      if (!res.ok) throw new Error('Could not download the starter template')
+      const url = URL.createObjectURL(await res.blob())
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `SiteIQ starter - ${CLOSEOUT_PLACEHOLDERS[kind].title}.docx`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+    } catch (err: any) { setError(err.message) }
+  }
+
+  const openCurrent = async (kind: CloseoutTemplateKind) => {
+    try { window.open(await closeoutFileUrl(`kind=template&which=${kind}`), '_blank', 'noopener,noreferrer') } catch (err: any) { setError(err.message) }
+  }
+
+  return (
+    <Card className="settings-card">
+      <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-line)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <h2 style={{ fontFamily: 'var(--f-heading)', fontSize: 15, fontWeight: 800, color: 'var(--text-ink)' }}>Close-out templates</h2>{NEW_BADGE}
+      </div>
+      <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <p style={hint}>
+          Optional. Lay these close-out pages out in Word with your letterhead and styles. Start from the starter template: it has every placeholder in place.
+          Report numbers stay clickable links to the reports in the pack.
+        </p>
+        {CLOSEOUT_TEMPLATE_KINDS.map(kind => {
+          const spec = CLOSEOUT_PLACEHOLDERS[kind]
+          const tpl = settings.templates?.[kind]
+          return (
+            <div key={kind} style={{ border: '1px solid var(--border-line)', borderRadius: 'var(--radius-sm)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input ref={el => { inputs.current[kind] = el }} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) upload(kind, f) }} />
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ fontFamily: 'var(--f-heading)', fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}>{spec.title}</div>
+                  {tpl
+                    ? <div style={{ ...hint, color: tpl.unknown.length ? 'var(--marigold-ink)' : 'var(--sage-ink)' }}>
+                        {tpl.name}{tpl.unknown.length ? ` · not recognised, so left blank: ${tpl.unknown.map(t => `{{${t}}}`).join(', ')}` : ' · ✓ all placeholders recognised'}
+                      </div>
+                    : <div style={hint}>Using SiteIQ&rsquo;s own page</div>}
+                </div>
+                <Btn variant="outline" small onClick={() => starter(kind)}>Starter template</Btn>
+                {tpl && <Btn variant="outline" small onClick={() => openCurrent(kind)}>Download yours</Btn>}
+                <Btn variant={tpl ? 'outline' : 'primary'} small onClick={() => inputs.current[kind]?.click()} disabled={busy === kind}>
+                  {busy === kind ? 'Checking…' : tpl ? 'Replace' : 'Upload'}
+                </Btn>
+                {tpl && <Btn variant="ghost" small onClick={() => remove(kind)} disabled={busy === kind}>Use SiteIQ&rsquo;s</Btn>}
+              </div>
+              <button onClick={() => setShowTags(showTags === kind ? null : kind)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'var(--f-heading)', fontSize: 12, fontWeight: 700, color: 'var(--indigo)' }}>
+                {showTags === kind ? 'Hide placeholders' : 'Show placeholders'}
+              </button>
+              {showTags === kind && (
+                <div style={{ ...hint, display: 'grid', gridTemplateColumns: 'minmax(0, auto) minmax(0, 1fr)', columnGap: 14, rowGap: 3 }}>
+                  {spec.fields.map(f => [<code key={f.tag + 'k'} style={{ fontFamily: 'var(--f-mono)', color: 'var(--text-ink)' }}>{`{{${f.tag}}}`}</code>, <span key={f.tag + 'v'}>{f.desc}</span>])}
+                  <span style={{ gridColumn: '1 / -1', marginTop: 8, fontWeight: 600, color: 'var(--text-ink)' }}>
+                    One table row per {spec.loop === 'notes' ? 'site note' : 'report'}: start its first cell with <code>{`{{#${spec.loop}}}`}</code> and end its last cell with <code>{`{{/${spec.loop}}}`}</code>
+                  </span>
+                  {spec.loopFields.map(f => [<code key={f.tag + 'lk'} style={{ fontFamily: 'var(--f-mono)', color: 'var(--text-ink)' }}>{`{{${f.tag}}}`}</code>, <span key={f.tag + 'lv'}>{f.desc}</span>])}
+                </div>
+              )}
+            </div>
+          )
+        })}
+        {error && <div style={{ ...hint, fontSize: 13, color: 'var(--clay-ink)' }}>{error}</div>}
+      </div>
+    </Card>
   )
 }

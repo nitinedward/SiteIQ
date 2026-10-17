@@ -63,6 +63,8 @@ export type FirmPs4Settings = {
   fieldCheck?: { found: number; missing: string[] }
   /** The "is / is not a member of ACE New Zealand" choice on the PS4. */
   aceMember?: 'Is' | 'Is not'
+  /** The firm's own Word layouts for pages SiteIQ otherwise draws. */
+  templates?: Partial<Record<CloseoutTemplateKind, CloseoutTemplateInfo>>
 }
 
 export type Ps4Author = {
@@ -137,4 +139,85 @@ export type CompileRequest = {
 export function normaliseCm(raw: string | null | undefined): string {
   const m = String(raw ?? '').match(/([1-5])/)
   return m && /cm|^\s*[1-5]\s*$/i.test(String(raw)) ? `CM ${m[1]}` : ''
+}
+
+// ── Firm templates for the pages SiteIQ draws ──────────────────────────────
+
+/** Pages a firm can lay out itself, in Word. Without one, SiteIQ's own page
+ *  is used. */
+export const CLOSEOUT_TEMPLATE_KINDS = ['summary', 'noteReg'] as const
+export type CloseoutTemplateKind = typeof CLOSEOUT_TEMPLATE_KINDS[number]
+
+export type CloseoutTemplateInfo = {
+  path: string
+  name: string
+  uploadedAt: string
+  /** Placeholders in the file SiteIQ doesn't know (likely typos). */
+  unknown: string[]
+}
+
+type Placeholder = { tag: string; desc: string }
+
+/** What each template can use, in the {{…}} style of report templates.
+ *  `loop` placeholders go inside the {{#loop}} … {{/loop}} table row. */
+export const CLOSEOUT_PLACEHOLDERS: Record<CloseoutTemplateKind, { title: string; fields: Placeholder[]; loop: string; loopFields: Placeholder[] }> = {
+  summary: {
+    title: 'Construction monitoring summary',
+    fields: [
+      { tag: 'project_name', desc: 'Project name' },
+      { tag: 'job_number', desc: 'Job number' },
+      { tag: 'address', desc: 'Site address (from the PS1, else the project)' },
+      { tag: 'client', desc: 'Owner / client' },
+      { tag: 'consent_no', desc: 'Building consent number' },
+      { tag: 'amendment_no', desc: 'Consent amendment number(s)' },
+      { tag: 'council', desc: 'Building consent authority' },
+      { tag: 'monitoring_level', desc: 'CM level, e.g. CM 3' },
+      { tag: 'period_start', desc: 'First visit date' },
+      { tag: 'period_end', desc: 'Last visit date' },
+      { tag: 'visit_count', desc: 'Number of site reports' },
+      { tag: 'engineers', desc: 'Engineers who visited' },
+      { tag: 'inspected', desc: 'What was inspected, from the reports' },
+      { tag: 'notes_raised', desc: 'Site notes raised' },
+      { tag: 'notes_closed', desc: 'Site notes closed' },
+      { tag: 'notes_open', desc: 'Site notes still open' },
+      { tag: 'design_firm', desc: 'Engineering design firm (PS1)' },
+      { tag: 'designer', desc: 'Design professional (PS1)' },
+      { tag: 'ps1_date', desc: 'PS1 date' },
+      { tag: 'ps4_author', desc: 'PS4 author' },
+      { tag: 'ps4_author_cpeng', desc: 'PS4 author CPEng number' },
+      { tag: 'firm_name', desc: 'Your firm' },
+      { tag: 'date', desc: 'Date the pack was built' },
+    ],
+    loop: 'reports',
+    loopFields: [
+      { tag: 'report', desc: 'Report number, e.g. SR 002 — links to the report' },
+      { tag: 'visit_date', desc: 'Visit date' },
+      { tag: 'purpose', desc: 'Purpose of the visit' },
+      { tag: 'engineer', desc: 'Engineer' },
+    ],
+  },
+  noteReg: {
+    title: 'Site notes closed register',
+    fields: [
+      { tag: 'project_name', desc: 'Project name' },
+      { tag: 'job_number', desc: 'Job number' },
+      { tag: 'notes_raised', desc: 'Site notes raised' },
+      { tag: 'notes_closed', desc: 'Site notes closed' },
+      { tag: 'notes_open', desc: 'Site notes still open' },
+      { tag: 'firm_name', desc: 'Your firm' },
+      { tag: 'date', desc: 'Date the pack was built' },
+    ],
+    loop: 'notes',
+    loopFields: [
+      { tag: 'ref', desc: 'Note number, e.g. SN 07' },
+      { tag: 'location', desc: 'Location / item heading' },
+      { tag: 'item', desc: 'First sentence of the note' },
+      { tag: 'description', desc: 'The note in full' },
+      { tag: 'raised_in', desc: 'Report and date it was raised in — links to the report' },
+      { tag: 'status', desc: 'Open or Closed' },
+      { tag: 'closed_date', desc: 'Date closed' },
+      { tag: 'closed_by', desc: 'Who closed it' },
+      { tag: 'how_closed', desc: 'The closing comment' },
+    ],
+  },
 }

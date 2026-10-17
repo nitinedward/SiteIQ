@@ -205,7 +205,14 @@ export async function convertDocxToPdf(
   const sourceUrl = signed
     ? `${signed}&t=${Date.now()}`
     : `${appUrl}/api/docs/${inspectionId}?t=${Date.now()}`
-  const conversionKey = `convert-${inspectionId}-${Date.now()}`
+  return convertUrlToPdf(sourceUrl, `convert-${inspectionId}-${Date.now()}`, (title ?? '').trim() || inspectionId)
+}
+
+/** Converts the .docx at `sourceUrl` (which the Document Server must be able
+ *  to fetch) to PDF. `conversionKey` must be new for each document. */
+export async function convertUrlToPdf(sourceUrl: string, conversionKey: string, title: string): Promise<Buffer> {
+  const secret = getSecret()
+  if (!secret) throw new Error('ONLYOFFICE_JWT_SECRET not configured')
 
   const payload = {
     // async: true — a large, photo-heavy report can take 15s+ to convert on
@@ -220,7 +227,7 @@ export async function convertDocxToPdf(
     key: conversionKey,
     // The extension stays .docx — it describes the source being converted,
     // and OnlyOffice swaps it for .pdf on the way out.
-    title: `${(title ?? '').trim() || inspectionId}.docx`,
+    title: `${title}.docx`,
     url: sourceUrl,
   }
   const token = jwt.sign(payload, secret, { algorithm: 'HS256' })
