@@ -205,8 +205,23 @@ const MID = rgb(0.42, 0.45, 0.5)
 const INDIGO = rgb(0.227, 0.29, 0.388)
 const LINE = rgb(0.86, 0.84, 0.8)
 const SOFT = rgb(0.98, 0.973, 0.957)
+/** Text that jumps to a report when clicked. */
+const LINK = rgb(0.12, 0.25, 0.6)
 
 type Fonts = { regular: PDFFont; bold: PDFFont }
+
+/** A clickable area over text that names a report; linked to the report's
+ *  first page once the reports are in the pack. */
+type LinkSpot = { page: PDFPage; rect: [number, number, number, number]; reportId: string }
+
+/** A link inside the pack: clicking `rect` on `page` opens `target`. */
+function addLink(doc: PDFDocument, page: PDFPage, rect: [number, number, number, number], target: PDFPage) {
+  const annot = doc.context.register(doc.context.obj({
+    Type: 'Annot', Subtype: 'Link', Rect: rect, Border: [0, 0, 0],
+    Dest: [target.ref, 'XYZ', null, null, null],
+  }))
+  page.node.addAnnot(annot)
+}
 
 /** Writes down the page, starting a new one when it runs out of room. */
 class PageWriter {
@@ -239,7 +254,10 @@ class PageWriter {
 type Col = { header: string; width: number }
 type Cell = string | { text: string; image?: Awaited<ReturnType<PDFDocument['embedJpg']>> }
 
-function drawTable(w: PageWriter, fonts: Fonts, cols: Col[], rows: Cell[][], size = 8.5) {
+/** `links`: per row, the report the row names — the row becomes a link to
+ *  it, and the `linkCol` cell is drawn as link text. */
+function drawTable(w: PageWriter, fonts: Fonts, cols: Col[], rows: Cell[][], size = 8.5,
+  links?: { reports: (string | null | undefined)[]; linkCol: number; spots: LinkSpot[] }) {
   const pad = 5
   const lh = size * 1.3
   const drawHeader = () => {
@@ -253,7 +271,8 @@ function drawTable(w: PageWriter, fonts: Fonts, cols: Col[], rows: Cell[][], siz
     w.y -= lh + pad * 2
   }
   drawHeader()
-  for (const row of rows) {
+  rows.forEach((row, rowIndex) => {
+    const reportId = links?.reports[rowIndex] ?? null
     const cellLines = row.map((cell, i) => wrapText(typeof cell === 'string' ? cell : cell.text, fonts.regular, size, cols[i].width - pad * 2 - (typeof cell !== 'string' && cell.image ? 50 : 0)))
     const imgH = row.some(c => typeof c !== 'string' && c.image) ? 34 : 0
     const h = Math.max(...cellLines.map(l => l.length * lh), imgH) + pad * 2
@@ -267,14 +286,18 @@ function drawTable(w: PageWriter, fonts: Fonts, cols: Col[], rows: Cell[][], siz
         w.page.drawImage(img, { x: tx, y: w.y - pad - img.height * scale, width: img.width * scale, height: img.height * scale })
         tx += 50
       }
+      const linked = !!reportId && i === links?.linkCol
       cellLines[i].forEach((line, j) => {
-        w.page.drawText(line, { x: tx, y: w.y - pad - size - j * lh, size, font: fonts.regular, color: INK })
+        const y = w.y - pad - size - j * lh
+        w.page.drawText(line, { x: tx, y, size, font: fonts.regular, color: linked ? LINK : INK })
+        if (linked) w.page.drawLine({ start: { x: tx, y: y - 1.2 }, end: { x: tx + fonts.regular.widthOfTextAtSize(line, size), y: y - 1.2 }, thickness: 0.4, color: LINK })
       })
       x += cols[i].width
     })
+    if (reportId && links) links.spots.push({ page: w.page, rect: [MARGIN, w.y - h, A4[0] - MARGIN, w.y], reportId })
     w.y -= h
     w.page.drawLine({ start: { x: MARGIN, y: w.y }, end: { x: A4[0] - MARGIN, y: w.y }, thickness: 0.5, color: LINE })
-  }
+  })
 }
 
 function drawKeyValues(w: PageWriter, fonts: Fonts, rows: [string, string][]) {
@@ -394,27 +417,29 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
   }
   const generated = new Set<PDFPage>()
   const contents: { title: string; page: PDFPage }[] = []
+  const spots: LinkSpot[] = []
 
   // ── 1. The PS4 ─────────────────────────────────────────────────────────
   if (isPs4) {
     if (!settings.formPath) throw new Error('Upload your firm’s PS4 form under Settings first.')
     const ps4 = await PDFDocument.load(await download(settings.formPath), { ignoreEncryption: true })
-    const scheduleLines: string[] = []
+    const scheduleLines: SchedLine[] = []
+    const push = (text: string, reportId?: string) => { scheduleLines.push({ text, reportId }) }
     if (ps1) {
       const f = ps1.fields
-      scheduleLines.push('Design documents (from the PS1)')
+      push('Design documents (from the PS1)')
       const issued = [f.designFirm, [f.designer, f.designerCpeng && `CPEng ${f.designerCpeng}`].filter(Boolean).join(', '), f.ps1Date && `dated ${f.ps1Date}`].filter(Boolean).join(', ')
-      scheduleLines.push(`    PS1 – ${issued || 'design producer statement'}`)
-      for (const ref of f.references.split('\n').map(s => s.trim()).filter(Boolean)) scheduleLines.push(`    ${ref}`)
-      scheduleLines.push('')
+      push(`    PS1 – ${issued || 'design producer statement'}`)
+      for (const ref of f.references.split('\n').map(s => s.trim()).filter(Boolean)) push(`    ${ref}`)
+      push('')
     }
-    scheduleLines.push('Construction monitoring site reports')
-    for (const r of reports) scheduleLines.push(`    ${reportLine(r)}`)
-    if (reports.length === 0) scheduleLines.push('    None finalised yet')
-    scheduleLines.push('')
-    scheduleLines.push(`Site notes: ${notes.length} raised, ${closedCount} closed (see the site notes closed register).`)
+    push('Construction monitoring site reports')
+    for (const r of reports) push(`    ${reportLine(r)}`, want.has('reports') ? r.id : undefined)
+    if (reports.length === 0) push('    None finalised yet')
+    push('')
+    push(`Site notes: ${notes.length} raised, ${closedCount} closed (see the site notes closed register).`)
 
-    const continuation = fillPs4(ps4, {
+    const { overflow: continuation, spots: ps4Spots } = fillPs4(ps4, {
       clauses: ps1?.fields.clauses ?? '',
       jobNo: project.project_number ?? '',
       firmName: (firm as any)?.name ?? '',
@@ -437,6 +462,7 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
 
     const copied = await pack.copyPages(ps4, ps4.getPageIndices())
     copied.forEach(p => pack.addPage(p))
+    for (const sp of ps4Spots) if (copied[sp.pageIndex]) spots.push({ page: copied[sp.pageIndex], rect: sp.rect, reportId: sp.reportId })
     contents.push({ title: 'PS4 – Producer statement, construction review', page: copied[0] })
     if (continuation.length > 0) {
       // Straight after the schedule page, as the form's "refer the
@@ -444,7 +470,9 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
       const w = new PageWriter(pack, fonts, 'SCHEDULE to PS4', `Job number ${project.project_number ?? ''}`, Math.min(2, pack.getPageCount()))
       for (const line of continuation) {
         w.room(12)
-        w.page.drawText(line, { x: MARGIN, y: w.y - 10, size: 9, font: fonts.regular, color: INK })
+        const x = MARGIN + fonts.regular.widthOfTextAtSize(line.indent, 9)
+        w.page.drawText(line.text, { x, y: w.y - 10, size: 9, font: fonts.regular, color: line.reportId ? LINK : INK })
+        if (line.reportId) spots.push({ page: w.page, rect: [x, w.y - 13, x + fonts.regular.widthOfTextAtSize(line.text, 9), w.y - 1], reportId: line.reportId })
         w.y -= 12
       }
       w.pages.forEach(p => generated.add(p))
@@ -489,7 +517,8 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
     const w = new PageWriter(pack, fonts, 'Site report register', `${project.name} · ${reports.length} report${reports.length === 1 ? '' : 's'}`)
     drawTable(w, fonts,
       [{ header: 'Report', width: 60 }, { header: 'Visit', width: 95 }, { header: 'Purpose', width: 230 }, { header: 'Engineer', width: A4[0] - MARGIN * 2 - 385 }],
-      reports.map(r => [reportNoLabel(r.report_no), visitDate(r), purposeOf(r), engineerOf(r)]), 9)
+      reports.map(r => [reportNoLabel(r.report_no), visitDate(r), purposeOf(r), engineerOf(r)]), 9,
+      want.has('reports') ? { reports: reports.map(r => r.id), linkCol: 0, spots } : undefined)
     w.pages.forEach(p => generated.add(p))
     contents.push({ title: 'Site report register', page: w.pages[0] })
   }
@@ -515,6 +544,8 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
       if (pic) images.set(id, await fetchImage(pack, pic.url))
     }))
 
+    // Only reports in this pack can be linked to.
+    const inPack = new Set(reports.map(r => r.id))
     const rows: Cell[][] = notes.map(n => {
       const r = n.inspection_id ? reportById.get(n.inspection_id) : undefined
       const resp = latest.get(n.id)
@@ -533,7 +564,8 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
     })
     drawTable(w, fonts,
       [{ header: 'Note', width: 42 }, { header: 'Item', width: 140 }, { header: 'Raised in', width: 92 }, { header: 'Status', width: 44 }, { header: 'Closed', width: 62 }, { header: 'How it was closed', width: A4[0] - MARGIN * 2 - 380 }],
-      rows)
+      rows, 8.5,
+      want.has('reports') ? { reports: notes.map(n => (n.inspection_id && inPack.has(n.inspection_id) ? n.inspection_id : null)), linkCol: 2, spots } : undefined)
     if (notes.length === 0) {
       w.page.drawText('No site notes on this project.', { x: MARGIN, y: w.y - 16, size: 10, font: fonts.regular, color: MID })
     }
@@ -542,12 +574,14 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
   }
 
   // ── 5. The reports ─────────────────────────────────────────────────────
+  const reportFirstPage = new Map<string, PDFPage>()
   if (want.has('reports')) {
     for (const r of reports) {
       try {
         const doc = await PDFDocument.load(await loadPdf(r.id), { ignoreEncryption: true })
         const pages = await pack.copyPages(doc, doc.getPageIndices())
         pages.forEach(p => pack.addPage(p))
+        if (pages[0]) reportFirstPage.set(r.id, pages[0])
         if (pages[0]) contents.push({ title: `${reportNoLabel(r.report_no)} · ${visitDate(r)}`, page: pages[0] })
       } catch {
         warnings.push(`${reportNoLabel(r.report_no)} has no finalised PDF and was left out.`)
@@ -567,12 +601,19 @@ export async function compilePack(req: CompileRequest, firmId: string): Promise<
     const size = contents.length > 45 ? 8 : 10
     for (const c of contents) {
       const n = String(all.indexOf(c.page) + 1)
-      contentsPage.drawText(pdfSafe(c.title), { x: MARGIN, y, size, font: fonts.regular, color: INK })
+      contentsPage.drawText(pdfSafe(c.title), { x: MARGIN, y, size, font: fonts.regular, color: LINK })
+      addLink(pack, contentsPage, [MARGIN, y - 3, A4[0] - MARGIN, y + size], c.page)
       contentsPage.drawText(n, { x: A4[0] - MARGIN - fonts.regular.widthOfTextAtSize(n, size), y, size, font: fonts.regular, color: INK })
       y -= size * 1.6
       if (y < MARGIN) break
     }
   }
+  // Every mention of a report opens it — but only reports in this pack.
+  for (const sp of spots) {
+    const target = reportFirstPage.get(sp.reportId)
+    if (target) addLink(pack, sp.page, sp.rect, target)
+  }
+
   all.forEach((p, i) => {
     if (generated.has(p)) {
       const label = pdfSafe(`${project.name} · close-out pack · page ${i + 1} of ${total}`)
@@ -594,12 +635,21 @@ type Ps4Values = {
   clauses: string; jobNo: string; firmName: string; owner: string; bca: string; respect: string; at: string
   legal: string; legalNA: boolean; designFirm: string; consentNo: string; amendmentNo: string
   professional: string; cpeng: string; qualifications: string; aceMember: string; cm: string
-  schedule: string[]
+  schedule: SchedLine[]
 }
 
+/** A line of the PS4 schedule; reportId when it names a report in the pack. */
+type SchedLine = { text: string; reportId?: string }
+/** A schedule line after wrapping: its indent kept apart so it can be drawn. */
+type WrappedLine = { indent: string; text: string; reportId?: string }
+
 /** Fills the PS4's boxes and flattens them. Returns the schedule lines that
- *  didn't fit in its box, for continuation pages. */
-export function fillPs4(doc: PDFDocument, v: Ps4Values, warnings: string[]): string[] {
+ *  didn't fit in its box, for continuation pages, and where each line
+ *  naming a report was drawn, to link it. */
+export function fillPs4(doc: PDFDocument, v: Ps4Values, warnings: string[]): {
+  overflow: WrappedLine[]
+  spots: { pageIndex: number; rect: [number, number, number, number]; reportId: string }[]
+} {
   const form = doc.getForm()
   const helv = doc.embedStandardFont(StandardFonts.Helvetica)
   const missing: string[] = []
@@ -646,32 +696,43 @@ export function fillPs4(doc: PDFDocument, v: Ps4Values, warnings: string[]): str
   }
 
   // The schedule: as much as fits in its box at 9pt down to 7pt; the rest
-  // goes on continuation pages.
-  let overflow: string[] = []
+  // goes on continuation pages. Drawn straight onto the page over the box
+  // (left empty) rather than typed into it, so each report's line has a
+  // known place to put a link on.
+  const wrapAt = (size: number, width: number): WrappedLine[] => v.schedule.flatMap(line => {
+    const indent = line.text.match(/^ */)?.[0] ?? ''
+    return wrapText(line.text.trim(), helv, size, width - helv.widthOfTextAtSize(indent, size))
+      .map(text => ({ indent, text, reportId: line.reportId }))
+  })
+  let overflow: WrappedLine[] = []
+  const spots: { pageIndex: number; rect: [number, number, number, number]; reportId: string }[] = []
   const sched = fieldNamed(form, PS4_FIELDS.schedule)
-  if (sched instanceof PDFTextField) {
-    const rect = sched.acroField.getWidgets()[0]?.getRectangle()
-    const width = (rect?.width ?? 500) - 8
-    const height = (rect?.height ?? 600) - 8
-    const wrapAt = (size: number) => v.schedule.flatMap(line => {
-      const indent = line.match(/^ */)?.[0] ?? ''
-      const wrapped = wrapText(line.trim(), helv, size, width - helv.widthOfTextAtSize(indent, size))
-      return wrapped.map(l => indent + l)
-    })
+  const widget = sched?.acroField.getWidgets()[0]
+  const pageIndex = widget ? doc.getPages().findIndex(p => p.ref === widget.P()) : -1
+  if (sched instanceof PDFTextField && widget && pageIndex >= 0) {
+    const rect = widget.getRectangle()
+    const width = rect.width - 8
+    const height = rect.height - 8
     let size = 9
-    let lines = wrapAt(size)
-    while (size > 7 && lines.length * size * 1.25 > height) { size -= 0.5; lines = wrapAt(size) }
-    const capacity = Math.floor(height / (size * 1.25))
+    let lines = wrapAt(size, width)
+    while (size > 7 && lines.length * size * 1.25 > height) { size -= 0.5; lines = wrapAt(size, width) }
+    const lh = size * 1.25
+    const capacity = Math.floor(height / lh)
     if (lines.length > capacity) {
       overflow = lines.slice(capacity - 1)
-      lines = [...lines.slice(0, capacity - 1), 'Continued on the next page.']
+      lines = [...lines.slice(0, capacity - 1), { indent: '', text: 'Continued on the next page.' }]
     }
-    sched.enableMultiline()
-    sched.setFontSize(size)
-    sched.setText(lines.join('\n'))
+    sched.setText('')
+    const page = doc.getPages()[pageIndex]
+    lines.forEach((line, i) => {
+      const x = rect.x + 4 + helv.widthOfTextAtSize(line.indent, size)
+      const y = rect.y + rect.height - 4 - size - i * lh
+      page.drawText(line.text, { x, y, size, font: helv, color: line.reportId ? LINK : rgb(0, 0, 0) })
+      if (line.reportId) spots.push({ pageIndex, rect: [x, y - 2, x + helv.widthOfTextAtSize(line.text, size), y + size], reportId: line.reportId })
+    })
   } else {
     missing.push(PS4_FIELDS.schedule)
-    overflow = v.schedule
+    overflow = wrapAt(9, A4[0] - MARGIN * 2)
   }
 
   if (missing.length) warnings.push(`Your PS4 form has no box for: ${missing.join(', ')}.`)
@@ -681,5 +742,5 @@ export function fillPs4(doc: PDFDocument, v: Ps4Values, warnings: string[]): str
   } catch (err) {
     console.warn('[closeout] PS4 could not be flattened:', (err as Error).message)
   }
-  return overflow
+  return { overflow, spots }
 }
